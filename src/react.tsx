@@ -39,6 +39,26 @@ export type HomechatComposerChromeProps = {
   voiceWorking?: boolean;
 };
 
+export type HomechatMessageFrameClasses = Partial<{
+  row: string;
+  rowAssistant: string;
+  rowUser: string;
+  bubble: string;
+  bubbleAssistant: string;
+  bubbleUser: string;
+  content: string;
+  meta: string;
+}>;
+
+export type HomechatMessageFrameProps = {
+  after?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  classes?: HomechatMessageFrameClasses;
+  meta?: ReactNode;
+  role: "assistant" | "user" | string;
+};
+
 const defaultClasses: Required<HomechatComposerClasses> = {
   root: "composer chat-composer",
   rootDisabled: "disabled",
@@ -49,6 +69,17 @@ const defaultClasses: Required<HomechatComposerClasses> = {
   voiceMeterRecording: "recording",
   voiceMeterTranscribing: "transcribing",
   voiceMeterBar: "",
+};
+
+const defaultMessageFrameClasses: Required<HomechatMessageFrameClasses> = {
+  row: "message-row",
+  rowAssistant: "assistant",
+  rowUser: "user",
+  bubble: "message",
+  bubbleAssistant: "assistant",
+  bubbleUser: "user",
+  content: "message-content",
+  meta: "message-meta",
 };
 
 function classNames(...values: Array<string | false | null | undefined>) {
@@ -76,6 +107,30 @@ export function HomechatVoiceMeter({
       <span className={classNames("h-4 [animation-delay:240ms]", merged.voiceMeterBar)} />
       <span className={classNames("h-2 [animation-delay:360ms]", merged.voiceMeterBar)} />
     </span>
+  );
+}
+
+export function HomechatMessageFrame({
+  after,
+  children,
+  className,
+  classes,
+  meta,
+  role,
+}: HomechatMessageFrameProps) {
+  const merged = { ...defaultMessageFrameClasses, ...classes };
+  const own = role === "user";
+  const rowRoleClass = own ? merged.rowUser : merged.rowAssistant;
+  const bubbleRoleClass = own ? merged.bubbleUser : merged.bubbleAssistant;
+
+  return (
+    <div className={classNames(merged.row, rowRoleClass, className)}>
+      <div className={classNames(merged.bubble, bubbleRoleClass)}>
+        <div className={merged.content}>{children}</div>
+        {meta ? <div className={merged.meta}>{meta}</div> : null}
+        {after}
+      </div>
+    </div>
   );
 }
 
