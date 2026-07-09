@@ -35,6 +35,7 @@ export type HomechatComposerChromeProps = {
   voiceControls?: ReactNode;
   voiceMeterActive?: boolean;
   voiceMeterMode?: HomechatVoiceMeterMode;
+  voiceButtonPlacement?: "before-input" | "after-input";
   voiceWorking?: boolean;
 };
 
@@ -99,6 +100,7 @@ export function HomechatComposerChrome({
   voiceControls,
   voiceMeterActive = false,
   voiceMeterMode = "transcribing",
+  voiceButtonPlacement = "before-input",
   voiceWorking = false,
 }: HomechatComposerChromeProps) {
   const merged = { ...defaultClasses, ...classes };
@@ -121,7 +123,7 @@ export function HomechatComposerChrome({
       {fileInput}
       {attachmentRow}
       {attachButton}
-      {voiceButton}
+      {voiceButtonPlacement === "before-input" ? voiceButton : null}
       <div className={merged.inputShell}>
         <textarea
           ref={textareaRef}
@@ -138,6 +140,7 @@ export function HomechatComposerChrome({
           <HomechatVoiceMeter classes={merged} mode={voiceMeterMode} />
         ) : null}
       </div>
+      {voiceButtonPlacement === "after-input" ? voiceButton : null}
       {readAloudButton}
       {sendButton}
       {voiceControls}
