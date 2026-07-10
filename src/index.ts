@@ -1156,8 +1156,7 @@ function persistCompletedHomechatMessage<Message extends SharedHomechatMessage>(
     !input.completedMessage &&
     state.messages.some((message) =>
       message.role === "assistant" &&
-      message.runId === input.runId &&
-      message.content === content,
+      message.runId === input.runId,
     )
   ) {
     return state.messages;

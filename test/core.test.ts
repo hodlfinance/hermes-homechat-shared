@@ -148,6 +148,27 @@ test("persists the streamed draft when a terminal poll snapshot wins the complet
   }]);
 });
 
+test("prefers a persisted snapshot message over a shorter streaming draft", () => {
+  let state = createHomechatClientState();
+  state = reduceHomechatClientState(state, { type: "run.started", runId: "run-persisted", status: "running" });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: { id: "delta-persisted", runId: "run-persisted", type: "message_delta", payload: { delta: "Complete" } },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.snapshot",
+    run: {
+      id: "run-persisted",
+      status: "completed",
+      messages: [{ id: "message-persisted", runId: "run-persisted", role: "assistant", content: "Complete answer" }],
+    },
+  });
+
+  assert.deepEqual(state.messages, [
+    { id: "message-persisted", runId: "run-persisted", role: "assistant", content: "Complete answer" },
+  ]);
+});
+
 test("marks source, artifact, and action updates as user-visible product events", () => {
   assert.equal(isUserVisibleHomechatEvent({ type: "sources.update" }), true);
   assert.equal(isUserVisibleHomechatEvent({ type: "artifact.update" }), true);
