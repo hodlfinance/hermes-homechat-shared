@@ -65,6 +65,10 @@ test("preserves the Finance flat event vocabulary from flat and nested payload i
     state: "failed",
     error: "offline",
   });
+  const nestedStatus = normalizeHomechatRunEvent({ type: "run.status", payload: { state: "waiting", error: "approval" } });
+  if (nestedStatus?.type === "run.status") {
+    assert.deepEqual({ state: nestedStatus.state, error: nestedStatus.error }, { state: "waiting", error: "approval" });
+  }
 
   const sources = normalizeHomechatRunEvent({
     type: "sources.update",
@@ -79,9 +83,16 @@ test("preserves the Finance flat event vocabulary from flat and nested payload i
   });
   if (nestedSources?.type === "sources.update") assert.equal((nestedSources.items[0] as { origin: string }).origin, "Reuters");
 
+  const flatArtifact = normalizeHomechatRunEvent({
+    type: "artifact.update",
+    artifact: { id: "artifact-flat", kind: "market_panel" },
+  });
+  if (flatArtifact?.type === "artifact.update") {
+    assert.deepEqual(flatArtifact.artifact, { id: "artifact-flat", kind: "market_panel" });
+  }
   const artifact = normalizeHomechatRunEvent({
     type: "artifact.update",
-    payload: { artifact: { id: "artifact-1", kind: "market_panel" } },
+    payload: { id: "artifact-1", kind: "market_panel" },
   });
   if (artifact?.type === "artifact.update") {
     assert.deepEqual(artifact.artifact, { id: "artifact-1", kind: "market_panel" });
@@ -93,12 +104,47 @@ test("preserves the Finance flat event vocabulary from flat and nested payload i
     action: { actionId: "action-1", kind: "create_job", summary: "Daily scan", payload: {}, expiresAt: "2026-07-11" },
   });
   if (action?.type === "action.proposal") assert.equal((action.action as { actionId: string }).actionId, "action-1");
+  const nestedAction = normalizeHomechatRunEvent({
+    type: "action.proposal",
+    payload: { actionId: "action-2", kind: "create_alert", summary: "Price alert", payload: { price: 100 }, expiresAt: "2026-07-12" },
+  });
+  if (nestedAction?.type === "action.proposal") {
+    assert.deepEqual(nestedAction.action, {
+      actionId: "action-2",
+      kind: "create_alert",
+      summary: "Price alert",
+      payload: { price: 100 },
+      expiresAt: "2026-07-12",
+    });
+  }
 
+  const flatUsage = normalizeHomechatRunEvent({ type: "usage.update", used: 2 });
+  if (flatUsage?.type === "usage.update") assert.equal(flatUsage.used, 2);
   const usage = normalizeHomechatRunEvent({ type: "usage", payload: { used: 3, limit: 10 } });
   if (usage?.type === "usage.update") assert.deepEqual({ used: usage.used, limit: usage.limit }, { used: 3, limit: 10 });
 
   const error = normalizeHomechatRunEvent({ type: "error", code: "runtime_offline", message: "Try again" });
   if (error?.type === "error") assert.deepEqual({ code: error.code, message: error.message }, { code: "runtime_offline", message: "Try again" });
+  const nestedError = normalizeHomechatRunEvent({ type: "error", payload: { code: "tool_failed", message: "Search failed" } });
+  if (nestedError?.type === "error") {
+    assert.deepEqual({ code: nestedError.code, message: nestedError.message }, { code: "tool_failed", message: "Search failed" });
+  }
+
+  const flatTool = normalizeHomechatRunEvent({
+    type: "tool.status",
+    toolCallId: "tool-1",
+    toolName: "capchat_search",
+    label: "Searching research",
+    state: "succeeded",
+  });
+  if (flatTool?.type === "tool.status") assert.equal(flatTool.toolName, "capchat_search");
+  const nestedTool = normalizeHomechatRunEvent({
+    type: "tool.status",
+    payload: { toolCallId: "tool-2", label: "Checking prices", state: "started" },
+  });
+  if (nestedTool?.type === "tool.status") {
+    assert.deepEqual({ toolCallId: nestedTool.toolCallId, state: nestedTool.state }, { toolCallId: "tool-2", state: "started" });
+  }
 });
 
 test("parses standard SSE frames with CRLF event names and Last-Event-ID cursors", () => {

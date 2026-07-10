@@ -692,6 +692,16 @@ function homechatJsonRecord(value: unknown): Record<string, SharedHomechatJsonVa
     : {};
 }
 
+function homechatActionProposalFields(value: unknown): Record<string, unknown> | undefined {
+  const record = homechatRecord(value);
+  if (!homechatText(record.actionId) && !homechatText(record.kind)) return undefined;
+  return Object.fromEntries(
+    ["actionId", "kind", "summary", "payload", "expiresAt"].flatMap((key) =>
+      record[key] === undefined ? [] : [[key, record[key]]],
+    ),
+  );
+}
+
 export function normalizeHomechatRunStatus(value: unknown): SharedHomechatRunStatus | null {
   if (
     value === "queued" ||
@@ -792,7 +802,8 @@ export function normalizeHomechatRunEvent(input: unknown): SharedHomechatCanonic
   }
   if (type === "artifact.update") {
     const rawArtifacts = raw.artifacts ?? rawPayload.artifacts ?? raw.items ?? rawPayload.items;
-    const rawArtifact = raw.artifact ?? rawPayload.artifact;
+    const nestedArtifact = rawPayload.id !== undefined || rawPayload.kind !== undefined ? rawPayload : undefined;
+    const rawArtifact = raw.artifact ?? rawPayload.artifact ?? nestedArtifact;
     const artifacts = Array.isArray(rawArtifacts)
       ? homechatJsonValue(rawArtifacts) as SharedHomechatJsonValue[]
       : rawArtifact === undefined
@@ -805,7 +816,10 @@ export function normalizeHomechatRunEvent(input: unknown): SharedHomechatCanonic
   }
   if (type === "action.proposal") {
     const rawActions = raw.actions ?? rawPayload.actions;
-    const rawAction = raw.action ?? rawPayload.action ?? (Array.isArray(rawActions) ? rawActions[0] : undefined);
+    const rawAction = raw.action ?? rawPayload.action ??
+      (Array.isArray(rawActions) ? rawActions[0] : undefined) ??
+      homechatActionProposalFields(raw) ??
+      homechatActionProposalFields(rawPayload);
     const action = homechatJsonValue(rawAction) ?? {};
     payload.action = action;
     return { id, runId, messageId, type, action, payload: payload as SharedHomechatActionProposalEvent["payload"], createdAt };
