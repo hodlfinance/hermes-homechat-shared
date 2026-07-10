@@ -118,6 +118,16 @@ export type SharedHomechatCanonicalEvent =
   | SharedHomechatUsageUpdateEvent
   | SharedHomechatErrorEvent;
 
+export type SharedHomechatEventStreamParseResult = {
+  cursor: string | null;
+  events: SharedHomechatCanonicalEvent[];
+  ignored: number;
+};
+
+export type SharedHomechatEventStreamParseOptions = {
+  cursor?: string | null;
+};
+
 export type SharedHomechatLegacyEvent = {
   createdAt: string;
   id: string;
@@ -214,7 +224,7 @@ export type SharedHomechatClientAction<Message extends SharedHomechatMessage = S
         status: SharedHomechatRunStatus | string;
       };
     }
-  | { type: "run.event"; event: unknown }
+  | { type: "run.event"; event: unknown; completedMessage?: Message }
   | { type: "run.error"; error: string };
 
 export type SharedHomechatRunSnapshot<
@@ -356,6 +366,13 @@ export class SharedHomechatVoiceControllerError extends Error {
     this.code = code;
   }
 }
+
+export type SharedHomechatVoiceController<Recording> = {
+  cancel: (context?: SharedHomechatTransportContext) => Promise<void>;
+  isRecording: () => boolean;
+  start: (context?: SharedHomechatTransportContext) => Promise<SharedHomechatVoiceRecording<Recording>>;
+  stopAndTranscribe: (context?: SharedHomechatTransportContext) => Promise<string>;
+};
 
 export type SharedHomechatRunControllerErrorCode =
   | "aborted"
@@ -604,32 +621,76 @@ export function legacyHomechatRunEvent(input: unknown): SharedHomechatLegacyEven
   return null;
 }
 
-export function parseHomechatEventStream(value: string): { events: SharedHomechatCanonicalEvent[]; ignored: number } {
+export function parseHomechatEventStream(
+  value: string,
+  options: SharedHomechatEventStreamParseOptions = {},
+): SharedHomechatEventStreamParseResult {
   const events: SharedHomechatCanonicalEvent[] = [];
   let ignored = 0;
+  let cursor = options.cursor ?? null;
 
-  for (const block of value.split("\n\n")) {
-    const data = block
-      .split("\n")
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.replace(/^data:\s?/, ""))
-      .join("\n");
+  for (const block of value.replace(/\r\n?/g, "\n").split(/\n{2,}/)) {
+    let eventName = "";
+    let frameId: string | null | undefined;
+    const dataLines: string[] = [];
+
+    for (const line of block.split("\n")) {
+      if (!line || line.startsWith(":")) continue;
+      const separator = line.indexOf(":");
+      const field = separator < 0 ? line : line.slice(0, separator);
+      let fieldValue = separator < 0 ? "" : line.slice(separator + 1);
+      if (fieldValue.startsWith(" ")) fieldValue = fieldValue.slice(1);
+      if (field === "data") dataLines.push(fieldValue);
+      if (field === "event") eventName = fieldValue;
+      if (field === "id" && !fieldValue.includes("\0")) frameId = fieldValue || null;
+    }
+
+    if (frameId !== undefined) cursor = frameId;
+    const data = dataLines.join("\n");
     if (!data) continue;
     try {
-      const event = normalizeHomechatRunEvent(JSON.parse(data));
+      const decoded = JSON.parse(data) as unknown;
+      const decodedRecord = homechatRecord(decoded);
+      const input = eventName && !decodedRecord.type && !decodedRecord.event
+        ? decodedRecord.payload
+          ? { ...decodedRecord, type: eventName }
+          : { type: eventName, payload: decodedRecord }
+        : decodedRecord;
+      const event = normalizeHomechatRunEvent(
+        frameId !== undefined ? { ...input, id: frameId ?? undefined } : input,
+      );
       if (event) events.push(event);
       else ignored += 1;
     } catch {
       ignored += 1;
     }
   }
-  return { events, ignored };
+  return { cursor, events, ignored };
+}
+
+export function isUserVisibleHomechatEvent(
+  event: Pick<SharedHomechatCanonicalEvent, "type">,
+): boolean {
+  return (
+    event.type === "sources.update" ||
+    event.type === "artifact.update" ||
+    event.type === "action.proposal" ||
+    event.type === "error"
+  );
 }
 
 export function isActiveHomechatRunStatus(
   status: SharedHomechatRunStatus | null | undefined,
 ): boolean {
   return Boolean(status && activeRunStatuses.has(status));
+}
+
+export function isTerminalHomechatEvent(event: SharedHomechatCanonicalEvent): boolean {
+  return (
+    event.type === "message.completed" ||
+    event.type === "error" ||
+    (event.type === "run.status" && !isActiveHomechatRunStatus(event.payload.status))
+  );
 }
 
 export function userVisibleHomechatMessages<T extends SharedHomechatMessage>(messages: T[]): T[] {
@@ -675,6 +736,20 @@ export function mergeHomechatMessages<T extends SharedHomechatMessage>(current: 
     const index = message.id ? indexById.get(message.id) : undefined;
     if (index !== undefined) {
       merged[index] = message;
+      continue;
+    }
+    const matchingCompletedMessageIndex = message.runId && message.role === "assistant"
+      ? merged.findIndex((item) =>
+          item.role === "assistant" &&
+          item.runId === message.runId &&
+          item.content === message.content,
+        )
+      : -1;
+    if (matchingCompletedMessageIndex >= 0) {
+      const previousId = merged[matchingCompletedMessageIndex]?.id;
+      if (previousId) indexById.delete(previousId);
+      merged[matchingCompletedMessageIndex] = message;
+      if (message.id) indexById.set(message.id, matchingCompletedMessageIndex);
       continue;
     }
     if (message.id) indexById.set(message.id, merged.length);
@@ -1050,6 +1125,47 @@ export function createHomechatClientState<Message extends SharedHomechatMessage>
   };
 }
 
+function completedHomechatMessage<Message extends SharedHomechatMessage>(input: {
+  content: string;
+  createdAt?: string;
+  id?: string;
+  runId: string;
+}): Message {
+  return {
+    content: input.content,
+    ...(input.createdAt ? { createdAt: input.createdAt } : {}),
+    id: input.id || `${input.runId}:assistant`,
+    role: "assistant",
+    runId: input.runId,
+  } as Message;
+}
+
+function persistCompletedHomechatMessage<Message extends SharedHomechatMessage>(
+  state: SharedHomechatClientState<Message>,
+  input: {
+    completedMessage?: Message;
+    content: string;
+    createdAt?: string;
+    id?: string;
+    runId: string;
+  },
+): Message[] {
+  const content = input.content.trim() ? input.content : input.completedMessage?.content ?? "";
+  if (!content.trim()) return state.messages;
+  if (
+    !input.completedMessage &&
+    state.messages.some((message) =>
+      message.role === "assistant" &&
+      message.runId === input.runId &&
+      message.content === content,
+    )
+  ) {
+    return state.messages;
+  }
+  const message = input.completedMessage ?? completedHomechatMessage<Message>({ ...input, content });
+  return mergeHomechatMessages(state.messages, [message]);
+}
+
 export function reduceHomechatClientState<Message extends SharedHomechatMessage>(
   state: SharedHomechatClientState<Message>,
   action: SharedHomechatClientAction<Message>,
@@ -1093,6 +1209,12 @@ export function reduceHomechatClientState<Message extends SharedHomechatMessage>
     return {
       ...next,
       error: status === "failed" ? next.error : null,
+      messages: status === "completed"
+        ? persistCompletedHomechatMessage(next, {
+            content: next.streamingText,
+            runId: action.run.id,
+          })
+        : next.messages,
       phase: homechatClientPhaseForStatus(status),
       status,
       streamingText: terminal ? "" : next.streamingText,
@@ -1109,11 +1231,21 @@ export function reduceHomechatClientState<Message extends SharedHomechatMessage>
     : [...state.events, event];
 
   if (event.type === "run.status") {
+    const runId = event.runId ?? state.runId;
+    const completed = event.payload.status === "completed" && Boolean(runId);
     return {
       ...state,
       events,
+      messages: completed
+        ? persistCompletedHomechatMessage(state, {
+            content: state.streamingText,
+            createdAt: event.createdAt,
+            id: event.id,
+            runId: runId!,
+          })
+        : state.messages,
       phase: homechatClientPhaseForStatus(event.payload.status),
-      runId: event.runId ?? state.runId,
+      runId,
       status: event.payload.status,
       streamingText: isActiveHomechatRunStatus(event.payload.status) ? state.streamingText : "",
     };
@@ -1128,12 +1260,22 @@ export function reduceHomechatClientState<Message extends SharedHomechatMessage>
     };
   }
   if (event.type === "message.completed") {
+    const runId = event.runId ?? state.runId ?? "run";
+    const content = reconcileHomechatFinalAnswer(event.payload.text, state.streamingText);
     return {
       ...state,
       events,
-      phase: "streaming",
-      runId: event.runId ?? state.runId,
-      streamingText: reconcileHomechatFinalAnswer(event.payload.text, state.streamingText),
+      messages: persistCompletedHomechatMessage(state, {
+        completedMessage: action.completedMessage,
+        content,
+        createdAt: event.createdAt,
+        id: event.payload.messageId || event.id,
+        runId,
+      }),
+      phase: "completed",
+      runId,
+      status: "completed",
+      streamingText: "",
     };
   }
   if (event.type === "error") {
@@ -1235,7 +1377,7 @@ export function createHomechatRunController<Run extends SharedHomechatRunSnapsho
               cursor = event.id;
               options.onCursor?.(event.id);
             }
-            if (event.type === "run.status" && !isActiveHomechatRunStatus(event.payload.status)) terminal = true;
+            if (isTerminalHomechatEvent(event)) terminal = true;
             await options.onEvent?.(event);
           },
         });
@@ -1359,6 +1501,19 @@ export function composeHomechatVoiceMessage(input: {
   return draft ? `${draft}\n\n${voiceMessage}` : voiceMessage;
 }
 
+export async function completeHomechatVoiceNote(input: {
+  context?: SharedHomechatTransportContext;
+  controller: Pick<SharedHomechatVoiceController<unknown>, "stopAndTranscribe">;
+  draft?: string | null;
+  prefix?: string;
+}): Promise<{ message: string; transcript: string }> {
+  const transcript = await input.controller.stopAndTranscribe(input.context);
+  return {
+    message: composeHomechatVoiceMessage({ draft: input.draft, prefix: input.prefix, transcript }),
+    transcript,
+  };
+}
+
 export function homechatVoiceTranscriptError(error: unknown, fallback = "Voice note could not be transcribed."): string {
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : fallback;
   const normalized = message.toLowerCase();
@@ -1379,7 +1534,7 @@ export function createHomechatVoiceController<Recording, Audio>(adapter: {
   startRecording: (context: SharedHomechatTransportContext) => Promise<SharedHomechatVoiceRecording<Recording>>;
   stopRecording: (recording: Recording, context: SharedHomechatTransportContext) => Promise<Audio>;
   transcribe: (audio: Audio, context: SharedHomechatTransportContext & { mimeType?: string }) => Promise<string | { text: string }>;
-}) {
+}): SharedHomechatVoiceController<Recording> {
   let active: SharedHomechatVoiceRecording<Recording> | null = null;
 
   async function start(context: SharedHomechatTransportContext = {}) {

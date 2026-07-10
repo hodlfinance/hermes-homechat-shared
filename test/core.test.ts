@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   SharedHomechatRunControllerError,
+  completeHomechatVoiceNote,
   composeHomechatVoiceMessage,
   createHomechatClientState,
   createHomechatComposerController,
@@ -11,6 +12,7 @@ import {
   createHomechatRunController,
   createHomechatVoiceController,
   homechatTranscriptMessages,
+  isUserVisibleHomechatEvent,
   legacyHomechatRunEvent,
   mergeHomechatMessages,
   nextHomechatStreamingText,
@@ -50,14 +52,16 @@ test("normalizes legacy and canonical events into a discriminated contract", () 
   });
 });
 
-test("parses SSE blocks while ignoring malformed payloads", () => {
+test("parses standard SSE frames with CRLF event names and Last-Event-ID cursors", () => {
   const parsed = parseHomechatEventStream([
-    "id: 1\ndata: {\"type\":\"message.delta\",\"payload\":{\"text\":\"Hi\"}}",
+    "id: cursor-1\r\nevent: message_delta\r\ndata: {\"payload\":{\"delta\":\"Hi\"}}",
     "data: not-json",
     "data: {\"type\":\"unknown\"}",
-  ].join("\n\n"));
+  ].join("\r\n\r\n"), { cursor: "cursor-0" });
   assert.equal(parsed.events.length, 1);
   assert.equal(parsed.events[0]?.type, "message.delta");
+  assert.equal(parsed.events[0]?.id, "cursor-1");
+  assert.equal(parsed.cursor, "cursor-1");
   assert.equal(parsed.ignored, 2);
 });
 
@@ -86,6 +90,69 @@ test("reduces snapshots and overlapping stream deltas into canonical client stat
   assert.equal(state.phase, "completed");
   assert.equal(state.streamingText, "");
   assert.equal(state.messages.length, 1);
+});
+
+test("persists a completed assistant message before terminal status clears the draft", () => {
+  let state = createHomechatClientState();
+  state = reduceHomechatClientState(state, { type: "run.started", runId: "run-complete", status: "running" });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: { id: "delta-1", runId: "run-complete", type: "message_delta", payload: { delta: "Durable answer" } },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: {
+      id: "message-1",
+      runId: "run-complete",
+      type: "message_completed",
+      payload: { content: "Durable answer" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: { id: "status-1", runId: "run-complete", type: "status", payload: { status: "completed" } },
+  });
+
+  assert.equal(state.phase, "completed");
+  assert.equal(state.status, "completed");
+  assert.equal(state.streamingText, "");
+  assert.deepEqual(state.messages, [{
+    id: "message-1",
+    runId: "run-complete",
+    role: "assistant",
+    content: "Durable answer",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  }]);
+});
+
+test("persists the streamed draft when a terminal poll snapshot wins the completion race", () => {
+  let state = createHomechatClientState();
+  state = reduceHomechatClientState(state, { type: "run.started", runId: "run-poll", status: "running" });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: { id: "delta-poll", runId: "run-poll", type: "message_delta", payload: { delta: "Polled answer" } },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.snapshot",
+    run: { id: "run-poll", status: "completed", messages: [] },
+  });
+
+  assert.equal(state.phase, "completed");
+  assert.equal(state.streamingText, "");
+  assert.deepEqual(state.messages, [{
+    id: "run-poll:assistant",
+    runId: "run-poll",
+    role: "assistant",
+    content: "Polled answer",
+  }]);
+});
+
+test("marks source, artifact, and action updates as user-visible product events", () => {
+  assert.equal(isUserVisibleHomechatEvent({ type: "sources.update" }), true);
+  assert.equal(isUserVisibleHomechatEvent({ type: "artifact.update" }), true);
+  assert.equal(isUserVisibleHomechatEvent({ type: "action.proposal" }), true);
+  assert.equal(isUserVisibleHomechatEvent({ type: "message.delta" }), false);
 });
 
 test("preserves meaningful leading whitespace in streamed delta segments", () => {
@@ -169,6 +236,30 @@ test("waits, stops, reconnects, resumes SSE cursors, and aborts through an injec
   );
 });
 
+test("advances Last-Event-ID through parsed SSE reconnects until message completion", async () => {
+  const requests: Array<string | null | undefined> = [];
+  const controller = createHomechatRunController(
+    {
+      getRun: async (id) => ({ id, status: "running" }),
+      streamRun: async (id, context) => {
+        requests.push(context.cursor);
+        const frame = requests.length === 1
+          ? `id: cursor-1\r\nevent: message_delta\r\ndata: {"runId":"${id}","payload":{"delta":"Hi"}}\r\n\r\n`
+          : `id: cursor-2\r\nevent: message_completed\r\ndata: {"runId":"${id}","payload":{"content":"Hi"}}\r\n\r\n`;
+        const parsed = parseHomechatEventStream(frame, { cursor: context.cursor });
+        if (parsed.cursor) context.onCursor?.(parsed.cursor);
+        for (const event of parsed.events) await context.onEvent(event);
+        return { cursor: parsed.cursor };
+      },
+    },
+    { sleep: async () => undefined },
+  );
+
+  const result = await controller.stream("run-sse", { reconnectDelayMs: 0 });
+  assert.deepEqual(requests, [null, "cursor-1"]);
+  assert.deepEqual(result, { cursor: "cursor-2", terminal: true });
+});
+
 test("loads paged conversation and job history through an injected transport", async () => {
   const requests: Array<string | null | undefined> = [];
   const controller = createHomechatHistoryController<SharedHomechatHistoryItem>({
@@ -202,6 +293,9 @@ test("coordinates permission, recording, and transcription adapters", async () =
     transcribe: async (audio, context) => ({ text: `${audio}:${context.mimeType}` }),
   });
   await voice.start();
-  assert.equal(await voice.stopAndTranscribe(), "audio:recording-1:audio/webm");
+  assert.deepEqual(await completeHomechatVoiceNote({ controller: voice, draft: "Context" }), {
+    message: "Context\n\nVoice note:\n\naudio:recording-1:audio/webm",
+    transcript: "audio:recording-1:audio/webm",
+  });
   assert.equal(composeHomechatVoiceMessage({ draft: "Context", transcript: "Buy milk" }), "Context\n\nVoice note:\n\nBuy milk");
 });

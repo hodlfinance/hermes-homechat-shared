@@ -16,13 +16,13 @@ Current version: `0.2.0`.
 
 Shared here:
 
-- discriminated canonical run-event normalization
-- headless client reducer/state and streaming text reconciliation
+- discriminated canonical run-event normalization and standards-compliant SSE frame parsing
+- headless client reducer/state, durable message completion, and streaming text reconciliation
 - transcript filtering and message/history merging
 - composer intent and wait/stop/reconnect controllers
 - injectable polling and SSE transports with cursor, reconnect, timeout, and abort semantics
 - conversation/job history and job lifecycle controllers
-- browser/native recording and transcription adapters
+- adapter-driven browser/native recording and transcription controller
 - typed generic source, artifact, and action renderer slots
 - generic transcript, message frame, composer chrome, and voice meter React components
 
@@ -35,6 +35,8 @@ Not shared here:
 ## Transport Boundary
 
 The package never constructs a URL. Products implement `SharedHomechatRunTransport`, `SharedHomechatHistoryTransport`, and `SharedHomechatJobTransport` against their canonical backend contract. An SSE transport receives the latest cursor and an `AbortSignal`, reports cursor advances, and emits raw events for canonical normalization.
+
+`parseHomechatEventStream` accepts LF or CRLF frames, honors standard `id:`, `event:`, and multiline `data:` fields, attaches the frame id to normalized events, and returns the latest `cursor` for the next `Last-Event-ID` request. `message.completed` is a terminal event and the reducer persists its assistant message before clearing the streaming draft.
 
 ```ts
 import { createHomechatRunController } from "@hodlfinance/hermes-homechat-shared/core";
@@ -52,7 +54,7 @@ Finance owns the final product surface value `finhermes` in its transport metada
 
 1. Point the Finance superproject at the reviewed `0.2.0` package commit and pin all local consumers to `0.2.0`.
 2. Implement the transport interfaces with Finance's canonical client. Do not add Finance endpoints to this package.
-3. Feed API/SSE payloads through `normalizeHomechatRunEvent` or `reduceHomechatClientState`.
+3. Feed API/SSE payloads through `parseHomechatEventStream`, `normalizeHomechatRunEvent`, and `reduceHomechatClientState`; send the returned cursor as `Last-Event-ID` on reconnect.
 4. Use `HomechatTranscript` with typed `sources`, `artifacts`, and `actions`; render Finance cards, market panels, portfolio context, and confirmations in Finance-owned renderers.
 5. Keep Finance navigation, theme, responsive shell, and CSS in the Finance repo.
 6. Run package contract tests plus Finance desktop/mobile browser QA before updating the package pointer.
