@@ -428,6 +428,14 @@ test("owns send, stream-to-poll hydration, terminal errors, reconnect, and persi
   assert.deepEqual(state.messages, [persistedUser, persistedAssistant]);
 
   controller.reset([]);
+  const queued = await controller.send(
+    { message: "Hello" },
+    { follow: false, optimisticMessage: { id: "local-queued", role: "user", content: "Hello" } },
+  );
+  assert.equal(queued.phase, "waiting");
+  assert.deepEqual(queued.messages, [persistedUser]);
+
+  controller.reset([]);
   controller.dispatch({ type: "run.sending", optimisticMessage: { id: "local-stop", role: "user", content: "Hello" } });
   const stopped = await controller.stop("run-client");
   assert.equal(stopped.phase, "stopped");

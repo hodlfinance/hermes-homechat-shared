@@ -1838,6 +1838,7 @@ export function createHomechatRunController<
 }
 
 export type SharedHomechatFollowOptions = SharedHomechatStreamOptions & {
+  follow?: boolean;
   pollAfterStream?: boolean;
 };
 
@@ -1855,6 +1856,7 @@ export type SharedHomechatClientControllerOptions<
     content: string,
   ) => Message;
   onEvent?: (event: SharedHomechatCanonicalEvent) => void | Promise<void>;
+  onRunCreated?: (run: Run) => void | Promise<void>;
   onSnapshot?: (run: Run) => void | Promise<void>;
   onState?: (state: SharedHomechatClientState<Message, Source, Artifact, Action>) => void;
   runController?: ReturnType<typeof createHomechatRunController<Run, CreateRunRequest>>;
@@ -1951,6 +1953,12 @@ export function createHomechatClientController<
     dispatch({ type: "run.sending", optimisticMessage: sendOptions.optimisticMessage });
     try {
       const run = await runs.send(request, { signal: sendOptions.signal });
+      await options.onRunCreated?.(run);
+      if (sendOptions.follow === false) {
+        dispatch({ type: "run.started", runId: run.id, status: run.status });
+        await takeSnapshot(run);
+        return state;
+      }
       return await follow(run, sendOptions);
     } catch (error) {
       captureError(error);
