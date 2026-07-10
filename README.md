@@ -1,19 +1,60 @@
 # Hermes Homechat Shared
 
-Shared, product-neutral Homechat helpers and composer chrome used by Hey Hermes and FinanceHermes.
+Shared, product-neutral Homechat core and React primitives used by Hey Hermes and ready for FinanceHermes.
 
-This package intentionally contains no application secrets, no Finance data access, and no runtime credentials. Product apps keep their own API clients, styling, source cards, finance chips, and permission flows.
+This package intentionally contains no application secrets, endpoint paths, Finance data access, runtime credentials, themes, navigation, or product CSS. Products inject their own transports and renderers.
+
+Current version: `0.2.0`.
+
+## Exports
+
+- `@hodlfinance/hermes-homechat-shared/core`: canonical events, client reducer/state, transcript/message helpers, composer state, run/SSE/history/job/voice controllers, and typed product slots.
+- `@hodlfinance/hermes-homechat-shared/react`: unstyled transcript, message frame, composer chrome, and voice meter primitives.
+- `@hodlfinance/hermes-homechat-shared`: backward-compatible alias for `core`.
 
 ## Boundary
 
 Shared here:
 
-- Homechat status/action/composer state helpers
-- Voice notice and recording MIME helpers
-- Generic composer chrome and voice meter React components
+- discriminated canonical run-event normalization
+- headless client reducer/state and streaming text reconciliation
+- transcript filtering and message/history merging
+- composer intent and wait/stop/reconnect controllers
+- injectable polling and SSE transports with cursor, reconnect, timeout, and abort semantics
+- conversation/job history and job lifecycle controllers
+- browser/native recording and transcription adapters
+- typed generic source, artifact, and action renderer slots
+- generic transcript, message frame, composer chrome, and voice meter React components
 
 Not shared here:
 
 - Hey Hermes account/runtime ownership
 - FinanceHermes HODL/CapChat tools
 - product-specific CSS, copy, source cards, action proposals, or backend clients
+
+## Transport Boundary
+
+The package never constructs a URL. Products implement `SharedHomechatRunTransport`, `SharedHomechatHistoryTransport`, and `SharedHomechatJobTransport` against their canonical backend contract. An SSE transport receives the latest cursor and an `AbortSignal`, reports cursor advances, and emits raw events for canonical normalization.
+
+```ts
+import { createHomechatRunController } from "@hodlfinance/hermes-homechat-shared/core";
+
+const runs = createHomechatRunController({
+  getRun: (runId, { signal }) => productClient.getRun(runId, { signal }),
+  stopRun: (runId, { signal }) => productClient.stopRun(runId, { signal }),
+  streamRun: (runId, stream) => productClient.streamRun(runId, stream),
+});
+```
+
+## Finance Integration
+
+Finance owns the final product surface value `finhermes` in its transport metadata. The shared package does not define product-surface identities.
+
+1. Point the Finance superproject at the reviewed `0.2.0` package commit and pin all local consumers to `0.2.0`.
+2. Implement the transport interfaces with Finance's canonical client. Do not add Finance endpoints to this package.
+3. Feed API/SSE payloads through `normalizeHomechatRunEvent` or `reduceHomechatClientState`.
+4. Use `HomechatTranscript` with typed `sources`, `artifacts`, and `actions`; render Finance cards, market panels, portfolio context, and confirmations in Finance-owned renderers.
+5. Keep Finance navigation, theme, responsive shell, and CSS in the Finance repo.
+6. Run package contract tests plus Finance desktop/mobile browser QA before updating the package pointer.
+
+The old `heyHomechat*` and `financeHomechat*` helpers remain deprecated compatibility aliases for staged migration. New consumers should use product-neutral helpers and supply product copy locally.
