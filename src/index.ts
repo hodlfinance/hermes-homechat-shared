@@ -7,11 +7,16 @@ export type SharedHomechatRunStatus =
   | "cancelled"
   | "failed";
 
+export type SharedHomechatRunState = Exclude<SharedHomechatRunStatus, "waiting_for_approval">;
+
+export type SharedHomechatToolState = "started" | "succeeded" | "failed";
+
 export type SharedHomechatMessage<Role extends string = "user" | "assistant" | "system" | "tool"> = {
   content: string;
   conversationSessionId?: string | null;
   createdAt?: string;
   id?: string;
+  optimistic?: boolean;
   role: Role;
   runId?: string;
 };
@@ -57,6 +62,7 @@ export type SharedHomechatEventBase<
 > = {
   createdAt?: string;
   id?: string;
+  messageId?: string;
   payload: Payload;
   runId?: string;
   type: Type;
@@ -64,48 +70,100 @@ export type SharedHomechatEventBase<
 
 export type SharedHomechatRunStatusEvent = SharedHomechatEventBase<
   "run.status",
-  Record<string, SharedHomechatJsonValue> & { status: SharedHomechatRunStatus }
->;
+  Record<string, SharedHomechatJsonValue> & { error?: string; state: SharedHomechatRunState }
+> & {
+  error?: string;
+  state: SharedHomechatRunState;
+};
 
 export type SharedHomechatMessageDeltaEvent = SharedHomechatEventBase<
   "message.delta",
-  Record<string, SharedHomechatJsonValue> & { text: string }
->;
+  Record<string, SharedHomechatJsonValue> & { replace?: boolean; text: string }
+> & {
+  replace?: boolean;
+  text: string;
+};
 
 export type SharedHomechatMessageCompletedEvent = SharedHomechatEventBase<
   "message.completed",
   Record<string, SharedHomechatJsonValue> & { messageId: string; text: string }
->;
+> & {
+  messageId: string;
+  text: string;
+};
 
 export type SharedHomechatToolStatusEvent = SharedHomechatEventBase<
   "tool.status",
-  Record<string, SharedHomechatJsonValue>
->;
+  Record<string, SharedHomechatJsonValue> & {
+    label: string;
+    state: SharedHomechatToolState;
+    toolCallId: string;
+    toolName?: string;
+  }
+> & {
+  label: string;
+  state: SharedHomechatToolState;
+  toolCallId: string;
+  toolName?: string;
+};
+
+export type SharedHomechatSourceItem = {
+  as_of?: string;
+  asset_symbols?: string[];
+  kind: string;
+  origin: string;
+  published_at?: string;
+  snapshot_id?: string;
+  source_id?: string;
+  title: string;
+  url?: string;
+};
+
+export type SharedHomechatActionProposal = {
+  actionId: string;
+  expiresAt: string;
+  kind: string;
+  payload: SharedHomechatJsonValue;
+  summary: string;
+};
 
 export type SharedHomechatSourcesUpdateEvent = SharedHomechatEventBase<
   "sources.update",
-  Record<string, SharedHomechatJsonValue> & { sources: SharedHomechatJsonValue[] }
->;
+  Record<string, SharedHomechatJsonValue> & { items: SharedHomechatJsonValue[] }
+> & {
+  items: SharedHomechatJsonValue[];
+};
 
 export type SharedHomechatArtifactUpdateEvent = SharedHomechatEventBase<
   "artifact.update",
   Record<string, SharedHomechatJsonValue> & { artifacts: SharedHomechatJsonValue[] }
->;
+> & {
+  artifact?: SharedHomechatJsonValue;
+  artifacts: SharedHomechatJsonValue[];
+};
 
 export type SharedHomechatActionProposalEvent = SharedHomechatEventBase<
   "action.proposal",
-  Record<string, SharedHomechatJsonValue> & { actions: SharedHomechatJsonValue[] }
->;
+  Record<string, SharedHomechatJsonValue> & { action: SharedHomechatJsonValue }
+> & {
+  action: SharedHomechatJsonValue;
+};
 
 export type SharedHomechatUsageUpdateEvent = SharedHomechatEventBase<
   "usage.update",
-  Record<string, SharedHomechatJsonValue>
->;
+  Record<string, SharedHomechatJsonValue> & { limit?: number; used: number }
+> & {
+  limit?: number;
+  used: number;
+};
 
 export type SharedHomechatErrorEvent = SharedHomechatEventBase<
   "error",
-  Record<string, SharedHomechatJsonValue> & { message: string }
->;
+  Record<string, SharedHomechatJsonValue> & { code: string; message: string }
+> & {
+  code: string;
+  message: string;
+};
 
 export type SharedHomechatCanonicalEvent =
   | SharedHomechatRunStatusEvent
@@ -172,6 +230,21 @@ export type SharedHomechatProductSlots<
   sources?: readonly Source[];
 };
 
+export type SharedHomechatSlotContext<Message extends SharedHomechatMessage = SharedHomechatMessage> = {
+  message: Message;
+  messageId: string | null;
+  runId: string | null;
+};
+
+export type SharedHomechatKeyedProductSlots<
+  Source = SharedHomechatJsonValue,
+  Artifact = SharedHomechatJsonValue,
+  Action = SharedHomechatJsonValue,
+> = {
+  byMessageId: Record<string, SharedHomechatProductSlots<Source, Artifact, Action>>;
+  byRunId: Record<string, SharedHomechatProductSlots<Source, Artifact, Action>>;
+};
+
 export type SharedHomechatProductRenderers<
   Rendered,
   Message extends SharedHomechatMessage = SharedHomechatMessage,
@@ -179,13 +252,13 @@ export type SharedHomechatProductRenderers<
   Artifact = SharedHomechatArtifact,
   Action = SharedHomechatProductAction,
 > = {
-  action?: (action: Action, message: Message) => Rendered;
-  actions?: (actions: readonly Action[], message: Message) => Rendered;
-  artifact?: (artifact: Artifact, message: Message) => Rendered;
-  artifacts?: (artifacts: readonly Artifact[], message: Message) => Rendered;
+  action?: (action: Action, message: Message, context: SharedHomechatSlotContext<Message>) => Rendered;
+  actions?: (actions: readonly Action[], message: Message, context: SharedHomechatSlotContext<Message>) => Rendered;
+  artifact?: (artifact: Artifact, message: Message, context: SharedHomechatSlotContext<Message>) => Rendered;
+  artifacts?: (artifacts: readonly Artifact[], message: Message, context: SharedHomechatSlotContext<Message>) => Rendered;
   message: (message: Message, index: number) => Rendered;
-  source?: (source: Source, message: Message) => Rendered;
-  sources?: (sources: readonly Source[], message: Message) => Rendered;
+  source?: (source: Source, message: Message, context: SharedHomechatSlotContext<Message>) => Rendered;
+  sources?: (sources: readonly Source[], message: Message, context: SharedHomechatSlotContext<Message>) => Rendered;
 };
 
 export type SharedHomechatClientPhase =
@@ -199,12 +272,18 @@ export type SharedHomechatClientPhase =
   | "stopped"
   | "error";
 
-export type SharedHomechatClientState<Message extends SharedHomechatMessage = SharedHomechatMessage> = {
+export type SharedHomechatClientState<
+  Message extends SharedHomechatMessage = SharedHomechatMessage,
+  Source = SharedHomechatJsonValue,
+  Artifact = SharedHomechatJsonValue,
+  Action = SharedHomechatJsonValue,
+> = {
   error: string | null;
   events: SharedHomechatCanonicalEvent[];
   messages: Message[];
   phase: SharedHomechatClientPhase;
   runId: string | null;
+  slots: SharedHomechatKeyedProductSlots<Source, Artifact, Action>;
   startedAt: number | null;
   status: SharedHomechatRunStatus | null;
   streamingText: string;
@@ -212,12 +291,14 @@ export type SharedHomechatClientState<Message extends SharedHomechatMessage = Sh
 
 export type SharedHomechatClientAction<Message extends SharedHomechatMessage = SharedHomechatMessage> =
   | { type: "reset"; messages?: Message[] }
+  | { type: "run.sending"; optimisticMessage?: Message }
   | { type: "run.started"; runId: string; startedAt?: number; status?: SharedHomechatRunStatus | string }
   | { type: "run.reconnecting"; runId: string; startedAt?: number }
   | { type: "run.stopping" }
   | {
       type: "run.snapshot";
       run: {
+        error?: string | null;
         events?: readonly unknown[];
         id: string;
         messages?: readonly Message[];
@@ -231,6 +312,7 @@ export type SharedHomechatRunSnapshot<
   Message extends SharedHomechatMessage = SharedHomechatMessage,
   Event = SharedHomechatRunEvent,
 > = {
+  error?: string | null;
   events?: readonly Event[];
   id: string;
   messages?: readonly Message[];
@@ -256,6 +338,11 @@ export type SharedHomechatRunWaitOptions<Run> = {
   timeoutMs?: number;
 };
 
+export type SharedHomechatRunCreateOptions<Run> = {
+  onSnapshot?: (run: Run) => void | Promise<void>;
+  signal?: AbortSignal;
+};
+
 export type SharedHomechatTransportContext = {
   signal?: AbortSignal;
 };
@@ -271,7 +358,11 @@ export type SharedHomechatStreamResult = {
   terminal?: boolean;
 };
 
-export type SharedHomechatRunTransport<Run extends SharedHomechatRunSnapshot> = {
+export type SharedHomechatRunTransport<
+  Run extends SharedHomechatRunSnapshot,
+  CreateRunRequest = never,
+> = {
+  createRun?: (request: CreateRunRequest, context: SharedHomechatTransportContext) => Promise<Run>;
   getRun: (runId: string, context: SharedHomechatTransportContext) => Promise<Run>;
   stopRun?: (runId: string, context: SharedHomechatTransportContext) => Promise<Run | void>;
   streamRun?: (runId: string, context: SharedHomechatStreamContext) => Promise<SharedHomechatStreamResult | void>;
@@ -285,6 +376,53 @@ export type SharedHomechatStreamOptions = {
   onReconnect?: (attempt: number, cursor: string | null, error?: unknown) => void | Promise<void>;
   reconnectDelayMs?: number;
   signal?: AbortSignal;
+};
+
+export type SharedHomechatPage<Item> = {
+  cursor: string | null;
+  items: Item[];
+};
+
+export type SharedHomechatConversation = {
+  id: string;
+  title?: string;
+  updatedAt?: string;
+};
+
+export type SharedHomechatConversationListRequest = SharedHomechatTransportContext & {
+  cursor?: string | null;
+  limit?: number;
+  search?: string;
+};
+
+export type SharedHomechatMessageListRequest = SharedHomechatTransportContext & {
+  conversationId: string;
+  cursor?: string | null;
+  limit?: number;
+};
+
+export type SharedHomechatConversationTransport<
+  Conversation extends SharedHomechatConversation = SharedHomechatConversation,
+  Message extends SharedHomechatMessage = SharedHomechatMessage,
+  CreateConversationRequest = Record<string, never>,
+> = {
+  createConversation: (
+    request: CreateConversationRequest,
+    context: SharedHomechatTransportContext,
+  ) => Promise<Conversation>;
+  listConversations: (
+    request: SharedHomechatConversationListRequest,
+  ) => Promise<SharedHomechatPage<Conversation>>;
+  listMessages: (
+    request: SharedHomechatMessageListRequest,
+  ) => Promise<SharedHomechatPage<Message>>;
+};
+
+export type SharedHomechatPagedState<Item> = {
+  cursor: string | null;
+  error: string | null;
+  items: Item[];
+  phase: "idle" | "loading" | "ready" | "error";
 };
 
 export type SharedHomechatHistoryKind = "conversation" | "job" | (string & {});
@@ -333,9 +471,36 @@ export type SharedHomechatJob = {
   status: SharedHomechatJobStatus | string;
 };
 
-export type SharedHomechatJobTransport<Job extends SharedHomechatJob = SharedHomechatJob> = {
+export type SharedHomechatJobHistoryItem = {
+  id: string;
+  jobId: string;
+  status: SharedHomechatJobStatus | string;
+};
+
+export type SharedHomechatJobListRequest = SharedHomechatTransportContext & {
+  cursor?: string | null;
+  limit?: number;
+};
+
+export type SharedHomechatJobHistoryRequest = SharedHomechatJobListRequest & {
+  jobId: string;
+};
+
+export type SharedHomechatJobTransport<
+  Job extends SharedHomechatJob = SharedHomechatJob,
+  CreateJobRequest = unknown,
+  UpdateJobRequest = unknown,
+  JobRun extends SharedHomechatRunSnapshot = SharedHomechatRunSnapshot,
+  HistoryItem extends SharedHomechatJobHistoryItem = SharedHomechatJobHistoryItem,
+> = {
   cancelJob?: (jobId: string, context: SharedHomechatTransportContext) => Promise<Job | void>;
+  createJob: (request: CreateJobRequest, context: SharedHomechatTransportContext) => Promise<Job>;
+  deleteJob: (jobId: string, context: SharedHomechatTransportContext) => Promise<void>;
   getJob: (jobId: string, context: SharedHomechatTransportContext) => Promise<Job>;
+  listJobHistory: (request: SharedHomechatJobHistoryRequest) => Promise<SharedHomechatPage<HistoryItem>>;
+  listJobs: (request: SharedHomechatJobListRequest) => Promise<SharedHomechatPage<Job>>;
+  runJob: (jobId: string, context: SharedHomechatTransportContext) => Promise<JobRun>;
+  updateJob: (jobId: string, request: UpdateJobRequest, context: SharedHomechatTransportContext) => Promise<Job>;
 };
 
 export type SharedHomechatComposerIntent = "none" | "send" | "queue_follow_up" | "transcribe_voice";
@@ -357,6 +522,20 @@ export type SharedHomechatVoiceControllerErrorCode =
   | "empty_recording"
   | "empty_transcript";
 
+export type SharedHomechatVoicePhase =
+  | "idle"
+  | "requesting_permission"
+  | "recording"
+  | "stopping"
+  | "transcribing"
+  | "error";
+
+export type SharedHomechatVoiceState = {
+  error: string | null;
+  permission: "unknown" | "granted" | "denied";
+  phase: SharedHomechatVoicePhase;
+};
+
 export class SharedHomechatVoiceControllerError extends Error {
   readonly code: SharedHomechatVoiceControllerErrorCode;
 
@@ -369,9 +548,11 @@ export class SharedHomechatVoiceControllerError extends Error {
 
 export type SharedHomechatVoiceController<Recording> = {
   cancel: (context?: SharedHomechatTransportContext) => Promise<void>;
+  getState: () => SharedHomechatVoiceState;
   isRecording: () => boolean;
   start: (context?: SharedHomechatTransportContext) => Promise<SharedHomechatVoiceRecording<Recording>>;
   stopAndTranscribe: (context?: SharedHomechatTransportContext) => Promise<string>;
+  subscribe: (listener: (state: SharedHomechatVoiceState) => void) => () => void;
 };
 
 export type SharedHomechatRunControllerErrorCode =
@@ -482,6 +663,10 @@ function homechatStreamingValue(value: unknown): string | null {
   return typeof value === "string" && value.length ? value : null;
 }
 
+function homechatNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function homechatJsonValue(value: unknown): SharedHomechatJsonValue | undefined {
   if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return value as SharedHomechatJsonValue;
@@ -555,39 +740,93 @@ export function normalizeHomechatRunEvent(input: unknown): SharedHomechatCanonic
   const id = homechatText(raw.id) ?? undefined;
   const runId = homechatText(raw.runId) ?? homechatText(raw.run_id) ?? undefined;
   const createdAt = homechatText(raw.createdAt) ?? homechatText(raw.created_at) ?? undefined;
+  const messageId = homechatText(raw.messageId) ?? homechatText(raw.message_id) ??
+    homechatText(rawPayload.messageId) ?? homechatText(rawPayload.message_id) ?? undefined;
   const payload = homechatJsonRecord(rawPayload);
 
   if (type === "run.status") {
-    const status = normalizeHomechatRunStatus(raw.status ?? raw.state ?? rawPayload.status ?? rawPayload.state) ?? "running";
-    payload.status = status;
+    const normalized = normalizeHomechatRunStatus(raw.state ?? raw.status ?? rawPayload.state ?? rawPayload.status) ?? "running";
+    const state: SharedHomechatRunState = normalized === "waiting_for_approval" ? "waiting" : normalized;
+    const error = homechatText(raw.error) ?? homechatText(rawPayload.error) ?? undefined;
+    payload.state = state;
+    if (error) payload.error = error;
+    return { id, runId, messageId, type, state, ...(error ? { error } : {}), payload: payload as SharedHomechatRunStatusEvent["payload"], createdAt };
   }
   if (type === "message.delta") {
-    payload.text = homechatStreamingValue(rawPayload.delta) ?? homechatStreamingValue(rawPayload.text) ?? homechatStreamingValue(rawPayload.content) ?? homechatStreamingValue(raw.text) ?? "";
+    const text = homechatStreamingValue(raw.text) ?? homechatStreamingValue(raw.delta) ??
+      homechatStreamingValue(rawPayload.text) ?? homechatStreamingValue(rawPayload.delta) ??
+      homechatStreamingValue(rawPayload.content) ?? "";
+    const replace = raw.replace === true || rawPayload.replace === true;
+    payload.text = text;
+    if (replace) payload.replace = true;
+    return { id, runId, messageId, type, text, ...(replace ? { replace: true } : {}), payload: payload as SharedHomechatMessageDeltaEvent["payload"], createdAt };
   }
   if (type === "message.completed") {
-    payload.text = homechatStreamingValue(rawPayload.content) ?? homechatStreamingValue(rawPayload.text) ?? homechatStreamingValue(raw.text) ?? "";
-    payload.messageId = homechatText(rawPayload.messageId) ?? homechatText(rawPayload.message_id) ?? homechatText(raw.messageId) ?? "";
+    const text = homechatStreamingValue(raw.text) ?? homechatStreamingValue(raw.content) ??
+      homechatStreamingValue(rawPayload.text) ?? homechatStreamingValue(rawPayload.content) ?? "";
+    const completedMessageId = messageId ?? "";
+    payload.text = text;
+    payload.messageId = completedMessageId;
+    return { id, runId, type, messageId: completedMessageId, text, payload: payload as SharedHomechatMessageCompletedEvent["payload"], createdAt };
+  }
+  if (type === "tool.status") {
+    const toolCallId = homechatText(raw.toolCallId) ?? homechatText(raw.tool_call_id) ??
+      homechatText(rawPayload.toolCallId) ?? homechatText(rawPayload.tool_call_id) ?? "";
+    const toolName = homechatText(raw.toolName) ?? homechatText(raw.tool_name) ??
+      homechatText(rawPayload.toolName) ?? homechatText(rawPayload.tool_name) ?? undefined;
+    const label = homechatText(raw.label) ?? homechatText(rawPayload.label) ?? "";
+    const rawState = raw.state ?? raw.status ?? rawPayload.state ?? rawPayload.status;
+    const state: SharedHomechatToolState = rawState === "succeeded" || rawState === "failed" ? rawState : "started";
+    payload.toolCallId = toolCallId;
+    payload.label = label;
+    payload.state = state;
+    if (toolName) payload.toolName = toolName;
+    return { id, runId, messageId, type, toolCallId, ...(toolName ? { toolName } : {}), label, state, payload: payload as SharedHomechatToolStatusEvent["payload"], createdAt };
   }
 
   if (type === "sources.update") {
-    payload.sources = Array.isArray(rawPayload.sources) ? homechatJsonValue(rawPayload.sources) ?? [] : [];
+    const rawItems = raw.items ?? rawPayload.items ?? raw.sources ?? rawPayload.sources;
+    const items = Array.isArray(rawItems) ? homechatJsonValue(rawItems) as SharedHomechatJsonValue[] : [];
+    payload.items = items;
+    return { id, runId, messageId, type, items, payload: payload as SharedHomechatSourcesUpdateEvent["payload"], createdAt };
   }
   if (type === "artifact.update") {
-    payload.artifacts = Array.isArray(rawPayload.artifacts) ? homechatJsonValue(rawPayload.artifacts) ?? [] : [];
+    const rawArtifacts = raw.artifacts ?? rawPayload.artifacts ?? raw.items ?? rawPayload.items;
+    const rawArtifact = raw.artifact ?? rawPayload.artifact;
+    const artifacts = Array.isArray(rawArtifacts)
+      ? homechatJsonValue(rawArtifacts) as SharedHomechatJsonValue[]
+      : rawArtifact === undefined
+        ? []
+        : [homechatJsonValue(rawArtifact) ?? null];
+    const artifact = rawArtifact === undefined ? artifacts[0] : homechatJsonValue(rawArtifact);
+    payload.artifacts = artifacts;
+    if (artifact !== undefined) payload.artifact = artifact;
+    return { id, runId, messageId, type, artifacts, ...(artifact !== undefined ? { artifact } : {}), payload: payload as SharedHomechatArtifactUpdateEvent["payload"], createdAt };
   }
   if (type === "action.proposal") {
-    const actions = Array.isArray(rawPayload.actions)
-      ? rawPayload.actions
-      : rawPayload.action
-        ? [rawPayload.action]
-        : [];
-    payload.actions = homechatJsonValue(actions) ?? [];
+    const rawActions = raw.actions ?? rawPayload.actions;
+    const rawAction = raw.action ?? rawPayload.action ?? (Array.isArray(rawActions) ? rawActions[0] : undefined);
+    const action = homechatJsonValue(rawAction) ?? {};
+    payload.action = action;
+    return { id, runId, messageId, type, action, payload: payload as SharedHomechatActionProposalEvent["payload"], createdAt };
+  }
+  if (type === "usage.update") {
+    const used = homechatNumber(raw.used) ?? homechatNumber(rawPayload.used) ?? 0;
+    const limit = homechatNumber(raw.limit) ?? homechatNumber(rawPayload.limit) ?? undefined;
+    payload.used = used;
+    if (limit !== undefined) payload.limit = limit;
+    return { id, runId, messageId, type, used, ...(limit !== undefined ? { limit } : {}), payload: payload as SharedHomechatUsageUpdateEvent["payload"], createdAt };
   }
   if (type === "error") {
-    payload.message = homechatText(rawPayload.message) ?? homechatText(rawPayload.error) ?? homechatText(raw.message) ?? "";
+    const code = homechatText(raw.code) ?? homechatText(rawPayload.code) ?? "run_error";
+    const message = homechatText(raw.message) ?? homechatText(raw.error) ??
+      homechatText(rawPayload.message) ?? homechatText(rawPayload.error) ?? "";
+    payload.code = code;
+    payload.message = message;
+    return { id, runId, messageId, type, code, message, payload: payload as SharedHomechatErrorEvent["payload"], createdAt };
   }
 
-  return { id, runId, type, payload, createdAt } as SharedHomechatCanonicalEvent;
+  return null;
 }
 
 export function legacyHomechatRunEvent(input: unknown): SharedHomechatLegacyEvent | null {
@@ -601,20 +840,21 @@ export function legacyHomechatRunEvent(input: unknown): SharedHomechatLegacyEven
   const payload: Record<string, unknown> = { ...event.payload };
 
   if (event.type === "run.status") {
-    const status = normalizeHomechatRunStatus(payload.status) ?? "running";
+    const status = normalizeHomechatRunStatus(event.state) ?? "running";
+    const { state: _state, ...legacyPayload } = payload;
     return {
       id,
       runId,
       type: "status",
-      payload: { ...payload, status: status === "waiting" ? "waiting_for_approval" : status },
+      payload: { ...legacyPayload, status: status === "waiting" ? "waiting_for_approval" : status },
       createdAt,
     };
   }
   if (event.type === "message.delta") {
-    return { id, runId, type: "message_delta", payload: { ...payload, delta: payload.text ?? "" }, createdAt };
+    return { id, runId, type: "message_delta", payload: { ...payload, delta: event.text }, createdAt };
   }
   if (event.type === "message.completed") {
-    return { id, runId, type: "message_completed", payload: { ...payload, content: payload.text ?? "" }, createdAt };
+    return { id, runId, type: "message_completed", payload: { ...payload, content: event.text }, createdAt };
   }
   if (event.type === "usage.update") return { id, runId, type: "usage", payload, createdAt };
   if (event.type === "error") return { id, runId, type: "error", payload, createdAt };
@@ -668,6 +908,42 @@ export function parseHomechatEventStream(
   return { cursor, events, ignored };
 }
 
+export function createHomechatEventStreamDecoder(options: SharedHomechatEventStreamParseOptions = {}) {
+  let buffer = "";
+  let cursor = options.cursor ?? null;
+
+  function parseFrames(value: string): SharedHomechatEventStreamParseResult {
+    const parsed = parseHomechatEventStream(value, { cursor });
+    cursor = parsed.cursor;
+    return parsed;
+  }
+
+  function push(chunk: string): SharedHomechatEventStreamParseResult {
+    buffer += chunk;
+    const frames: string[] = [];
+    while (true) {
+      const match = /\r?\n\r?\n/.exec(buffer);
+      if (!match || match.index === undefined) break;
+      const end = match.index + match[0].length;
+      frames.push(buffer.slice(0, end));
+      buffer = buffer.slice(end);
+    }
+    return frames.length ? parseFrames(frames.join("")) : { cursor, events: [], ignored: 0 };
+  }
+
+  function finish(): SharedHomechatEventStreamParseResult {
+    if (!buffer.trim()) {
+      buffer = "";
+      return { cursor, events: [], ignored: 0 };
+    }
+    const remainder = buffer;
+    buffer = "";
+    return parseFrames(remainder);
+  }
+
+  return { finish, getCursor: () => cursor, push };
+}
+
 export function isUserVisibleHomechatEvent(
   event: Pick<SharedHomechatCanonicalEvent, "type">,
 ): boolean {
@@ -689,7 +965,7 @@ export function isTerminalHomechatEvent(event: SharedHomechatCanonicalEvent): bo
   return (
     event.type === "message.completed" ||
     event.type === "error" ||
-    (event.type === "run.status" && !isActiveHomechatRunStatus(event.payload.status))
+    (event.type === "run.status" && !isActiveHomechatRunStatus(event.state))
   );
 }
 
@@ -752,6 +1028,28 @@ export function mergeHomechatMessages<T extends SharedHomechatMessage>(current: 
       if (message.id) indexById.set(message.id, matchingCompletedMessageIndex);
       continue;
     }
+    let optimisticUserIndex = -1;
+    if (message.role === "user") {
+      for (let candidateIndex = merged.length - 1; candidateIndex >= 0; candidateIndex -= 1) {
+        const item = merged[candidateIndex];
+        if (
+          item?.role === "user" &&
+          item.optimistic === true &&
+          item.content === message.content &&
+          (!message.conversationSessionId || !item.conversationSessionId || item.conversationSessionId === message.conversationSessionId)
+        ) {
+          optimisticUserIndex = candidateIndex;
+          break;
+        }
+      }
+    }
+    if (optimisticUserIndex >= 0) {
+      const previousId = merged[optimisticUserIndex]?.id;
+      if (previousId) indexById.delete(previousId);
+      merged[optimisticUserIndex] = message;
+      if (message.id) indexById.set(message.id, optimisticUserIndex);
+      continue;
+    }
     if (message.id) indexById.set(message.id, merged.length);
     merged.push(message);
   }
@@ -798,30 +1096,6 @@ export function homechatRunStatusLabel(
   if (status === "cancelled") return copy.cancelled ?? "That message was stopped.";
   if (status === "failed") return copy.failed ?? "That message did not go through.";
   return copy.unknown ?? "The assistant is working...";
-}
-
-/** @deprecated Use homechatStatusLabel with product-owned copy. */
-export function financeHomechatStatusLabel(run: SharedHomechatRun | null): string {
-  return homechatStatusLabel(run);
-}
-
-/** @deprecated Use homechatRunStatusLabel with product-owned copy. */
-export function heyHomechatRunStatusLabel(status: string | null | undefined): string {
-  return homechatRunStatusLabel(status, {
-    queued: "Waiting for Hermes...",
-    running: "Hermes is thinking...",
-    waiting: "Hermes needs a moment...",
-    unknown: "Hermes is working...",
-  });
-}
-
-/** @deprecated Use homechatRunStatusLabel with product-owned copy. */
-export function financeHomechatRunStatusLabel(
-  status: SharedHomechatRunStatus | null | undefined,
-): string {
-  if (!status) return "Ready";
-  if (status === "waiting_for_approval") return "Hermes needs a moment...";
-  return homechatStatusLabel({ status });
 }
 
 export function homechatActionView(args: {
@@ -926,9 +1200,6 @@ export function homechatActionView(args: {
   };
 }
 
-/** @deprecated Use homechatActionView. */
-export const sharedHomechatActionView = homechatActionView;
-
 export function nextHomechatStreamingText(
   current: string,
   payload: Record<string, unknown>,
@@ -946,8 +1217,7 @@ export function streamingTextFromHomechatEvents(events: readonly unknown[]): str
   return events.reduce<string>((draft, input) => {
     const event = normalizeHomechatRunEvent(input);
     if (event?.type !== "message.delta") return draft;
-    const replace = event.payload.replace === true;
-    return nextHomechatStreamingText(draft, event.payload, replace);
+    return nextHomechatStreamingText(draft, { text: event.text }, event.replace === true);
   }, "");
 }
 
@@ -1110,15 +1380,95 @@ export function formatHomechatElapsedSeconds(seconds: number): string {
   return `${minutes}m ${String(remainder).padStart(2, "0")}s`;
 }
 
-export function createHomechatClientState<Message extends SharedHomechatMessage>(
+export function createHomechatKeyedProductSlots<Source = SharedHomechatJsonValue, Artifact = SharedHomechatJsonValue, Action = SharedHomechatJsonValue>(): SharedHomechatKeyedProductSlots<Source, Artifact, Action> {
+  return { byMessageId: {}, byRunId: {} };
+}
+
+function homechatSlotValueKey(value: unknown, index: number): string {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    const id = homechatText(record.id) ?? homechatText(record.actionId) ?? homechatText(record.artifactId) ??
+      homechatText(record.source_id) ?? homechatText(record.snapshot_id);
+    if (id) return id;
+  }
+  try {
+    return JSON.stringify(value) || String(index);
+  } catch {
+    return String(index);
+  }
+}
+
+function mergeHomechatSlotValues<Value>(current: readonly Value[] = [], incoming: readonly Value[] = []): Value[] {
+  const merged = [...current];
+  const indexByKey = new Map(merged.map((value, index) => [homechatSlotValueKey(value, index), index]));
+  for (const value of incoming) {
+    const key = homechatSlotValueKey(value, merged.length);
+    const index = indexByKey.get(key);
+    if (index === undefined) {
+      indexByKey.set(key, merged.length);
+      merged.push(value);
+    } else {
+      merged[index] = value;
+    }
+  }
+  return merged;
+}
+
+export function mergeHomechatProductSlots<Source, Artifact, Action>(
+  current: SharedHomechatProductSlots<Source, Artifact, Action> | null | undefined,
+  incoming: SharedHomechatProductSlots<Source, Artifact, Action> | null | undefined,
+): SharedHomechatProductSlots<Source, Artifact, Action> {
+  return {
+    sources: mergeHomechatSlotValues(current?.sources, incoming?.sources),
+    artifacts: mergeHomechatSlotValues(current?.artifacts, incoming?.artifacts),
+    actions: mergeHomechatSlotValues(current?.actions, incoming?.actions),
+  };
+}
+
+export function putHomechatProductSlots<Source, Artifact, Action>(
+  current: SharedHomechatKeyedProductSlots<Source, Artifact, Action>,
+  input: {
+    messageId?: string | null;
+    runId?: string | null;
+    slots: SharedHomechatProductSlots<Source, Artifact, Action>;
+  },
+): SharedHomechatKeyedProductSlots<Source, Artifact, Action> {
+  const byMessageId = { ...current.byMessageId };
+  const byRunId = { ...current.byRunId };
+  if (input.runId) byRunId[input.runId] = mergeHomechatProductSlots(byRunId[input.runId], input.slots);
+  if (input.messageId) byMessageId[input.messageId] = mergeHomechatProductSlots(byMessageId[input.messageId], input.slots);
+  return { byMessageId, byRunId };
+}
+
+export function homechatProductSlotsForMessage<
+  Message extends SharedHomechatMessage,
+  Source,
+  Artifact,
+  Action,
+>(
+  slots: SharedHomechatKeyedProductSlots<Source, Artifact, Action>,
+  message: Message,
+): SharedHomechatProductSlots<Source, Artifact, Action> {
+  const runSlots = message.runId ? slots.byRunId[message.runId] : undefined;
+  const messageSlots = message.id ? slots.byMessageId[message.id] : undefined;
+  return mergeHomechatProductSlots(runSlots, messageSlots);
+}
+
+export function createHomechatClientState<
+  Message extends SharedHomechatMessage,
+  Source = SharedHomechatJsonValue,
+  Artifact = SharedHomechatJsonValue,
+  Action = SharedHomechatJsonValue,
+>(
   messages: readonly Message[] = [],
-): SharedHomechatClientState<Message> {
+): SharedHomechatClientState<Message, Source, Artifact, Action> {
   return {
     error: null,
     events: [],
     messages: [...messages],
     phase: "idle",
     runId: null,
+    slots: createHomechatKeyedProductSlots<Source, Artifact, Action>(),
     startedAt: null,
     status: null,
     streamingText: "",
@@ -1141,7 +1491,7 @@ function completedHomechatMessage<Message extends SharedHomechatMessage>(input: 
 }
 
 function persistCompletedHomechatMessage<Message extends SharedHomechatMessage>(
-  state: SharedHomechatClientState<Message>,
+  state: { messages: Message[] },
   input: {
     completedMessage?: Message;
     content: string;
@@ -1165,11 +1515,27 @@ function persistCompletedHomechatMessage<Message extends SharedHomechatMessage>(
   return mergeHomechatMessages(state.messages, [message]);
 }
 
-export function reduceHomechatClientState<Message extends SharedHomechatMessage>(
-  state: SharedHomechatClientState<Message>,
+export function reduceHomechatClientState<
+  Message extends SharedHomechatMessage,
+  Source = SharedHomechatJsonValue,
+  Artifact = SharedHomechatJsonValue,
+  Action = SharedHomechatJsonValue,
+>(
+  state: SharedHomechatClientState<Message, Source, Artifact, Action>,
   action: SharedHomechatClientAction<Message>,
-): SharedHomechatClientState<Message> {
-  if (action.type === "reset") return createHomechatClientState(action.messages ?? state.messages);
+): SharedHomechatClientState<Message, Source, Artifact, Action> {
+  if (action.type === "reset") return createHomechatClientState<Message, Source, Artifact, Action>(action.messages ?? state.messages);
+  if (action.type === "run.sending") {
+    return {
+      ...state,
+      error: null,
+      messages: action.optimisticMessage
+        ? mergeHomechatMessages(state.messages, [{ ...action.optimisticMessage, optimistic: true }])
+        : state.messages,
+      phase: "sending",
+      streamingText: "",
+    };
+  }
   if (action.type === "run.started") {
     const status = normalizeHomechatRunStatus(action.status) ?? "queued";
     return {
@@ -1195,7 +1561,7 @@ export function reduceHomechatClientState<Message extends SharedHomechatMessage>
   if (action.type === "run.stopping") return { ...state, phase: "stopping" };
   if (action.type === "run.error") return { ...state, error: action.error, phase: "error" };
   if (action.type === "run.snapshot") {
-    let next: SharedHomechatClientState<Message> = {
+    let next: SharedHomechatClientState<Message, Source, Artifact, Action> = {
       ...state,
       runId: action.run.id,
       messages: mergeHomechatMessages(state.messages, action.run.messages ?? []),
@@ -1207,7 +1573,7 @@ export function reduceHomechatClientState<Message extends SharedHomechatMessage>
     const terminal = status === "completed" || status === "cancelled" || status === "failed";
     return {
       ...next,
-      error: status === "failed" ? next.error : null,
+      error: status === "failed" ? action.run.error ?? next.error ?? "The run could not finish." : null,
       messages: status === "completed"
         ? persistCompletedHomechatMessage(next, {
             content: next.streamingText,
@@ -1228,13 +1594,34 @@ export function reduceHomechatClientState<Message extends SharedHomechatMessage>
   )
     ? state.events
     : [...state.events, event];
+  let slots = state.slots;
+  if (event.type === "sources.update") {
+    slots = putHomechatProductSlots(slots, {
+      messageId: event.messageId,
+      runId: event.runId ?? state.runId,
+      slots: { sources: event.items as Source[] },
+    });
+  } else if (event.type === "artifact.update") {
+    slots = putHomechatProductSlots(slots, {
+      messageId: event.messageId,
+      runId: event.runId ?? state.runId,
+      slots: { artifacts: event.artifacts as Artifact[] },
+    });
+  } else if (event.type === "action.proposal") {
+    slots = putHomechatProductSlots(slots, {
+      messageId: event.messageId,
+      runId: event.runId ?? state.runId,
+      slots: { actions: [event.action as Action] },
+    });
+  }
 
   if (event.type === "run.status") {
     const runId = event.runId ?? state.runId;
-    const completed = event.payload.status === "completed" && Boolean(runId);
+    const completed = event.state === "completed" && Boolean(runId);
     return {
       ...state,
       events,
+      error: event.state === "failed" ? event.error ?? state.error ?? "The run could not finish." : null,
       messages: completed
         ? persistCompletedHomechatMessage(state, {
             content: state.streamingText,
@@ -1243,10 +1630,11 @@ export function reduceHomechatClientState<Message extends SharedHomechatMessage>
             runId: runId!,
           })
         : state.messages,
-      phase: homechatClientPhaseForStatus(event.payload.status),
+      phase: homechatClientPhaseForStatus(event.state),
       runId,
-      status: event.payload.status,
-      streamingText: isActiveHomechatRunStatus(event.payload.status) ? state.streamingText : "",
+      slots,
+      status: event.state,
+      streamingText: isActiveHomechatRunStatus(event.state) ? state.streamingText : "",
     };
   }
   if (event.type === "message.delta") {
@@ -1255,12 +1643,17 @@ export function reduceHomechatClientState<Message extends SharedHomechatMessage>
       events,
       phase: "streaming",
       runId: event.runId ?? state.runId,
-      streamingText: nextHomechatStreamingText(state.streamingText, event.payload, event.payload.replace === true),
+      slots,
+      streamingText: nextHomechatStreamingText(state.streamingText, { text: event.text }, event.replace === true),
     };
   }
   if (event.type === "message.completed") {
     const runId = event.runId ?? state.runId ?? "run";
-    const content = reconcileHomechatFinalAnswer(event.payload.text, state.streamingText);
+    const content = reconcileHomechatFinalAnswer(event.text, state.streamingText);
+    const completedSlots = slots.byRunId[runId];
+    if (completedSlots && event.messageId) {
+      slots = putHomechatProductSlots(slots, { messageId: event.messageId, runId, slots: completedSlots });
+    }
     return {
       ...state,
       events,
@@ -1268,19 +1661,20 @@ export function reduceHomechatClientState<Message extends SharedHomechatMessage>
         completedMessage: action.completedMessage,
         content,
         createdAt: event.createdAt,
-        id: event.payload.messageId || event.id,
+        id: event.messageId || event.id,
         runId,
       }),
       phase: "completed",
       runId,
+      slots,
       status: "completed",
       streamingText: "",
     };
   }
   if (event.type === "error") {
-    return { ...state, events, error: event.payload.message || "The run reported an error.", phase: "error" };
+    return { ...state, events, error: event.message || "The run reported an error.", phase: "error", slots };
   }
-  return { ...state, events, runId: event.runId ?? state.runId };
+  return { ...state, events, runId: event.runId ?? state.runId, slots };
 }
 
 export function homechatClientPhaseForStatus(status: SharedHomechatRunStatus): SharedHomechatClientPhase {
@@ -1298,8 +1692,11 @@ export function isSharedHomechatRunControllerError(
   return error instanceof SharedHomechatRunControllerError && (!code || error.code === code);
 }
 
-export function createHomechatRunController<Run extends SharedHomechatRunSnapshot>(
-  transport: SharedHomechatRunTransport<Run>,
+export function createHomechatRunController<
+  Run extends SharedHomechatRunSnapshot,
+  CreateRunRequest = never,
+>(
+  transport: SharedHomechatRunTransport<Run, CreateRunRequest>,
   defaults: {
     intervalMs?: number;
     now?: () => number;
@@ -1309,6 +1706,27 @@ export function createHomechatRunController<Run extends SharedHomechatRunSnapsho
 ) {
   const now = defaults.now ?? Date.now;
   const sleep = defaults.sleep ?? ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+
+  async function create(
+    request: CreateRunRequest,
+    options: SharedHomechatRunCreateOptions<Run> = {},
+  ): Promise<Run> {
+    if (!transport.createRun) throw new Error("This transport does not support creating runs.");
+    assertHomechatNotAborted(options.signal);
+    const run = await transport.createRun(request, { signal: options.signal });
+    await options.onSnapshot?.(run);
+    return run;
+  }
+
+  async function get(
+    runId: string,
+    options: SharedHomechatRunCreateOptions<Run> = {},
+  ): Promise<Run> {
+    assertHomechatNotAborted(options.signal);
+    const run = await transport.getRun(runId, { signal: options.signal });
+    await options.onSnapshot?.(run);
+    return run;
+  }
 
   async function wait(runId: string, options: SharedHomechatRunWaitOptions<Run> = {}): Promise<Run> {
     const startedAt = options.startedAt ?? now();
@@ -1406,7 +1824,284 @@ export function createHomechatRunController<Run extends SharedHomechatRunSnapsho
     );
   }
 
-  return { reconnect, stop, stream, wait };
+  return {
+    create,
+    continue: create,
+    get,
+    poll: wait,
+    reconnect,
+    send: create,
+    stop,
+    stream,
+    wait,
+  };
+}
+
+export type SharedHomechatFollowOptions = SharedHomechatStreamOptions & {
+  pollAfterStream?: boolean;
+};
+
+export type SharedHomechatClientControllerOptions<
+  Message extends SharedHomechatMessage,
+  Run extends SharedHomechatRunSnapshot<Message>,
+  CreateRunRequest,
+  Source = SharedHomechatJsonValue,
+  Artifact = SharedHomechatJsonValue,
+  Action = SharedHomechatJsonValue,
+> = {
+  initialMessages?: readonly Message[];
+  messageFromCompletion?: (
+    event: SharedHomechatMessageCompletedEvent,
+    content: string,
+  ) => Message;
+  onEvent?: (event: SharedHomechatCanonicalEvent) => void | Promise<void>;
+  onSnapshot?: (run: Run) => void | Promise<void>;
+  onState?: (state: SharedHomechatClientState<Message, Source, Artifact, Action>) => void;
+  runController?: ReturnType<typeof createHomechatRunController<Run, CreateRunRequest>>;
+  transport: SharedHomechatRunTransport<Run, CreateRunRequest>;
+};
+
+export function createHomechatClientController<
+  Message extends SharedHomechatMessage,
+  Run extends SharedHomechatRunSnapshot<Message>,
+  CreateRunRequest,
+  Source = SharedHomechatJsonValue,
+  Artifact = SharedHomechatJsonValue,
+  Action = SharedHomechatJsonValue,
+>(
+  options: SharedHomechatClientControllerOptions<Message, Run, CreateRunRequest, Source, Artifact, Action>,
+) {
+  const runs = options.runController ?? createHomechatRunController(options.transport);
+  let state = createHomechatClientState<Message, Source, Artifact, Action>(options.initialMessages ?? []);
+
+  function dispatch(action: SharedHomechatClientAction<Message>) {
+    state = reduceHomechatClientState(state, action);
+    options.onState?.(state);
+    return state;
+  }
+
+  function captureError(error: unknown) {
+    const terminal = state.phase === "completed" || state.phase === "stopped" || state.phase === "error";
+    if (!terminal && !isSharedHomechatRunControllerError(error, "aborted")) {
+      dispatch({ type: "run.error", error: error instanceof Error ? error.message : "The run could not finish." });
+    }
+  }
+
+  async function takeSnapshot(run: Run) {
+    dispatch({ type: "run.snapshot", run });
+    await options.onSnapshot?.(run);
+  }
+
+  async function takeEvent(event: SharedHomechatCanonicalEvent) {
+    const completedMessage = event.type === "message.completed" && options.messageFromCompletion
+      ? options.messageFromCompletion(event, reconcileHomechatFinalAnswer(event.text, state.streamingText))
+      : undefined;
+    dispatch({ type: "run.event", event, completedMessage });
+    await options.onEvent?.(event);
+  }
+
+  async function poll(runId: string, signal?: AbortSignal) {
+    return runs.poll(runId, {
+      signal,
+      onPhase: () => dispatch({ type: "run.reconnecting", runId }),
+      onSnapshot: takeSnapshot,
+    });
+  }
+
+  async function follow(run: Run, followOptions: SharedHomechatFollowOptions = {}) {
+    dispatch({ type: "run.started", runId: run.id, status: run.status });
+    await takeSnapshot(run);
+    const status = normalizeHomechatRunStatus(run.status);
+    if (status === "completed" || status === "failed" || status === "cancelled") return state;
+
+    if (options.transport.streamRun) {
+      try {
+        await runs.stream(run.id, {
+          cursor: followOptions.cursor,
+          maxReconnectAttempts: followOptions.maxReconnectAttempts ?? 2,
+          onCursor: followOptions.onCursor,
+          onEvent: takeEvent,
+          onReconnect: async (attempt, cursor, error) => {
+            dispatch({ type: "run.reconnecting", runId: run.id });
+            await followOptions.onReconnect?.(attempt, cursor, error);
+          },
+          reconnectDelayMs: followOptions.reconnectDelayMs,
+          signal: followOptions.signal,
+        });
+      } catch (error) {
+        if (isSharedHomechatRunControllerError(error, "aborted")) throw error;
+      }
+    }
+
+    if (followOptions.pollAfterStream !== false) {
+      try {
+        await poll(run.id, followOptions.signal);
+      } catch (error) {
+        captureError(error);
+        throw error;
+      }
+    }
+    return state;
+  }
+
+  async function send(
+    request: CreateRunRequest,
+    sendOptions: SharedHomechatFollowOptions & { optimisticMessage?: Message } = {},
+  ) {
+    dispatch({ type: "run.sending", optimisticMessage: sendOptions.optimisticMessage });
+    try {
+      const run = await runs.send(request, { signal: sendOptions.signal });
+      return await follow(run, sendOptions);
+    } catch (error) {
+      captureError(error);
+      throw error;
+    }
+  }
+
+  async function get(runId: string, signal?: AbortSignal) {
+    return runs.get(runId, { signal, onSnapshot: takeSnapshot });
+  }
+
+  async function reconnect(runId: string, followOptions: SharedHomechatFollowOptions = {}) {
+    try {
+      dispatch({ type: "run.reconnecting", runId });
+      const run = await runs.get(runId, { signal: followOptions.signal, onSnapshot: takeSnapshot });
+      const status = normalizeHomechatRunStatus(run.status);
+      if (status === "completed" || status === "failed" || status === "cancelled") return state;
+      return follow(run, followOptions);
+    } catch (error) {
+      captureError(error);
+      throw error;
+    }
+  }
+
+  async function stop(runId: string, signal?: AbortSignal) {
+    try {
+      dispatch({ type: "run.stopping" });
+      const stopped = await runs.stop(runId, { signal, onSnapshot: takeSnapshot });
+      if (!stopped) await runs.get(runId, { signal, onSnapshot: takeSnapshot });
+      return state;
+    } catch (error) {
+      captureError(error);
+      throw error;
+    }
+  }
+
+  return {
+    continue: send,
+    create: send,
+    dispatch,
+    follow,
+    get,
+    getState: () => state,
+    poll,
+    reconnect,
+    reset: (messages?: Message[]) => dispatch({ type: "reset", messages }),
+    send,
+    stop,
+    supportsStreaming: Boolean(options.transport.streamRun),
+  };
+}
+
+export function createHomechatPagedState<Item>(items: readonly Item[] = []): SharedHomechatPagedState<Item> {
+  return { cursor: null, error: null, items: [...items], phase: items.length ? "ready" : "idle" };
+}
+
+export function mergeHomechatPagedItems<Item>(
+  current: readonly Item[],
+  incoming: readonly Item[],
+  keyForItem: (item: Item) => string,
+  placement: "append" | "prepend" = "append",
+): Item[] {
+  const result = placement === "prepend" ? [...incoming] : [...current];
+  const indexByKey = new Map(result.map((item, index) => [keyForItem(item), index]));
+  const updates = placement === "prepend" ? current : incoming;
+  for (const item of updates) {
+    const key = keyForItem(item);
+    const index = indexByKey.get(key);
+    if (index === undefined) {
+      indexByKey.set(key, result.length);
+      result.push(item);
+    } else if (placement === "append") {
+      result[index] = item;
+    }
+  }
+  return result;
+}
+
+export function createHomechatConversationController<
+  Conversation extends SharedHomechatConversation,
+  Message extends SharedHomechatMessage,
+  CreateConversationRequest = Record<string, never>,
+>(
+  transport: SharedHomechatConversationTransport<Conversation, Message, CreateConversationRequest>,
+) {
+  async function create(request: CreateConversationRequest, context: SharedHomechatTransportContext = {}) {
+    assertHomechatNotAborted(context.signal);
+    return transport.createConversation(request, context);
+  }
+
+  async function loadConversations(
+    state: SharedHomechatPagedState<Conversation>,
+    request: SharedHomechatConversationListRequest = {},
+  ): Promise<SharedHomechatPagedState<Conversation>> {
+    try {
+      const page = await transport.listConversations(request);
+      return {
+        cursor: page.cursor,
+        error: null,
+        items: request.cursor
+          ? mergeHomechatPagedItems(state.items, page.items, (item) => item.id)
+          : [...page.items],
+        phase: "ready",
+      };
+    } catch (error) {
+      if (request.signal?.aborted) throw error;
+      return { ...state, error: error instanceof Error ? error.message : "Conversations could not be loaded.", phase: "error" };
+    }
+  }
+
+  async function loadMessages(
+    state: SharedHomechatPagedState<Message>,
+    request: SharedHomechatMessageListRequest,
+  ): Promise<SharedHomechatPagedState<Message>> {
+    try {
+      const page = await transport.listMessages(request);
+      return {
+        cursor: page.cursor,
+        error: null,
+        items: request.cursor
+          ? mergeHomechatPagedItems(state.items, page.items, (item) => item.id ?? `${item.runId ?? "run"}:${item.role}:${item.content}`, "prepend")
+          : [...page.items],
+        phase: "ready",
+      };
+    } catch (error) {
+      if (request.signal?.aborted) throw error;
+      return { ...state, error: error instanceof Error ? error.message : "Messages could not be loaded.", phase: "error" };
+    }
+  }
+
+  return {
+    create,
+    loadConversations,
+    loadMessages,
+    loadNextConversations: (
+      state: SharedHomechatPagedState<Conversation>,
+      request: Omit<SharedHomechatConversationListRequest, "cursor"> = {},
+    ) => state.cursor ? loadConversations(state, { ...request, cursor: state.cursor }) : Promise.resolve(state),
+    loadOlderMessages: (
+      state: SharedHomechatPagedState<Message>,
+      request: Omit<SharedHomechatMessageListRequest, "cursor">,
+    ) => state.cursor ? loadMessages(state, { ...request, cursor: state.cursor }) : Promise.resolve(state),
+    refreshConversations: (
+      state: SharedHomechatPagedState<Conversation>,
+      request: Omit<SharedHomechatConversationListRequest, "cursor"> = {},
+    ) => loadConversations(state, { ...request, cursor: null }),
+    refreshMessages: (
+      state: SharedHomechatPagedState<Message>,
+      request: Omit<SharedHomechatMessageListRequest, "cursor">,
+    ) => loadMessages(state, { ...request, cursor: null }),
+  };
 }
 
 export function createHomechatHistoryState<Item extends SharedHomechatHistoryItem>(
@@ -1470,8 +2165,14 @@ export function createHomechatHistoryController<Item extends SharedHomechatHisto
   return { load, loadNext, refresh };
 }
 
-export function createHomechatJobController<Job extends SharedHomechatJob>(
-  transport: SharedHomechatJobTransport<Job>,
+export function createHomechatJobController<
+  Job extends SharedHomechatJob,
+  CreateJobRequest = unknown,
+  UpdateJobRequest = unknown,
+  JobRun extends SharedHomechatRunSnapshot = SharedHomechatRunSnapshot,
+  HistoryItem extends SharedHomechatJobHistoryItem = SharedHomechatJobHistoryItem,
+>(
+  transport: SharedHomechatJobTransport<Job, CreateJobRequest, UpdateJobRequest, JobRun, HistoryItem>,
   defaults: Parameters<typeof createHomechatRunController>[1] = {},
 ) {
   const controller = createHomechatRunController<Job>(
@@ -1481,9 +2182,66 @@ export function createHomechatJobController<Job extends SharedHomechatJob>(
     },
     defaults,
   );
+
+  async function list(
+    state: SharedHomechatPagedState<Job>,
+    request: SharedHomechatJobListRequest = {},
+  ): Promise<SharedHomechatPagedState<Job>> {
+    try {
+      const page = await transport.listJobs(request);
+      return {
+        cursor: page.cursor,
+        error: null,
+        items: request.cursor ? mergeHomechatPagedItems(state.items, page.items, (job) => job.id) : [...page.items],
+        phase: "ready",
+      };
+    } catch (error) {
+      if (request.signal?.aborted) throw error;
+      return { ...state, error: error instanceof Error ? error.message : "Jobs could not be loaded.", phase: "error" };
+    }
+  }
+
+  async function history(
+    state: SharedHomechatPagedState<HistoryItem>,
+    request: SharedHomechatJobHistoryRequest,
+  ): Promise<SharedHomechatPagedState<HistoryItem>> {
+    try {
+      const page = await transport.listJobHistory(request);
+      return {
+        cursor: page.cursor,
+        error: null,
+        items: request.cursor ? mergeHomechatPagedItems(state.items, page.items, (item) => item.id) : [...page.items],
+        phase: "ready",
+      };
+    } catch (error) {
+      if (request.signal?.aborted) throw error;
+      return { ...state, error: error instanceof Error ? error.message : "Job history could not be loaded.", phase: "error" };
+    }
+  }
+
   return {
     cancel: controller.stop,
+    create: (request: CreateJobRequest, context: SharedHomechatTransportContext = {}) => transport.createJob(request, context),
+    delete: (jobId: string, context: SharedHomechatTransportContext = {}) => transport.deleteJob(jobId, context),
+    get: (jobId: string, context: SharedHomechatTransportContext = {}) => transport.getJob(jobId, context),
+    history,
+    list,
+    loadNextHistory: (
+      state: SharedHomechatPagedState<HistoryItem>,
+      request: Omit<SharedHomechatJobHistoryRequest, "cursor">,
+    ) => state.cursor ? history(state, { ...request, cursor: state.cursor }) : Promise.resolve(state),
+    loadNextJobs: (
+      state: SharedHomechatPagedState<Job>,
+      request: Omit<SharedHomechatJobListRequest, "cursor"> = {},
+    ) => state.cursor ? list(state, { ...request, cursor: state.cursor }) : Promise.resolve(state),
     reconnect: controller.reconnect,
+    refreshJobs: (
+      state: SharedHomechatPagedState<Job>,
+      request: Omit<SharedHomechatJobListRequest, "cursor"> = {},
+    ) => list(state, { ...request, cursor: null }),
+    run: (jobId: string, context: SharedHomechatTransportContext = {}) => transport.runJob(jobId, context),
+    update: (jobId: string, request: UpdateJobRequest, context: SharedHomechatTransportContext = {}) =>
+      transport.updateJob(jobId, request, context),
     wait: controller.wait,
   };
 }
@@ -1526,51 +2284,100 @@ export function homechatVoiceTranscriptError(error: unknown, fallback = "Voice n
   return message || fallback;
 }
 
-export function createHomechatVoiceController<Recording, Audio>(adapter: {
-  discardRecording?: (recording: Recording, context: SharedHomechatTransportContext) => Promise<void>;
-  isEmptyRecording?: (audio: Audio) => boolean;
-  requestPermission: (context: SharedHomechatTransportContext) => Promise<boolean>;
-  startRecording: (context: SharedHomechatTransportContext) => Promise<SharedHomechatVoiceRecording<Recording>>;
-  stopRecording: (recording: Recording, context: SharedHomechatTransportContext) => Promise<Audio>;
-  transcribe: (audio: Audio, context: SharedHomechatTransportContext & { mimeType?: string }) => Promise<string | { text: string }>;
-}): SharedHomechatVoiceController<Recording> {
+export function createHomechatVoiceController<Recording, Audio>(
+  adapter: {
+    discardRecording?: (recording: Recording, context: SharedHomechatTransportContext) => Promise<void>;
+    isEmptyRecording?: (audio: Audio) => boolean;
+    requestPermission: (context: SharedHomechatTransportContext) => Promise<boolean>;
+    startRecording: (context: SharedHomechatTransportContext) => Promise<SharedHomechatVoiceRecording<Recording>>;
+    stopRecording: (recording: Recording, context: SharedHomechatTransportContext) => Promise<Audio>;
+    transcribe: (audio: Audio, context: SharedHomechatTransportContext & { mimeType?: string }) => Promise<string | { text: string }>;
+  },
+  options: { onState?: (state: SharedHomechatVoiceState) => void } = {},
+): SharedHomechatVoiceController<Recording> {
   let active: SharedHomechatVoiceRecording<Recording> | null = null;
+  let state: SharedHomechatVoiceState = { error: null, permission: "unknown", phase: "idle" };
+  const listeners = new Set<(state: SharedHomechatVoiceState) => void>();
+
+  function setState(next: SharedHomechatVoiceState) {
+    state = next;
+    options.onState?.(state);
+    for (const listener of listeners) listener(state);
+  }
+
+  function fail(error: unknown) {
+    const message = error instanceof Error ? error.message : "Voice note could not be completed.";
+    setState({ ...state, error: message, phase: "error" });
+  }
 
   async function start(context: SharedHomechatTransportContext = {}) {
     if (active) return active;
-    if (!await adapter.requestPermission(context)) {
-      throw new SharedHomechatVoiceControllerError("permission_denied", "Microphone permission is required to record a voice note.");
+    setState({ ...state, error: null, phase: "requesting_permission" });
+    try {
+      if (!await adapter.requestPermission(context)) {
+        const error = new SharedHomechatVoiceControllerError("permission_denied", "Microphone permission is required to record a voice note.");
+        setState({ error: error.message, permission: "denied", phase: "error" });
+        throw error;
+      }
+      active = await adapter.startRecording(context);
+      setState({ error: null, permission: "granted", phase: "recording" });
+      return active;
+    } catch (error) {
+      if (state.phase !== "error") fail(error);
+      throw error;
     }
-    active = await adapter.startRecording(context);
-    return active;
   }
 
   async function stopAndTranscribe(context: SharedHomechatTransportContext = {}): Promise<string> {
     if (!active) throw new SharedHomechatVoiceControllerError("not_recording", "No voice note is currently recording.");
     const current = active;
     active = null;
-    const audio = await adapter.stopRecording(current.recording, context);
-    if (adapter.isEmptyRecording?.(audio)) {
-      throw new SharedHomechatVoiceControllerError("empty_recording", "No voice note audio was recorded.");
+    setState({ ...state, error: null, phase: "stopping" });
+    try {
+      const audio = await adapter.stopRecording(current.recording, context);
+      if (adapter.isEmptyRecording?.(audio)) {
+        throw new SharedHomechatVoiceControllerError("empty_recording", "No voice note audio was recorded.");
+      }
+      setState({ ...state, phase: "transcribing" });
+      const result = await adapter.transcribe(audio, { ...context, mimeType: current.mimeType });
+      const transcript = (typeof result === "string" ? result : result.text).trim();
+      if (!transcript) throw new SharedHomechatVoiceControllerError("empty_transcript", "No speech was detected.");
+      setState({ ...state, error: null, phase: "idle" });
+      return transcript;
+    } catch (error) {
+      fail(error);
+      throw error;
     }
-    const result = await adapter.transcribe(audio, { ...context, mimeType: current.mimeType });
-    const transcript = (typeof result === "string" ? result : result.text).trim();
-    if (!transcript) throw new SharedHomechatVoiceControllerError("empty_transcript", "No speech was detected.");
-    return transcript;
   }
 
   async function cancel(context: SharedHomechatTransportContext = {}) {
-    if (!active) return;
+    if (!active) {
+      setState({ ...state, error: null, phase: "idle" });
+      return;
+    }
     const current = active;
     active = null;
-    await adapter.discardRecording?.(current.recording, context);
+    setState({ ...state, error: null, phase: "stopping" });
+    try {
+      await adapter.discardRecording?.(current.recording, context);
+      setState({ ...state, error: null, phase: "idle" });
+    } catch (error) {
+      fail(error);
+      throw error;
+    }
   }
 
   return {
     cancel,
+    getState: () => state,
     isRecording: () => Boolean(active),
     start,
     stopAndTranscribe,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      listener(state);
+      return () => listeners.delete(listener);
+    },
   };
 }
 

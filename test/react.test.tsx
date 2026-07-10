@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { HomechatComposerChrome, HomechatMessageFrame, HomechatTranscript } from "../src/react.tsx";
+import {
+  HomechatComposerChrome,
+  HomechatMessageFrame,
+  HomechatTranscript,
+  shouldSubmitHomechatComposerOnEnter,
+} from "../src/react.tsx";
 import type { SharedHomechatMessage } from "../src/index.ts";
 
 test("renders product-owned source, artifact, and action slots without package styling", () => {
@@ -15,11 +20,16 @@ test("renders product-owned source, artifact, and action slots without package s
         artifact: (artifact) => <span>{artifact.title}</span>,
         action: (action) => <button>{action.label}</button>,
       }}
-      slotsForMessage={() => ({
-        sources: [{ id: "source-1", kind: "market", label: "Market source", href: "/source" }],
-        artifacts: [{ id: "artifact-1", kind: "report", title: "Report" }],
-        actions: [{ id: "action-1", kind: "confirm", label: "Confirm" }],
-      })}
+      slots={{
+        byMessageId: {
+          "message-1": {
+            sources: [{ id: "source-1", kind: "market", label: "Market source", href: "/source" }],
+            artifacts: [{ id: "artifact-1", kind: "report", title: "Report" }],
+            actions: [{ id: "action-1", kind: "confirm", label: "Confirm" }],
+          },
+        },
+        byRunId: {},
+      }}
     />,
   );
   assert.match(html, /product-transcript/);
@@ -53,4 +63,11 @@ test("keeps empty, pending, and composer chrome controlled by the consumer", () 
   );
   assert.match(composer, /Draft/);
   assert.match(composer, /Send/);
+});
+
+test("does not submit Enter while an IME composition is active", () => {
+  assert.equal(shouldSubmitHomechatComposerOnEnter({ key: "Enter", isComposing: true }), false);
+  assert.equal(shouldSubmitHomechatComposerOnEnter({ key: "Enter", keyCode: 229 }), false);
+  assert.equal(shouldSubmitHomechatComposerOnEnter({ key: "Enter", shiftKey: true }), false);
+  assert.equal(shouldSubmitHomechatComposerOnEnter({ key: "Enter" }), true);
 });

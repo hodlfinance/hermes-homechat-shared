@@ -4,9 +4,11 @@ import type {
   SharedHomechatMessage,
   SharedHomechatProductAction,
   SharedHomechatProductRenderers,
-  SharedHomechatProductSlots,
+  SharedHomechatKeyedProductSlots,
+  SharedHomechatSlotContext,
   SharedHomechatSource,
 } from "./index.js";
+import { homechatProductSlotsForMessage } from "./index.js";
 
 export type HomechatVoiceMeterMode = "recording" | "transcribing";
 
@@ -93,8 +95,19 @@ export type HomechatTranscriptProps<
   messages: readonly Message[];
   pending?: ReactNode;
   renderers: SharedHomechatProductRenderers<ReactNode, Message, Source, Artifact, Action>;
-  slotsForMessage?: (message: Message) => SharedHomechatProductSlots<Source, Artifact, Action> | null | undefined;
+  slots?: SharedHomechatKeyedProductSlots<Source, Artifact, Action>;
 };
+
+export type HomechatComposerKeyInput = {
+  isComposing?: boolean;
+  key: string;
+  keyCode?: number;
+  shiftKey?: boolean;
+};
+
+export function shouldSubmitHomechatComposerOnEnter(input: HomechatComposerKeyInput): boolean {
+  return input.key === "Enter" && !input.shiftKey && !input.isComposing && input.keyCode !== 229;
+}
 
 const defaultClasses: Required<HomechatComposerClasses> = {
   root: "composer chat-composer",
@@ -197,7 +210,7 @@ export function HomechatTranscript<
   messages,
   pending,
   renderers,
-  slotsForMessage,
+  slots,
 }: HomechatTranscriptProps<Message, Source, Artifact, Action>) {
   const merged = { ...defaultTranscriptClasses, ...classes };
 
@@ -206,40 +219,45 @@ export function HomechatTranscript<
       {before}
       {!messages.length ? empty : null}
       {messages.map((message, index) => {
-        const slots = slotsForMessage?.(message);
+        const messageSlots = slots ? homechatProductSlotsForMessage(slots, message) : undefined;
         const key = keyForMessage?.(message, index) ?? message.id ?? `${message.role}:${index}`;
+        const context: SharedHomechatSlotContext<Message> = {
+          message,
+          messageId: message.id ?? null,
+          runId: message.runId ?? null,
+        };
         return (
           <div className={merged.entry} key={key}>
             {renderers.message(message, index)}
-            {slots?.sources?.length && (renderers.sources || renderers.source) ? (
+            {messageSlots?.sources?.length && (renderers.sources || renderers.source) ? (
               <div className={merged.sources} data-homechat-slot="sources">
                 {renderers.sources
-                  ? renderers.sources(slots.sources, message)
-                  : slots.sources.map((source, sourceIndex) => (
+                  ? renderers.sources(messageSlots.sources, message, context)
+                  : messageSlots.sources.map((source, sourceIndex) => (
                       <div className={merged.source} key={slotKey(source, sourceIndex)}>
-                        {renderers.source?.(source, message)}
+                        {renderers.source?.(source, message, context)}
                       </div>
                     ))}
               </div>
             ) : null}
-            {slots?.artifacts?.length && (renderers.artifacts || renderers.artifact) ? (
+            {messageSlots?.artifacts?.length && (renderers.artifacts || renderers.artifact) ? (
               <div className={merged.artifacts} data-homechat-slot="artifacts">
                 {renderers.artifacts
-                  ? renderers.artifacts(slots.artifacts, message)
-                  : slots.artifacts.map((artifact, artifactIndex) => (
+                  ? renderers.artifacts(messageSlots.artifacts, message, context)
+                  : messageSlots.artifacts.map((artifact, artifactIndex) => (
                       <div className={merged.artifact} key={slotKey(artifact, artifactIndex)}>
-                        {renderers.artifact?.(artifact, message)}
+                        {renderers.artifact?.(artifact, message, context)}
                       </div>
                     ))}
               </div>
             ) : null}
-            {slots?.actions?.length && (renderers.actions || renderers.action) ? (
+            {messageSlots?.actions?.length && (renderers.actions || renderers.action) ? (
               <div className={merged.actions} data-homechat-slot="actions">
                 {renderers.actions
-                  ? renderers.actions(slots.actions, message)
-                  : slots.actions.map((action, actionIndex) => (
+                  ? renderers.actions(messageSlots.actions, message, context)
+                  : messageSlots.actions.map((action, actionIndex) => (
                       <div className={merged.action} key={slotKey(action, actionIndex)}>
-                        {renderers.action?.(action, message)}
+                        {renderers.action?.(action, message, context)}
                       </div>
                     ))}
               </div>
@@ -280,7 +298,12 @@ export function HomechatComposerChrome({
   const merged = { ...defaultClasses, ...classes };
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (!onEnterSubmit || event.key !== "Enter" || event.shiftKey) return;
+    if (!onEnterSubmit || !shouldSubmitHomechatComposerOnEnter({
+      isComposing: event.nativeEvent.isComposing,
+      key: event.key,
+      keyCode: event.nativeEvent.keyCode,
+      shiftKey: event.shiftKey,
+    })) return;
     event.preventDefault();
     onEnterSubmit();
   }
