@@ -1,4 +1,12 @@
 import type { KeyboardEvent, ReactNode, Ref } from "react";
+import type {
+  SharedHomechatArtifact,
+  SharedHomechatMessage,
+  SharedHomechatProductAction,
+  SharedHomechatProductRenderers,
+  SharedHomechatProductSlots,
+  SharedHomechatSource,
+} from "./index.js";
 
 export type HomechatVoiceMeterMode = "recording" | "transcribing";
 
@@ -59,6 +67,35 @@ export type HomechatMessageFrameProps = {
   role: "assistant" | "user" | string;
 };
 
+export type HomechatTranscriptClasses = Partial<{
+  action: string;
+  actions: string;
+  artifact: string;
+  artifacts: string;
+  entry: string;
+  root: string;
+  source: string;
+  sources: string;
+}>;
+
+export type HomechatTranscriptProps<
+  Message extends SharedHomechatMessage,
+  Source = SharedHomechatSource,
+  Artifact = SharedHomechatArtifact,
+  Action = SharedHomechatProductAction,
+> = {
+  after?: ReactNode;
+  before?: ReactNode;
+  className?: string;
+  classes?: HomechatTranscriptClasses;
+  empty?: ReactNode;
+  keyForMessage?: (message: Message, index: number) => string;
+  messages: readonly Message[];
+  pending?: ReactNode;
+  renderers: SharedHomechatProductRenderers<ReactNode, Message, Source, Artifact, Action>;
+  slotsForMessage?: (message: Message) => SharedHomechatProductSlots<Source, Artifact, Action> | null | undefined;
+};
+
 const defaultClasses: Required<HomechatComposerClasses> = {
   root: "composer chat-composer",
   rootDisabled: "disabled",
@@ -80,6 +117,17 @@ const defaultMessageFrameClasses: Required<HomechatMessageFrameClasses> = {
   bubbleUser: "user",
   content: "message-content",
   meta: "message-meta",
+};
+
+const defaultTranscriptClasses: Required<HomechatTranscriptClasses> = {
+  action: "",
+  actions: "",
+  artifact: "",
+  artifacts: "",
+  entry: "",
+  root: "",
+  source: "",
+  sources: "",
 };
 
 function classNames(...values: Array<string | false | null | undefined>) {
@@ -130,6 +178,77 @@ export function HomechatMessageFrame({
         {meta ? <div className={merged.meta}>{meta}</div> : null}
         {after}
       </div>
+    </div>
+  );
+}
+
+export function HomechatTranscript<
+  Message extends SharedHomechatMessage,
+  Source = SharedHomechatSource,
+  Artifact = SharedHomechatArtifact,
+  Action = SharedHomechatProductAction,
+>({
+  after,
+  before,
+  className,
+  classes,
+  empty,
+  keyForMessage,
+  messages,
+  pending,
+  renderers,
+  slotsForMessage,
+}: HomechatTranscriptProps<Message, Source, Artifact, Action>) {
+  const merged = { ...defaultTranscriptClasses, ...classes };
+
+  return (
+    <div className={classNames(merged.root, className)} role="log">
+      {before}
+      {!messages.length ? empty : null}
+      {messages.map((message, index) => {
+        const slots = slotsForMessage?.(message);
+        const key = keyForMessage?.(message, index) ?? message.id ?? `${message.role}:${index}`;
+        return (
+          <div className={merged.entry} key={key}>
+            {renderers.message(message, index)}
+            {slots?.sources?.length && (renderers.sources || renderers.source) ? (
+              <div className={merged.sources} data-homechat-slot="sources">
+                {renderers.sources
+                  ? renderers.sources(slots.sources, message)
+                  : slots.sources.map((source, sourceIndex) => (
+                      <div className={merged.source} key={slotKey(source, sourceIndex)}>
+                        {renderers.source?.(source, message)}
+                      </div>
+                    ))}
+              </div>
+            ) : null}
+            {slots?.artifacts?.length && (renderers.artifacts || renderers.artifact) ? (
+              <div className={merged.artifacts} data-homechat-slot="artifacts">
+                {renderers.artifacts
+                  ? renderers.artifacts(slots.artifacts, message)
+                  : slots.artifacts.map((artifact, artifactIndex) => (
+                      <div className={merged.artifact} key={slotKey(artifact, artifactIndex)}>
+                        {renderers.artifact?.(artifact, message)}
+                      </div>
+                    ))}
+              </div>
+            ) : null}
+            {slots?.actions?.length && (renderers.actions || renderers.action) ? (
+              <div className={merged.actions} data-homechat-slot="actions">
+                {renderers.actions
+                  ? renderers.actions(slots.actions, message)
+                  : slots.actions.map((action, actionIndex) => (
+                      <div className={merged.action} key={slotKey(action, actionIndex)}>
+                        {renderers.action?.(action, message)}
+                      </div>
+                    ))}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+      {pending}
+      {after}
     </div>
   );
 }
@@ -201,4 +320,9 @@ export function HomechatComposerChrome({
       {voiceControls}
     </div>
   );
+}
+
+function slotKey(value: unknown, index: number): string {
+  if (value && typeof value === "object" && "id" in value && typeof value.id === "string") return value.id;
+  return String(index);
 }
