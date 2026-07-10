@@ -27,6 +27,7 @@ import {
   type SharedHomechatHistoryItem,
   type SharedHomechatJobHistoryItem,
   type SharedHomechatMessage,
+  type SharedHomechatRunTransport,
 } from "../src/index.ts";
 
 test("normalizes legacy and canonical events into a discriminated contract", () => {
@@ -145,6 +146,52 @@ test("preserves the Finance flat event vocabulary from flat and nested payload i
   if (nestedTool?.type === "tool.status") {
     assert.deepEqual({ toolCallId: nestedTool.toolCallId, state: nestedTool.state }, { toolCallId: "tool-2", state: "started" });
   }
+
+  const directFinanceAction = normalizeHomechatRunEvent({
+    type: "action.proposal",
+    approvalId: "approval-direct",
+    tool: "hodl_add_watchlist_item",
+    input: { symbol: "NVDA", assetType: "stock" },
+    label: "Add Nvidia",
+  });
+  if (directFinanceAction?.type === "action.proposal") {
+    assert.deepEqual(directFinanceAction.action, {
+      approvalId: "approval-direct",
+      tool: "hodl_add_watchlist_item",
+      input: { symbol: "NVDA", assetType: "stock" },
+      label: "Add Nvidia",
+    });
+  }
+  const currentFinanceConsumerAction = normalizeHomechatRunEvent({
+    type: "action.proposal",
+    payload: {
+      actionProposal: {
+        approvalId: "approval-nested",
+        tool: "capchat_create_alert",
+        input: { symbol: "BTC", price: 100_000 },
+        message: "Create this alert?",
+      },
+    },
+  });
+  if (currentFinanceConsumerAction?.type === "action.proposal") {
+    assert.equal((currentFinanceConsumerAction.action as { approvalId: string }).approvalId, "approval-nested");
+  }
+
+  const canonicalArtifacts = normalizeHomechatRunEvent({
+    type: "artifact.update",
+    artifactReferences: [
+      { id: "asset_btc", kind: "asset", source: "finance", sensitivity: "finance_context", label: null },
+      {},
+      null,
+    ],
+  });
+  if (canonicalArtifacts?.type === "artifact.update") {
+    assert.deepEqual(canonicalArtifacts.artifacts, [
+      { id: "asset_btc", kind: "asset", source: "finance", sensitivity: "finance_context", label: null },
+    ]);
+  }
+  assert.equal(normalizeHomechatRunEvent({ type: "artifact.update", artifact: {} }), null);
+  assert.equal(normalizeHomechatRunEvent({ type: "action.proposal", payload: { actionProposal: {} } }), null);
 });
 
 test("parses standard SSE frames with CRLF event names and Last-Event-ID cursors", () => {
@@ -227,6 +274,7 @@ test("persists a completed assistant message before terminal status clears the d
     role: "assistant",
     content: "Durable answer",
     createdAt: "2026-01-01T00:00:00.000Z",
+    provisional: true,
   }]);
 });
 
@@ -249,6 +297,7 @@ test("persists the streamed draft when a terminal poll snapshot wins the complet
     runId: "run-poll",
     role: "assistant",
     content: "Polled answer",
+    provisional: true,
   }]);
 });
 
@@ -271,6 +320,53 @@ test("prefers a persisted snapshot message over a shorter streaming draft", () =
   assert.deepEqual(state.messages, [
     { id: "message-persisted", runId: "run-persisted", role: "assistant", content: "Complete answer" },
   ]);
+});
+
+test("replaces a terminal status draft with the authoritative persisted answer", () => {
+  const variants = [
+    { name: "longer", draft: "Partial answer", final: "Partial answer with the complete allocation details.", snapshotEvents: false },
+    { name: "different", draft: "The market is closed.", final: "The market is open and BTC is trading normally.", snapshotEvents: true },
+    { name: "identical", draft: "No change required.", final: "No change required.", snapshotEvents: false },
+    { name: "shorter", draft: "Final answer with repeated trailing text", final: "Final answer", snapshotEvents: false },
+  ];
+
+  for (const variant of variants) {
+    const runId = `run-terminal-${variant.name}`;
+    const terminalEvent = { id: `status-${variant.name}`, runId, type: "run.status", state: "completed" };
+    let state = createHomechatClientState<SharedHomechatMessage>();
+    state = reduceHomechatClientState(state, { type: "run.started", runId, status: "running" });
+    state = reduceHomechatClientState(state, {
+      type: "run.event",
+      event: { id: `delta-${variant.name}`, runId, type: "message.delta", text: variant.draft },
+    });
+    state = reduceHomechatClientState(state, { type: "run.event", event: terminalEvent });
+
+    assert.deepEqual(state.messages, [{
+      id: terminalEvent.id,
+      runId,
+      role: "assistant",
+      content: variant.draft,
+      provisional: true,
+    }], `${variant.name}: terminal event should preserve one provisional draft`);
+
+    const persisted = {
+      id: `message-${variant.name}`,
+      runId,
+      role: "assistant" as const,
+      content: variant.final,
+    };
+    state = reduceHomechatClientState(state, {
+      type: "run.snapshot",
+      run: {
+        id: runId,
+        status: "completed",
+        messages: [persisted],
+        events: variant.snapshotEvents ? [terminalEvent] : [],
+      },
+    });
+
+    assert.deepEqual(state.messages, [persisted], `${variant.name}: persisted final must replace, not append to, the draft`);
+  }
 });
 
 test("marks source, artifact, and action updates as user-visible product events", () => {
@@ -309,6 +405,77 @@ test("keys source, artifact, and action render payloads by canonical run and com
   });
   assert.ok(state.slots.byRunId["run-slots"]);
   assert.ok(state.slots.byMessageId["message-slots"]);
+});
+
+test("normalizes current Finance and canonical API structured references without empty slots", () => {
+  const artifactReference = {
+    id: "asset_btc",
+    kind: "asset",
+    source: "finance",
+    sensitivity: "finance_context",
+    label: null,
+  };
+  let state = createHomechatClientState<SharedHomechatMessage>();
+  state = reduceHomechatClientState(state, {
+    type: "run.snapshot",
+    run: {
+      id: "run-finance-slots",
+      status: "running",
+      messages: [{
+        id: "message-finance",
+        runId: "run-finance-slots",
+        role: "assistant",
+        content: "Review the attached asset.",
+        artifactReferences: [artifactReference, {}, null],
+      }],
+    },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: {
+      type: "action.proposal",
+      runId: "run-finance-slots",
+      messageId: "message-finance",
+      payload: {
+        actionProposal: {
+          approvalId: "approval-1",
+          tool: "hodl_add_watchlist_item",
+          input: { symbol: "NVDA", assetType: "stock" },
+        },
+      },
+    },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: {
+      type: "artifact.update",
+      runId: "run-finance-slots",
+      messageId: "message-finance",
+      artifact: { id: "research-1", kind: "research", source: "capchat" },
+    },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: { type: "action.proposal", runId: "run-finance-slots", action: {} },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: { type: "artifact.update", runId: "run-finance-slots", artifactReferences: [{}, null] },
+  });
+
+  assert.deepEqual(homechatProductSlotsForMessage(state.slots, state.messages[0]!), {
+    artifacts: [
+      artifactReference,
+      { id: "research-1", kind: "research", source: "capchat" },
+    ],
+    actions: [{
+      approvalId: "approval-1",
+      tool: "hodl_add_watchlist_item",
+      input: { symbol: "NVDA", assetType: "stock" },
+    }],
+  });
+  assert.deepEqual(Object.keys(state.slots.byRunId), ["run-finance-slots"]);
+  assert.deepEqual(Object.keys(state.slots.byMessageId), ["message-finance"]);
 });
 
 test("preserves meaningful leading whitespace in streamed delta segments", () => {
@@ -480,12 +647,71 @@ test("owns send, stream-to-poll hydration, terminal errors, reconnect, and persi
   );
   assert.equal(queued.phase, "waiting");
   assert.deepEqual(queued.messages, [persistedUser]);
+  const queuedFinal = await controller.waitForBackgroundFollow();
+  assert.equal(queuedFinal.phase, "completed");
+  assert.deepEqual(queuedFinal.messages, [persistedUser, persistedAssistant]);
 
   controller.reset([]);
   controller.dispatch({ type: "run.sending", optimisticMessage: { id: "local-stop", role: "user", content: "Hello" } });
   const stopped = await controller.stop("run-client");
   assert.equal(stopped.phase, "stopped");
   assert.deepEqual(stopped.messages, [persistedUser]);
+});
+
+test("keeps exactly one shared poller for a follow:false queued run", async () => {
+  type Message = SharedHomechatMessage & { id: string };
+  type Run = { id: string; status: string; messages: Message[] };
+  const persistedUser: Message = { id: "queued-user", runId: "run-queued", role: "user", content: "Queued question" };
+  const persistedAssistant: Message = { id: "queued-assistant", runId: "run-queued", role: "assistant", content: "Queued answer" };
+  const queuedRun: Run = { id: "run-queued", status: "queued", messages: [persistedUser] };
+  let reads = 0;
+  let concurrentReads = 0;
+  let maxConcurrentReads = 0;
+  let releaseFirstRead: () => void = () => undefined;
+  let markFirstReadStarted: () => void = () => undefined;
+  const firstReadBlocked = new Promise<void>((resolve) => { releaseFirstRead = resolve; });
+  const firstReadStarted = new Promise<void>((resolve) => { markFirstReadStarted = resolve; });
+  const transport: SharedHomechatRunTransport<Run, { message: string }> = {
+    createRun: async () => queuedRun,
+    getRun: async () => {
+      reads += 1;
+      concurrentReads += 1;
+      maxConcurrentReads = Math.max(maxConcurrentReads, concurrentReads);
+      if (reads === 1) {
+        markFirstReadStarted();
+        await firstReadBlocked;
+      }
+      concurrentReads -= 1;
+      return reads === 1
+        ? { ...queuedRun, status: "running" }
+        : { ...queuedRun, status: "completed", messages: [persistedUser, persistedAssistant] };
+    },
+  };
+  const controller = createHomechatClientController<Message, Run, { message: string }>({
+    transport,
+    runController: createHomechatRunController(transport, { sleep: async () => undefined }),
+  });
+
+  const queued = await controller.send(
+    { message: "Queued question" },
+    { follow: false, optimisticMessage: { id: "queued-local", role: "user", content: "Queued question" } },
+  );
+  assert.equal(queued.phase, "waiting");
+  await firstReadStarted;
+  assert.equal(reads, 1);
+
+  const duplicateFollow = controller.follow(queuedRun);
+  releaseFirstRead();
+  const [background, duplicate] = await Promise.all([
+    controller.waitForBackgroundFollow(),
+    duplicateFollow,
+  ]);
+
+  assert.equal(reads, 2);
+  assert.equal(maxConcurrentReads, 1);
+  assert.equal(background.phase, "completed");
+  assert.equal(duplicate.phase, "completed");
+  assert.deepEqual(background.messages, [persistedUser, persistedAssistant]);
 });
 
 test("loads paged conversation and job history through an injected transport", async () => {

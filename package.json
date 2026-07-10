@@ -1,6 +1,6 @@
 {
   "name": "@hodlfinance/hermes-homechat-shared",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Shared Hermes Homechat core controllers and React primitives for Hey Hermes and FinanceHermes.",
   "type": "module",
   "license": "UNLICENSED",

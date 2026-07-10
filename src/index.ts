@@ -12,11 +12,13 @@ export type SharedHomechatRunState = Exclude<SharedHomechatRunStatus, "waiting_f
 export type SharedHomechatToolState = "started" | "succeeded" | "failed";
 
 export type SharedHomechatMessage<Role extends string = "user" | "assistant" | "system" | "tool"> = {
+  artifactReferences?: readonly SharedHomechatJsonValue[];
   content: string;
   conversationSessionId?: string | null;
   createdAt?: string;
   id?: string;
   optimistic?: boolean;
+  provisional?: boolean;
   role: Role;
   runId?: string;
 };
@@ -694,12 +696,54 @@ function homechatJsonRecord(value: unknown): Record<string, SharedHomechatJsonVa
 
 function homechatActionProposalFields(value: unknown): Record<string, unknown> | undefined {
   const record = homechatRecord(value);
-  if (!homechatText(record.actionId) && !homechatText(record.kind)) return undefined;
+  if (!homechatText(record.approvalId) && !homechatText(record.actionId)) return undefined;
   return Object.fromEntries(
-    ["actionId", "kind", "summary", "payload", "expiresAt"].flatMap((key) =>
+    [
+      "approvalId",
+      "actionId",
+      "kind",
+      "family",
+      "tool",
+      "label",
+      "message",
+      "summary",
+      "input",
+      "payload",
+      "expiresAt",
+    ].flatMap((key) =>
       record[key] === undefined ? [] : [[key, record[key]]],
     ),
   );
+}
+
+function homechatStructuredSlotRecord(
+  value: unknown,
+  identityFields: readonly string[],
+): Record<string, SharedHomechatJsonValue> | null {
+  const record = homechatJsonRecord(value);
+  if (!identityFields.some((field) => homechatText(record[field]))) return null;
+  return record;
+}
+
+function homechatSourceItems(value: unknown): SharedHomechatJsonValue[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const source = homechatStructuredSlotRecord(item, ["id", "source_id", "snapshot_id", "url", "title"]);
+    return source ? [source] : [];
+  });
+}
+
+function homechatArtifactItems(value: unknown): SharedHomechatJsonValue[] {
+  const values = Array.isArray(value) ? value : value === undefined ? [] : [value];
+  return values.flatMap((item) => {
+    const artifact = homechatStructuredSlotRecord(item, ["id", "artifactId"]);
+    return artifact ? [artifact] : [];
+  });
+}
+
+function homechatActionProposal(value: unknown): SharedHomechatJsonValue | null {
+  const fields = homechatActionProposalFields(value);
+  return fields ? homechatStructuredSlotRecord(fields, ["approvalId", "actionId"]) : null;
 }
 
 export function normalizeHomechatRunStatus(value: unknown): SharedHomechatRunStatus | null {
@@ -796,31 +840,35 @@ export function normalizeHomechatRunEvent(input: unknown): SharedHomechatCanonic
 
   if (type === "sources.update") {
     const rawItems = raw.items ?? rawPayload.items ?? raw.sources ?? rawPayload.sources;
-    const items = Array.isArray(rawItems) ? homechatJsonValue(rawItems) as SharedHomechatJsonValue[] : [];
+    const items = homechatSourceItems(rawItems);
     payload.items = items;
     return { id, runId, messageId, type, items, payload: payload as SharedHomechatSourcesUpdateEvent["payload"], createdAt };
   }
   if (type === "artifact.update") {
-    const rawArtifacts = raw.artifacts ?? rawPayload.artifacts ?? raw.items ?? rawPayload.items;
-    const nestedArtifact = rawPayload.id !== undefined || rawPayload.kind !== undefined ? rawPayload : undefined;
+    const rawArtifacts = raw.artifacts ?? rawPayload.artifacts ?? raw.artifactReferences ??
+      rawPayload.artifactReferences ?? raw.items ?? rawPayload.items;
+    const nestedArtifact = rawPayload.id !== undefined || rawPayload.artifactId !== undefined ? rawPayload : undefined;
     const rawArtifact = raw.artifact ?? rawPayload.artifact ?? nestedArtifact;
-    const artifacts = Array.isArray(rawArtifacts)
-      ? homechatJsonValue(rawArtifacts) as SharedHomechatJsonValue[]
-      : rawArtifact === undefined
-        ? []
-        : [homechatJsonValue(rawArtifact) ?? null];
-    const artifact = rawArtifact === undefined ? artifacts[0] : homechatJsonValue(rawArtifact);
+    const artifacts = homechatArtifactItems(rawArtifacts ?? rawArtifact);
+    if (!artifacts.length) return null;
+    const artifact = artifacts[0];
     payload.artifacts = artifacts;
-    if (artifact !== undefined) payload.artifact = artifact;
-    return { id, runId, messageId, type, artifacts, ...(artifact !== undefined ? { artifact } : {}), payload: payload as SharedHomechatArtifactUpdateEvent["payload"], createdAt };
+    payload.artifact = artifact!;
+    return { id, runId, messageId, type, artifacts, artifact, payload: payload as SharedHomechatArtifactUpdateEvent["payload"], createdAt };
   }
   if (type === "action.proposal") {
     const rawActions = raw.actions ?? rawPayload.actions;
-    const rawAction = raw.action ?? rawPayload.action ??
-      (Array.isArray(rawActions) ? rawActions[0] : undefined) ??
-      homechatActionProposalFields(raw) ??
-      homechatActionProposalFields(rawPayload);
-    const action = homechatJsonValue(rawAction) ?? {};
+    const actionCandidates = [
+      raw.action,
+      rawPayload.action,
+      raw.actionProposal,
+      rawPayload.actionProposal,
+      ...(Array.isArray(rawActions) ? rawActions : []),
+      raw,
+      rawPayload,
+    ];
+    const action = actionCandidates.map(homechatActionProposal).find((item) => item !== null) ?? null;
+    if (!action) return null;
     payload.action = action;
     return { id, runId, messageId, type, action, payload: payload as SharedHomechatActionProposalEvent["payload"], createdAt };
   }
@@ -1026,6 +1074,20 @@ export function mergeHomechatMessages<T extends SharedHomechatMessage>(current: 
     const index = message.id ? indexById.get(message.id) : undefined;
     if (index !== undefined) {
       merged[index] = message;
+      continue;
+    }
+    const provisionalAssistantIndex = message.runId && message.role === "assistant" && message.provisional !== true
+      ? merged.findIndex((item) =>
+          item.role === "assistant" &&
+          item.runId === message.runId &&
+          item.provisional === true,
+        )
+      : -1;
+    if (provisionalAssistantIndex >= 0) {
+      const previousId = merged[provisionalAssistantIndex]?.id;
+      if (previousId) indexById.delete(previousId);
+      merged[provisionalAssistantIndex] = message;
+      if (message.id) indexById.set(message.id, provisionalAssistantIndex);
       continue;
     }
     const matchingCompletedMessageIndex = message.runId && message.role === "assistant"
@@ -1401,7 +1463,7 @@ export function createHomechatKeyedProductSlots<Source = SharedHomechatJsonValue
 function homechatSlotValueKey(value: unknown, index: number): string {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     const record = value as Record<string, unknown>;
-    const id = homechatText(record.id) ?? homechatText(record.actionId) ?? homechatText(record.artifactId) ??
+    const id = homechatText(record.id) ?? homechatText(record.approvalId) ?? homechatText(record.actionId) ?? homechatText(record.artifactId) ??
       homechatText(record.source_id) ?? homechatText(record.snapshot_id);
     if (id) return id;
   }
@@ -1432,10 +1494,13 @@ export function mergeHomechatProductSlots<Source, Artifact, Action>(
   current: SharedHomechatProductSlots<Source, Artifact, Action> | null | undefined,
   incoming: SharedHomechatProductSlots<Source, Artifact, Action> | null | undefined,
 ): SharedHomechatProductSlots<Source, Artifact, Action> {
+  const sources = mergeHomechatSlotValues(current?.sources, incoming?.sources);
+  const artifacts = mergeHomechatSlotValues(current?.artifacts, incoming?.artifacts);
+  const actions = mergeHomechatSlotValues(current?.actions, incoming?.actions);
   return {
-    sources: mergeHomechatSlotValues(current?.sources, incoming?.sources),
-    artifacts: mergeHomechatSlotValues(current?.artifacts, incoming?.artifacts),
-    actions: mergeHomechatSlotValues(current?.actions, incoming?.actions),
+    ...(sources.length ? { sources } : {}),
+    ...(artifacts.length ? { artifacts } : {}),
+    ...(actions.length ? { actions } : {}),
   };
 }
 
@@ -1447,6 +1512,7 @@ export function putHomechatProductSlots<Source, Artifact, Action>(
     slots: SharedHomechatProductSlots<Source, Artifact, Action>;
   },
 ): SharedHomechatKeyedProductSlots<Source, Artifact, Action> {
+  if (!input.slots.sources?.length && !input.slots.artifacts?.length && !input.slots.actions?.length) return current;
   const byMessageId = { ...current.byMessageId };
   const byRunId = { ...current.byRunId };
   if (input.runId) byRunId[input.runId] = mergeHomechatProductSlots(byRunId[input.runId], input.slots);
@@ -1499,6 +1565,7 @@ function completedHomechatMessage<Message extends SharedHomechatMessage>(input: 
     content: input.content,
     ...(input.createdAt ? { createdAt: input.createdAt } : {}),
     id: input.id || `${input.runId}:assistant`,
+    provisional: true,
     role: "assistant",
     runId: input.runId,
   } as Message;
@@ -1525,7 +1592,9 @@ function persistCompletedHomechatMessage<Message extends SharedHomechatMessage>(
   ) {
     return state.messages;
   }
-  const message = input.completedMessage ?? completedHomechatMessage<Message>({ ...input, content });
+  const message = input.completedMessage
+    ? { ...input.completedMessage, provisional: true } as Message
+    : completedHomechatMessage<Message>({ ...input, content });
   return mergeHomechatMessages(state.messages, [message]);
 }
 
@@ -1575,10 +1644,21 @@ export function reduceHomechatClientState<
   if (action.type === "run.stopping") return { ...state, phase: "stopping" };
   if (action.type === "run.error") return { ...state, error: action.error, phase: "error" };
   if (action.type === "run.snapshot") {
+    let slots = state.slots;
+    for (const message of action.run.messages ?? []) {
+      const artifactReferences = homechatArtifactItems(message.artifactReferences);
+      if (!artifactReferences.length) continue;
+      slots = putHomechatProductSlots(slots, {
+        messageId: message.id,
+        runId: message.runId ?? action.run.id,
+        slots: { artifacts: artifactReferences as Artifact[] },
+      });
+    }
     let next: SharedHomechatClientState<Message, Source, Artifact, Action> = {
       ...state,
       runId: action.run.id,
       messages: mergeHomechatMessages(state.messages, action.run.messages ?? []),
+      slots,
     };
     for (const event of action.run.events ?? []) {
       next = reduceHomechatClientState(next, { type: "run.event", event });
@@ -1609,13 +1689,13 @@ export function reduceHomechatClientState<
     ? state.events
     : [...state.events, event];
   let slots = state.slots;
-  if (event.type === "sources.update") {
+  if (event.type === "sources.update" && event.items.length) {
     slots = putHomechatProductSlots(slots, {
       messageId: event.messageId,
       runId: event.runId ?? state.runId,
       slots: { sources: event.items as Source[] },
     });
-  } else if (event.type === "artifact.update") {
+  } else if (event.type === "artifact.update" && event.artifacts.length) {
     slots = putHomechatProductSlots(slots, {
       messageId: event.messageId,
       runId: event.runId ?? state.runId,
@@ -1889,6 +1969,8 @@ export function createHomechatClientController<
 ) {
   const runs = options.runController ?? createHomechatRunController(options.transport);
   let state = createHomechatClientState<Message, Source, Artifact, Action>(options.initialMessages ?? []);
+  const followingRuns = new Map<string, Promise<SharedHomechatClientState<Message, Source, Artifact, Action>>>();
+  let backgroundFollow: Promise<SharedHomechatClientState<Message, Source, Artifact, Action>> | null = null;
 
   function dispatch(action: SharedHomechatClientAction<Message>) {
     state = reduceHomechatClientState(state, action);
@@ -1924,7 +2006,7 @@ export function createHomechatClientController<
     });
   }
 
-  async function follow(run: Run, followOptions: SharedHomechatFollowOptions = {}) {
+  async function followOnce(run: Run, followOptions: SharedHomechatFollowOptions = {}) {
     dispatch({ type: "run.started", runId: run.id, status: run.status });
     await takeSnapshot(run);
     const status = normalizeHomechatRunStatus(run.status);
@@ -1960,6 +2042,17 @@ export function createHomechatClientController<
     return state;
   }
 
+  function follow(run: Run, followOptions: SharedHomechatFollowOptions = {}) {
+    const existing = followingRuns.get(run.id);
+    if (existing) return existing;
+    let task: Promise<SharedHomechatClientState<Message, Source, Artifact, Action>>;
+    task = followOnce(run, followOptions).finally(() => {
+      if (followingRuns.get(run.id) === task) followingRuns.delete(run.id);
+    });
+    followingRuns.set(run.id, task);
+    return task;
+  }
+
   async function send(
     request: CreateRunRequest,
     sendOptions: SharedHomechatFollowOptions & { optimisticMessage?: Message } = {},
@@ -1969,8 +2062,10 @@ export function createHomechatClientController<
       const run = await runs.send(request, { signal: sendOptions.signal });
       await options.onRunCreated?.(run);
       if (sendOptions.follow === false) {
-        dispatch({ type: "run.started", runId: run.id, status: run.status });
-        await takeSnapshot(run);
+        backgroundFollow = follow(run, sendOptions).catch((error) => {
+          captureError(error);
+          return state;
+        });
         return state;
       }
       return await follow(run, sendOptions);
@@ -2022,6 +2117,7 @@ export function createHomechatClientController<
     send,
     stop,
     supportsStreaming: Boolean(options.transport.streamRun),
+    waitForBackgroundFollow: () => backgroundFollow ?? Promise.resolve(state),
   };
 }
 

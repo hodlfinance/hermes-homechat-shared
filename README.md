@@ -4,7 +4,7 @@ Shared, product-neutral Homechat core and React primitives used by Hey Hermes an
 
 This package intentionally contains no application secrets, endpoint paths, Finance data access, runtime credentials, themes, navigation, or product CSS. Products inject their own transports and renderers.
 
-Current version: `0.3.0`.
+Current version: `0.3.1`.
 
 ## Exports
 
@@ -23,6 +23,7 @@ Shared here:
 - transcript filtering and message/history merging
 - composer intent and complete create/send/stream/poll/stop/reconnect controllers
 - injectable polling and SSE transports with cursor, reconnect, timeout, and abort semantics
+- detached `follow: false` sends that continue through one shared background follower, exposed through `waitForBackgroundFollow()`
 - paged conversation/message controllers and full job CRUD/run/history controllers
 - adapter-driven browser/native permission, recording, and transcription lifecycle
 - typed source, artifact, and action renderer slots keyed by canonical run/message ids
@@ -59,7 +60,7 @@ Canonical normalized events keep the Finance contract fields flat: `run.status.s
 
 Finance owns the final product surface value `finhermes` in its transport metadata. The shared package does not define product-surface identities.
 
-1. Point the Finance superproject at the reviewed `0.3.0` package commit and pin all local consumers to `0.3.0`.
+1. Point the Finance superproject at the reviewed `0.3.1` package commit and pin all local consumers to `0.3.1`.
 2. Implement the transport interfaces with Finance's canonical client. Do not add Finance endpoints to this package.
 3. Feed API/SSE payloads through `parseHomechatEventStream`, `normalizeHomechatRunEvent`, and `reduceHomechatClientState`; send the returned cursor as `Last-Event-ID` on reconnect.
 4. Use `HomechatTranscript` with `SharedHomechatKeyedProductSlots`; render Finance cards, market panels, portfolio context, and confirmations in Finance-owned renderers.
