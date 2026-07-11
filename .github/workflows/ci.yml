@@ -16,6 +16,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --workspaces=false
-      - run: npm test --workspaces=false
       - run: npm run typecheck --workspaces=false
-      - run: npm pack --dry-run --workspaces=false
+      - run: npm test --workspaces=false
+      - run: npm run build --workspaces=false
+      - run: npm run test:packed-consumer --workspaces=false

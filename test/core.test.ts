@@ -4,14 +4,19 @@ import {
   SharedHomechatRunControllerError,
   completeHomechatVoiceNote,
   composeHomechatVoiceMessage,
+  createHomechatClientController,
   createHomechatClientState,
   createHomechatComposerController,
+  createHomechatConversationController,
+  createHomechatEventStreamDecoder,
   createHomechatHistoryController,
   createHomechatHistoryState,
   createHomechatJobController,
+  createHomechatPagedState,
   createHomechatRunController,
   createHomechatVoiceController,
   homechatTranscriptMessages,
+  homechatProductSlotsForMessage,
   isUserVisibleHomechatEvent,
   legacyHomechatRunEvent,
   mergeHomechatMessages,
@@ -20,7 +25,9 @@ import {
   parseHomechatEventStream,
   reduceHomechatClientState,
   type SharedHomechatHistoryItem,
+  type SharedHomechatJobHistoryItem,
   type SharedHomechatMessage,
+  type SharedHomechatRunTransport,
 } from "../src/index.ts";
 
 test("normalizes legacy and canonical events into a discriminated contract", () => {
@@ -31,7 +38,7 @@ test("normalizes legacy and canonical events into a discriminated contract", () 
     payload: { status: "waiting_for_approval", privateValue: undefined },
   });
   assert.equal(status?.type, "run.status");
-  if (status?.type === "run.status") assert.equal(status.payload.status, "waiting_for_approval");
+  if (status?.type === "run.status") assert.equal(status.state, "waiting");
 
   const delta = normalizeHomechatRunEvent({
     event: "message_delta",
@@ -52,6 +59,141 @@ test("normalizes legacy and canonical events into a discriminated contract", () 
   });
 });
 
+test("preserves the Finance flat event vocabulary from flat and nested payload inputs", () => {
+  const status = normalizeHomechatRunEvent({ type: "run.status", state: "failed", error: "offline" });
+  assert.deepEqual(status && { type: status.type, state: status.type === "run.status" ? status.state : null, error: status.type === "run.status" ? status.error : null }, {
+    type: "run.status",
+    state: "failed",
+    error: "offline",
+  });
+  const nestedStatus = normalizeHomechatRunEvent({ type: "run.status", payload: { state: "waiting", error: "approval" } });
+  if (nestedStatus?.type === "run.status") {
+    assert.deepEqual({ state: nestedStatus.state, error: nestedStatus.error }, { state: "waiting", error: "approval" });
+  }
+
+  const sources = normalizeHomechatRunEvent({
+    type: "sources.update",
+    items: [{ kind: "research", title: "Report", origin: "CapChat" }],
+  });
+  assert.equal(sources?.type, "sources.update");
+  if (sources?.type === "sources.update") assert.equal((sources.items[0] as { title: string }).title, "Report");
+
+  const nestedSources = normalizeHomechatRunEvent({
+    type: "sources.update",
+    payload: { sources: [{ kind: "web", title: "Wire", origin: "Reuters" }] },
+  });
+  if (nestedSources?.type === "sources.update") assert.equal((nestedSources.items[0] as { origin: string }).origin, "Reuters");
+
+  const flatArtifact = normalizeHomechatRunEvent({
+    type: "artifact.update",
+    artifact: { id: "artifact-flat", kind: "market_panel" },
+  });
+  if (flatArtifact?.type === "artifact.update") {
+    assert.deepEqual(flatArtifact.artifact, { id: "artifact-flat", kind: "market_panel" });
+  }
+  const artifact = normalizeHomechatRunEvent({
+    type: "artifact.update",
+    payload: { id: "artifact-1", kind: "market_panel" },
+  });
+  if (artifact?.type === "artifact.update") {
+    assert.deepEqual(artifact.artifact, { id: "artifact-1", kind: "market_panel" });
+    assert.deepEqual(artifact.artifacts, [artifact.artifact]);
+  }
+
+  const action = normalizeHomechatRunEvent({
+    type: "action.proposal",
+    action: { actionId: "action-1", kind: "create_job", summary: "Daily scan", payload: {}, expiresAt: "2026-07-11" },
+  });
+  if (action?.type === "action.proposal") assert.equal((action.action as { actionId: string }).actionId, "action-1");
+  const nestedAction = normalizeHomechatRunEvent({
+    type: "action.proposal",
+    payload: { actionId: "action-2", kind: "create_alert", summary: "Price alert", payload: { price: 100 }, expiresAt: "2026-07-12" },
+  });
+  if (nestedAction?.type === "action.proposal") {
+    assert.deepEqual(nestedAction.action, {
+      actionId: "action-2",
+      kind: "create_alert",
+      summary: "Price alert",
+      payload: { price: 100 },
+      expiresAt: "2026-07-12",
+    });
+  }
+
+  const flatUsage = normalizeHomechatRunEvent({ type: "usage.update", used: 2 });
+  if (flatUsage?.type === "usage.update") assert.equal(flatUsage.used, 2);
+  const usage = normalizeHomechatRunEvent({ type: "usage", payload: { used: 3, limit: 10 } });
+  if (usage?.type === "usage.update") assert.deepEqual({ used: usage.used, limit: usage.limit }, { used: 3, limit: 10 });
+
+  const error = normalizeHomechatRunEvent({ type: "error", code: "runtime_offline", message: "Try again" });
+  if (error?.type === "error") assert.deepEqual({ code: error.code, message: error.message }, { code: "runtime_offline", message: "Try again" });
+  const nestedError = normalizeHomechatRunEvent({ type: "error", payload: { code: "tool_failed", message: "Search failed" } });
+  if (nestedError?.type === "error") {
+    assert.deepEqual({ code: nestedError.code, message: nestedError.message }, { code: "tool_failed", message: "Search failed" });
+  }
+
+  const flatTool = normalizeHomechatRunEvent({
+    type: "tool.status",
+    toolCallId: "tool-1",
+    toolName: "capchat_search",
+    label: "Searching research",
+    state: "succeeded",
+  });
+  if (flatTool?.type === "tool.status") assert.equal(flatTool.toolName, "capchat_search");
+  const nestedTool = normalizeHomechatRunEvent({
+    type: "tool.status",
+    payload: { toolCallId: "tool-2", label: "Checking prices", state: "started" },
+  });
+  if (nestedTool?.type === "tool.status") {
+    assert.deepEqual({ toolCallId: nestedTool.toolCallId, state: nestedTool.state }, { toolCallId: "tool-2", state: "started" });
+  }
+
+  const directFinanceAction = normalizeHomechatRunEvent({
+    type: "action.proposal",
+    approvalId: "approval-direct",
+    tool: "hodl_add_watchlist_item",
+    input: { symbol: "NVDA", assetType: "stock" },
+    label: "Add Nvidia",
+  });
+  if (directFinanceAction?.type === "action.proposal") {
+    assert.deepEqual(directFinanceAction.action, {
+      approvalId: "approval-direct",
+      tool: "hodl_add_watchlist_item",
+      input: { symbol: "NVDA", assetType: "stock" },
+      label: "Add Nvidia",
+    });
+  }
+  const currentFinanceConsumerAction = normalizeHomechatRunEvent({
+    type: "action.proposal",
+    payload: {
+      actionProposal: {
+        approvalId: "approval-nested",
+        tool: "capchat_create_alert",
+        input: { symbol: "BTC", price: 100_000 },
+        message: "Create this alert?",
+      },
+    },
+  });
+  if (currentFinanceConsumerAction?.type === "action.proposal") {
+    assert.equal((currentFinanceConsumerAction.action as { approvalId: string }).approvalId, "approval-nested");
+  }
+
+  const canonicalArtifacts = normalizeHomechatRunEvent({
+    type: "artifact.update",
+    artifactReferences: [
+      { id: "asset_btc", kind: "asset", source: "finance", sensitivity: "finance_context", label: null },
+      {},
+      null,
+    ],
+  });
+  if (canonicalArtifacts?.type === "artifact.update") {
+    assert.deepEqual(canonicalArtifacts.artifacts, [
+      { id: "asset_btc", kind: "asset", source: "finance", sensitivity: "finance_context", label: null },
+    ]);
+  }
+  assert.equal(normalizeHomechatRunEvent({ type: "artifact.update", artifact: {} }), null);
+  assert.equal(normalizeHomechatRunEvent({ type: "action.proposal", payload: { actionProposal: {} } }), null);
+});
+
 test("parses standard SSE frames with CRLF event names and Last-Event-ID cursors", () => {
   const parsed = parseHomechatEventStream([
     "id: cursor-1\r\nevent: message_delta\r\ndata: {\"payload\":{\"delta\":\"Hi\"}}",
@@ -63,6 +205,15 @@ test("parses standard SSE frames with CRLF event names and Last-Event-ID cursors
   assert.equal(parsed.events[0]?.id, "cursor-1");
   assert.equal(parsed.cursor, "cursor-1");
   assert.equal(parsed.ignored, 2);
+});
+
+test("decodes CRLF SSE frames split across transport chunks", () => {
+  const decoder = createHomechatEventStreamDecoder({ cursor: "cursor-0" });
+  assert.equal(decoder.push("id: cursor-1\r\nevent: message_delta\r\ndata: {\"text\":\"Hi\"}\r").events.length, 0);
+  const parsed = decoder.push("\n\r\nid: cursor-2\r\nevent: run.status\r\ndata: {\"state\":\"completed\"}\r\n\r\n");
+  assert.deepEqual(parsed.events.map((event) => event.type), ["message.delta", "run.status"]);
+  assert.equal(parsed.cursor, "cursor-2");
+  assert.equal(decoder.finish().events.length, 0);
 });
 
 test("reduces snapshots and overlapping stream deltas into canonical client state", () => {
@@ -123,6 +274,7 @@ test("persists a completed assistant message before terminal status clears the d
     role: "assistant",
     content: "Durable answer",
     createdAt: "2026-01-01T00:00:00.000Z",
+    provisional: true,
   }]);
 });
 
@@ -145,6 +297,7 @@ test("persists the streamed draft when a terminal poll snapshot wins the complet
     runId: "run-poll",
     role: "assistant",
     content: "Polled answer",
+    provisional: true,
   }]);
 });
 
@@ -169,6 +322,53 @@ test("prefers a persisted snapshot message over a shorter streaming draft", () =
   ]);
 });
 
+test("replaces a terminal status draft with the authoritative persisted answer", () => {
+  const variants = [
+    { name: "longer", draft: "Partial answer", final: "Partial answer with the complete allocation details.", snapshotEvents: false },
+    { name: "different", draft: "The market is closed.", final: "The market is open and BTC is trading normally.", snapshotEvents: true },
+    { name: "identical", draft: "No change required.", final: "No change required.", snapshotEvents: false },
+    { name: "shorter", draft: "Final answer with repeated trailing text", final: "Final answer", snapshotEvents: false },
+  ];
+
+  for (const variant of variants) {
+    const runId = `run-terminal-${variant.name}`;
+    const terminalEvent = { id: `status-${variant.name}`, runId, type: "run.status", state: "completed" };
+    let state = createHomechatClientState<SharedHomechatMessage>();
+    state = reduceHomechatClientState(state, { type: "run.started", runId, status: "running" });
+    state = reduceHomechatClientState(state, {
+      type: "run.event",
+      event: { id: `delta-${variant.name}`, runId, type: "message.delta", text: variant.draft },
+    });
+    state = reduceHomechatClientState(state, { type: "run.event", event: terminalEvent });
+
+    assert.deepEqual(state.messages, [{
+      id: terminalEvent.id,
+      runId,
+      role: "assistant",
+      content: variant.draft,
+      provisional: true,
+    }], `${variant.name}: terminal event should preserve one provisional draft`);
+
+    const persisted = {
+      id: `message-${variant.name}`,
+      runId,
+      role: "assistant" as const,
+      content: variant.final,
+    };
+    state = reduceHomechatClientState(state, {
+      type: "run.snapshot",
+      run: {
+        id: runId,
+        status: "completed",
+        messages: [persisted],
+        events: variant.snapshotEvents ? [terminalEvent] : [],
+      },
+    });
+
+    assert.deepEqual(state.messages, [persisted], `${variant.name}: persisted final must replace, not append to, the draft`);
+  }
+});
+
 test("marks source, artifact, and action updates as user-visible product events", () => {
   assert.equal(isUserVisibleHomechatEvent({ type: "sources.update" }), true);
   assert.equal(isUserVisibleHomechatEvent({ type: "artifact.update" }), true);
@@ -176,11 +376,114 @@ test("marks source, artifact, and action updates as user-visible product events"
   assert.equal(isUserVisibleHomechatEvent({ type: "message.delta" }), false);
 });
 
+test("keys source, artifact, and action render payloads by canonical run and completed message", () => {
+  let state = createHomechatClientState<SharedHomechatMessage>();
+  state = reduceHomechatClientState(state, { type: "run.started", runId: "run-slots", status: "running" });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: { type: "sources.update", runId: "run-slots", items: [{ id: "source-1" }] },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: { type: "artifact.update", runId: "run-slots", artifact: { id: "artifact-1" } },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: { type: "action.proposal", runId: "run-slots", action: { actionId: "action-1" } },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: { type: "message.completed", runId: "run-slots", messageId: "message-slots", text: "Done" },
+  });
+
+  const message = state.messages[0]!;
+  assert.equal(message.id, "message-slots");
+  assert.deepEqual(homechatProductSlotsForMessage(state.slots, message), {
+    sources: [{ id: "source-1" }],
+    artifacts: [{ id: "artifact-1" }],
+    actions: [{ actionId: "action-1" }],
+  });
+  assert.ok(state.slots.byRunId["run-slots"]);
+  assert.ok(state.slots.byMessageId["message-slots"]);
+});
+
+test("normalizes current Finance and canonical API structured references without empty slots", () => {
+  const artifactReference = {
+    id: "asset_btc",
+    kind: "asset",
+    source: "finance",
+    sensitivity: "finance_context",
+    label: null,
+  };
+  let state = createHomechatClientState<SharedHomechatMessage>();
+  state = reduceHomechatClientState(state, {
+    type: "run.snapshot",
+    run: {
+      id: "run-finance-slots",
+      status: "running",
+      messages: [{
+        id: "message-finance",
+        runId: "run-finance-slots",
+        role: "assistant",
+        content: "Review the attached asset.",
+        artifactReferences: [artifactReference, {}, null],
+      }],
+    },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: {
+      type: "action.proposal",
+      runId: "run-finance-slots",
+      messageId: "message-finance",
+      payload: {
+        actionProposal: {
+          approvalId: "approval-1",
+          tool: "hodl_add_watchlist_item",
+          input: { symbol: "NVDA", assetType: "stock" },
+        },
+      },
+    },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: {
+      type: "artifact.update",
+      runId: "run-finance-slots",
+      messageId: "message-finance",
+      artifact: { id: "research-1", kind: "research", source: "capchat" },
+    },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: { type: "action.proposal", runId: "run-finance-slots", action: {} },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: { type: "artifact.update", runId: "run-finance-slots", artifactReferences: [{}, null] },
+  });
+
+  assert.deepEqual(homechatProductSlotsForMessage(state.slots, state.messages[0]!), {
+    artifacts: [
+      artifactReference,
+      { id: "research-1", kind: "research", source: "capchat" },
+    ],
+    actions: [{
+      approvalId: "approval-1",
+      tool: "hodl_add_watchlist_item",
+      input: { symbol: "NVDA", assetType: "stock" },
+    }],
+  });
+  assert.deepEqual(Object.keys(state.slots.byRunId), ["run-finance-slots"]);
+  assert.deepEqual(Object.keys(state.slots.byMessageId), ["message-finance"]);
+});
+
 test("preserves meaningful leading whitespace in streamed delta segments", () => {
   assert.equal(
     nextHomechatStreamingText("Die erste Hälfte", { delta: " und die zweite Hälfte." }),
     "Die erste Hälfte und die zweite Hälfte.",
   );
+  assert.equal(nextHomechatStreamingText("same", { text: "same" }), "same");
 });
 
 test("builds a session transcript and merges message updates without copies", () => {
@@ -281,6 +584,136 @@ test("advances Last-Event-ID through parsed SSE reconnects until message complet
   assert.deepEqual(result, { cursor: "cursor-2", terminal: true });
 });
 
+test("owns send, stream-to-poll hydration, terminal errors, reconnect, and persisted user-message merging", async () => {
+  type Message = SharedHomechatMessage & { id: string };
+  type Run = { id: string; status: string; messages: Message[] };
+  const persistedUser: Message = { id: "user-1", runId: "run-client", role: "user", content: "Hello" };
+  const persistedAssistant: Message = { id: "assistant-1", runId: "run-client", role: "assistant", content: "Complete answer" };
+  let reads = 0;
+  let creates = 0;
+  const controller = createHomechatClientController<Message, Run, { message: string }>({
+    transport: {
+      createRun: async () => {
+        creates += 1;
+        return { id: "run-client", status: "running", messages: [persistedUser] };
+      },
+      getRun: async () => {
+        reads += 1;
+        return reads > 1
+          ? { id: "run-client", status: "completed", messages: [persistedUser, persistedAssistant] }
+          : { id: "run-client", status: "running", messages: [persistedUser] };
+      },
+      stopRun: async () => ({ id: "run-client", status: "cancelled", messages: [persistedUser] }),
+      streamRun: async (_runId, context) => {
+        await context.onEvent({ id: "delta-client", type: "message.delta", runId: "run-client", text: "Complete" });
+        throw new Error("network changed");
+      },
+    },
+    runController: createHomechatRunController(
+      {
+        createRun: async () => {
+          creates += 1;
+          return { id: "run-client", status: "running", messages: [persistedUser] };
+        },
+        getRun: async () => {
+          reads += 1;
+          return reads > 1
+            ? { id: "run-client", status: "completed", messages: [persistedUser, persistedAssistant] }
+            : { id: "run-client", status: "running", messages: [persistedUser] };
+        },
+        stopRun: async () => ({ id: "run-client", status: "cancelled", messages: [persistedUser] }),
+        streamRun: async (_runId, context) => {
+          await context.onEvent({ id: "delta-client", type: "message.delta", runId: "run-client", text: "Complete" });
+          throw new Error("network changed");
+        },
+      },
+      { sleep: async () => undefined },
+    ),
+  });
+
+  const state = await controller.send(
+    { message: "Hello" },
+    { optimisticMessage: { id: "local-1", role: "user", content: "Hello" }, maxReconnectAttempts: 0 },
+  );
+  assert.equal(creates, 1);
+  assert.equal(state.phase, "completed");
+  assert.equal(state.streamingText, "");
+  assert.deepEqual(state.messages, [persistedUser, persistedAssistant]);
+
+  controller.reset([]);
+  const queued = await controller.send(
+    { message: "Hello" },
+    { follow: false, optimisticMessage: { id: "local-queued", role: "user", content: "Hello" } },
+  );
+  assert.equal(queued.phase, "waiting");
+  assert.deepEqual(queued.messages, [persistedUser]);
+  const queuedFinal = await controller.waitForBackgroundFollow();
+  assert.equal(queuedFinal.phase, "completed");
+  assert.deepEqual(queuedFinal.messages, [persistedUser, persistedAssistant]);
+
+  controller.reset([]);
+  controller.dispatch({ type: "run.sending", optimisticMessage: { id: "local-stop", role: "user", content: "Hello" } });
+  const stopped = await controller.stop("run-client");
+  assert.equal(stopped.phase, "stopped");
+  assert.deepEqual(stopped.messages, [persistedUser]);
+});
+
+test("keeps exactly one shared poller for a follow:false queued run", async () => {
+  type Message = SharedHomechatMessage & { id: string };
+  type Run = { id: string; status: string; messages: Message[] };
+  const persistedUser: Message = { id: "queued-user", runId: "run-queued", role: "user", content: "Queued question" };
+  const persistedAssistant: Message = { id: "queued-assistant", runId: "run-queued", role: "assistant", content: "Queued answer" };
+  const queuedRun: Run = { id: "run-queued", status: "queued", messages: [persistedUser] };
+  let reads = 0;
+  let concurrentReads = 0;
+  let maxConcurrentReads = 0;
+  let releaseFirstRead: () => void = () => undefined;
+  let markFirstReadStarted: () => void = () => undefined;
+  const firstReadBlocked = new Promise<void>((resolve) => { releaseFirstRead = resolve; });
+  const firstReadStarted = new Promise<void>((resolve) => { markFirstReadStarted = resolve; });
+  const transport: SharedHomechatRunTransport<Run, { message: string }> = {
+    createRun: async () => queuedRun,
+    getRun: async () => {
+      reads += 1;
+      concurrentReads += 1;
+      maxConcurrentReads = Math.max(maxConcurrentReads, concurrentReads);
+      if (reads === 1) {
+        markFirstReadStarted();
+        await firstReadBlocked;
+      }
+      concurrentReads -= 1;
+      return reads === 1
+        ? { ...queuedRun, status: "running" }
+        : { ...queuedRun, status: "completed", messages: [persistedUser, persistedAssistant] };
+    },
+  };
+  const controller = createHomechatClientController<Message, Run, { message: string }>({
+    transport,
+    runController: createHomechatRunController(transport, { sleep: async () => undefined }),
+  });
+
+  const queued = await controller.send(
+    { message: "Queued question" },
+    { follow: false, optimisticMessage: { id: "queued-local", role: "user", content: "Queued question" } },
+  );
+  assert.equal(queued.phase, "waiting");
+  await firstReadStarted;
+  assert.equal(reads, 1);
+
+  const duplicateFollow = controller.follow(queuedRun);
+  releaseFirstRead();
+  const [background, duplicate] = await Promise.all([
+    controller.waitForBackgroundFollow(),
+    duplicateFollow,
+  ]);
+
+  assert.equal(reads, 2);
+  assert.equal(maxConcurrentReads, 1);
+  assert.equal(background.phase, "completed");
+  assert.equal(duplicate.phase, "completed");
+  assert.deepEqual(background.messages, [persistedUser, persistedAssistant]);
+});
+
 test("loads paged conversation and job history through an injected transport", async () => {
   const requests: Array<string | null | undefined> = [];
   const controller = createHomechatHistoryController<SharedHomechatHistoryItem>({
@@ -297,26 +730,70 @@ test("loads paged conversation and job history through an injected transport", a
   assert.deepEqual(state.items.map((item) => item.id), ["chat-1", "job-1"]);
 });
 
-test("uses the shared job lifecycle controller", async () => {
+test("loads paged conversations and prepends older messages through an injected transport", async () => {
+  type Conversation = { id: string; title: string };
+  type PagedMessage = SharedHomechatMessage & { id: string };
+  const controller = createHomechatConversationController<Conversation, PagedMessage>({
+    createConversation: async () => ({ id: "chat-new", title: "New" }),
+    listConversations: async (request) => request.cursor
+      ? { cursor: null, items: [{ id: "chat-2", title: "Second" }] }
+      : { cursor: "next", items: [{ id: "chat-1", title: "First" }] },
+    listMessages: async (request) => request.cursor
+      ? { cursor: null, items: [{ id: "message-1", role: "user" as const, content: "Older" }] }
+      : { cursor: "older", items: [{ id: "message-2", role: "assistant" as const, content: "Newer" }] },
+  });
+
+  assert.equal((await controller.create({})).id, "chat-new");
+  let conversations = await controller.refreshConversations(createHomechatPagedState());
+  conversations = await controller.loadNextConversations(conversations);
+  assert.deepEqual(conversations.items.map((item) => item.id), ["chat-1", "chat-2"]);
+
+  let messages = await controller.refreshMessages(createHomechatPagedState(), { conversationId: "chat-1" });
+  messages = await controller.loadOlderMessages(messages, { conversationId: "chat-1" });
+  assert.deepEqual(messages.items.map((item) => item.id), ["message-1", "message-2"]);
+});
+
+test("owns full jobs CRUD, run, paging, history, and terminal lifecycle", async () => {
   let reads = 0;
+  const historyItem: SharedHomechatJobHistoryItem = { id: "history-1", jobId: "job-1", status: "completed" };
   const jobs = createHomechatJobController(
-    { getJob: async (id) => ({ id, status: reads++ ? "completed" : "running" }) },
+    {
+      cancelJob: async (id) => ({ id, status: "cancelled" }),
+      createJob: async (request: { title: string }) => ({ id: "job-new", status: request.title ? "queued" : "failed" }),
+      deleteJob: async () => undefined,
+      getJob: async (id) => ({ id, status: reads++ ? "completed" : "running" }),
+      listJobHistory: async () => ({ cursor: null, items: [historyItem] }),
+      listJobs: async () => ({ cursor: null, items: [{ id: "job-1", status: "running" }] }),
+      runJob: async (id) => ({ id: `${id}-run`, status: "queued" }),
+      updateJob: async (id, request: { status: string }) => ({ id, status: request.status }),
+    },
     { sleep: async () => undefined },
   );
+  assert.equal((await jobs.create({ title: "Daily" })).id, "job-new");
+  assert.equal((await jobs.update("job-1", { status: "paused" })).status, "paused");
+  assert.equal((await jobs.run("job-1")).id, "job-1-run");
+  assert.deepEqual((await jobs.list(createHomechatPagedState())).items.map((job) => job.id), ["job-1"]);
+  assert.deepEqual((await jobs.history(createHomechatPagedState(), { jobId: "job-1" })).items, [historyItem]);
   assert.equal((await jobs.wait("job-1")).status, "completed");
+  assert.equal((await jobs.cancel("job-1"))?.status, "cancelled");
+  await jobs.delete("job-1");
 });
 
 test("coordinates permission, recording, and transcription adapters", async () => {
+  const phases: string[] = [];
   const voice = createHomechatVoiceController({
     requestPermission: async () => true,
     startRecording: async () => ({ recording: "recording-1", mimeType: "audio/webm" }),
     stopRecording: async (recording) => `audio:${recording}`,
     transcribe: async (audio, context) => ({ text: `${audio}:${context.mimeType}` }),
   });
+  const unsubscribe = voice.subscribe((state) => phases.push(state.phase));
   await voice.start();
   assert.deepEqual(await completeHomechatVoiceNote({ controller: voice, draft: "Context" }), {
     message: "Context\n\nVoice note:\n\naudio:recording-1:audio/webm",
     transcript: "audio:recording-1:audio/webm",
   });
   assert.equal(composeHomechatVoiceMessage({ draft: "Context", transcript: "Buy milk" }), "Context\n\nVoice note:\n\nBuy milk");
+  assert.deepEqual(phases, ["idle", "requesting_permission", "recording", "stopping", "transcribing", "idle"]);
+  unsubscribe();
 });
