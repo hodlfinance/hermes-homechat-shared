@@ -12,6 +12,7 @@ import {
   createHomechatHistoryController,
   createHomechatHistoryState,
   createHomechatJobController,
+  createHomechatKeyedProductSlots,
   createHomechatPagedState,
   createHomechatRunController,
   createHomechatVoiceController,
@@ -23,6 +24,7 @@ import {
   nextHomechatStreamingText,
   normalizeHomechatRunEvent,
   parseHomechatEventStream,
+  putHomechatProductSlots,
   reduceHomechatClientState,
   type SharedHomechatHistoryItem,
   type SharedHomechatJobHistoryItem,
@@ -374,6 +376,27 @@ test("marks source, artifact, and action updates as user-visible product events"
   assert.equal(isUserVisibleHomechatEvent({ type: "artifact.update" }), true);
   assert.equal(isUserVisibleHomechatEvent({ type: "action.proposal" }), true);
   assert.equal(isUserVisibleHomechatEvent({ type: "message.delta" }), false);
+});
+
+test("attaches run-level product slots only to assistant messages", () => {
+  const slots = putHomechatProductSlots(createHomechatKeyedProductSlots(), {
+    runId: "run-finance",
+    slots: { artifacts: [{ id: "artifact-1" }] },
+  });
+  const userSlots = homechatProductSlotsForMessage(slots, {
+    id: "user-1",
+    role: "user",
+    runId: "run-finance",
+    content: "Compare these assets",
+  });
+  const assistantSlots = homechatProductSlotsForMessage(slots, {
+    id: "assistant-1",
+    role: "assistant",
+    runId: "run-finance",
+    content: "Here is the comparison",
+  });
+  assert.deepEqual(userSlots, {});
+  assert.equal(assistantSlots.artifacts?.length, 1);
 });
 
 test("keys source, artifact, and action render payloads by canonical run and completed message", () => {
