@@ -1529,8 +1529,9 @@ export function homechatProductSlotsForMessage<
   slots: SharedHomechatKeyedProductSlots<Source, Artifact, Action>,
   message: Message,
 ): SharedHomechatProductSlots<Source, Artifact, Action> {
-  const runSlots = message.runId ? slots.byRunId[message.runId] : undefined;
   const messageSlots = message.id ? slots.byMessageId[message.id] : undefined;
+  if (message.role !== "assistant") return messageSlots ?? {};
+  const runSlots = message.runId ? slots.byRunId[message.runId] : undefined;
   return mergeHomechatProductSlots(runSlots, messageSlots);
 }
 
