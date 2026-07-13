@@ -395,7 +395,14 @@ test("attaches run-level product slots only to assistant messages", () => {
     runId: "run-finance",
     content: "Here is the comparison",
   });
+  const systemSlots = homechatProductSlotsForMessage(slots, {
+    id: "system-1",
+    role: "system",
+    runId: "run-finance",
+    content: "Internal context",
+  });
   assert.deepEqual(userSlots, {});
+  assert.deepEqual(systemSlots, {});
   assert.equal(assistantSlots.artifacts?.length, 1);
 });
 

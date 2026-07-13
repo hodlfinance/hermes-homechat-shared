@@ -1530,7 +1530,7 @@ export function homechatProductSlotsForMessage<
   message: Message,
 ): SharedHomechatProductSlots<Source, Artifact, Action> {
   const messageSlots = message.id ? slots.byMessageId[message.id] : undefined;
-  if (message.role === "user") return messageSlots ?? {};
+  if (message.role !== "assistant") return messageSlots ?? {};
   const runSlots = message.runId ? slots.byRunId[message.runId] : undefined;
   return mergeHomechatProductSlots(runSlots, messageSlots);
 }
