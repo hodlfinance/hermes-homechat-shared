@@ -1,3 +1,5 @@
+export * from "./suggestions.js";
+
 export type SharedHomechatRunStatus =
   | "queued"
   | "running"
