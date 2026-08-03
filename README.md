@@ -4,7 +4,7 @@ Shared, product-neutral Homechat core and React primitives used by Hey Hermes an
 
 This package intentionally contains no application secrets, endpoint paths, Finance data access, runtime credentials, themes, navigation, or product CSS. Products inject their own transports and renderers.
 
-Current version: `0.3.1`.
+Current version: `0.4.0`.
 
 ## Exports
 
@@ -28,12 +28,32 @@ Shared here:
 - adapter-driven browser/native permission, recording, and transcription lifecycle
 - typed source, artifact, and action renderer slots keyed by canonical run/message ids
 - generic transcript, message frame, composer chrome, and voice meter React components
+- versioned Suggestions catalog/state validation, two independent progress/promotion axes,
+  deterministic 24-hour/14-day Nudge selection, and mechanical destination descriptors
 
 Not shared here:
 
 - Hey Hermes account/runtime ownership
 - FinanceHermes HODL/CapChat tools
 - product-specific CSS, copy, source cards, action proposals, or backend clients
+- Suggestions catalog content, identity lookup, user state storage, navigation, setup logic,
+  completion facts, eligibility facts, or Nudge reservation/locking
+
+## Suggestions boundary
+
+The `0.4.0` core validates stable product-local catalog IDs and the exact
+`productId`/immutable product-local `accountId`/`workspaceId` state scope. Progress
+(`new`, `shown`, `tried`, `completed`) and promotion (`eligible`, `dismissed`) are
+independent axes. Direct manual start can move `new` to `tried` without inventing a
+Top placement; only an authoritative product success moves an item to `completed`.
+
+`selectSharedSuggestion()` is pure and deterministic. Product adapters provide their
+own eligibility/relevance facts and transactionally persist the returned `nextState`.
+The selector enforces at most one Nudge per session and rolling 24 hours, a 14-day
+same-ID cooldown, completed/dismissed exclusion, and active-run/high-priority-notice
+suppression. Connection, AI Access, Capability, and editable-draft targets contain
+only stable registry IDs; products resolve them through their existing setup or
+draft routes. No target executes work.
 
 ## Transport Boundary
 
