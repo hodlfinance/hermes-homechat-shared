@@ -688,6 +688,60 @@ test("owns send, stream-to-poll hydration, terminal errors, reconnect, and persi
   assert.deepEqual(stopped.messages, [persistedUser]);
 });
 
+test("a terminal stream error settles without polling or reconnecting", async () => {
+  type Message = SharedHomechatMessage & { id: string };
+  type Run = { id: string; status: string; messages: Message[] };
+  let polls = 0;
+  let reconnects = 0;
+  const transport: SharedHomechatRunTransport<Run, { message: string }> = {
+    createRun: async () => ({ id: "run-terminal-error", status: "running", messages: [] }),
+    getRun: async () => {
+      polls += 1;
+      return { id: "run-terminal-error", status: "completed", messages: [] };
+    },
+    streamRun: async (runId, context) => {
+      await context.onEvent({ id: "error-1", runId, type: "error", message: "Claude failed." });
+      return { cursor: "error-1", terminal: true };
+    },
+  };
+  const controller = createHomechatClientController<Message, Run, { message: string }>({
+    transport,
+    runController: createHomechatRunController(transport, { sleep: async () => undefined }),
+  });
+
+  const state = await controller.send(
+    { message: "Hello" },
+    { onReconnect: () => { reconnects += 1; } },
+  );
+
+  assert.equal(state.phase, "error");
+  assert.equal(state.status, "failed");
+  assert.equal(polls, 0);
+  assert.equal(reconnects, 0);
+});
+
+test("a terminal run ignores late reconnect, completion, and snapshot events", () => {
+  let state = createHomechatClientState<SharedHomechatMessage>();
+  state = reduceHomechatClientState(state, { type: "run.started", runId: "run-terminal", status: "running" });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: { id: "failed-1", runId: "run-terminal", type: "run.status", state: "failed" },
+  });
+  state = reduceHomechatClientState(state, { type: "run.reconnecting", runId: "run-terminal" });
+  state = reduceHomechatClientState(state, {
+    type: "run.event",
+    event: { id: "completed-1", runId: "run-terminal", type: "message.completed", text: "Late answer" },
+  });
+  state = reduceHomechatClientState(state, {
+    type: "run.snapshot",
+    run: { id: "run-terminal", status: "completed", messages: [] },
+  });
+
+  assert.equal(state.phase, "error");
+  assert.equal(state.status, "failed");
+  assert.equal(state.messages.length, 0);
+});
+
 test("keeps exactly one shared poller for a follow:false queued run", async () => {
   type Message = SharedHomechatMessage & { id: string };
   type Run = { id: string; status: string; messages: Message[] };

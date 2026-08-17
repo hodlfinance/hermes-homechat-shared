@@ -1623,6 +1623,7 @@ export function reduceHomechatClientState<
     };
   }
   if (action.type === "run.started") {
+    if (state.runId === action.runId && homechatClientTerminalStatus(state)) return state;
     const status = normalizeHomechatRunStatus(action.status) ?? "queued";
     return {
       ...state,
@@ -1636,6 +1637,7 @@ export function reduceHomechatClientState<
     };
   }
   if (action.type === "run.reconnecting") {
+    if (state.runId === action.runId && homechatClientTerminalStatus(state)) return state;
     return {
       ...state,
       error: null,
@@ -1644,9 +1646,18 @@ export function reduceHomechatClientState<
       startedAt: action.startedAt ?? state.startedAt ?? Date.now(),
     };
   }
-  if (action.type === "run.stopping") return { ...state, phase: "stopping" };
-  if (action.type === "run.error") return { ...state, error: action.error, phase: "error" };
+  if (action.type === "run.stopping") {
+    return homechatClientTerminalStatus(state) ? state : { ...state, phase: "stopping" };
+  }
+  if (action.type === "run.error") {
+    return homechatClientTerminalStatus(state)
+      ? state
+      : { ...state, error: action.error, phase: "error", status: "failed", streamingText: "" };
+  }
   if (action.type === "run.snapshot") {
+    const incomingStatus = normalizeHomechatRunStatus(action.run.status) ?? state.status ?? "running";
+    const currentTerminalStatus = state.runId === action.run.id ? homechatClientTerminalStatus(state) : null;
+    if (currentTerminalStatus && incomingStatus !== currentTerminalStatus) return state;
     let slots = state.slots;
     for (const message of action.run.messages ?? []) {
       const artifactReferences = homechatArtifactItems(message.artifactReferences);
@@ -1666,7 +1677,7 @@ export function reduceHomechatClientState<
     for (const event of action.run.events ?? []) {
       next = reduceHomechatClientState(next, { type: "run.event", event });
     }
-    const status = normalizeHomechatRunStatus(action.run.status) ?? next.status ?? "running";
+    const status = incomingStatus;
     const terminal = status === "completed" || status === "cancelled" || status === "failed";
     return {
       ...next,
@@ -1685,6 +1696,24 @@ export function reduceHomechatClientState<
 
   const event = normalizeHomechatRunEvent(action.event);
   if (!event) return state;
+  const eventRunId = event.runId ?? state.runId;
+  const currentTerminalStatus = eventRunId === state.runId ? homechatClientTerminalStatus(state) : null;
+  if (currentTerminalStatus) {
+    if (event.type !== "message.completed" || currentTerminalStatus !== "completed") return state;
+    const runId = eventRunId ?? "run";
+    const content = reconcileHomechatFinalAnswer(event.text, state.streamingText);
+    return {
+      ...state,
+      messages: persistCompletedHomechatMessage(state, {
+        completedMessage: action.completedMessage,
+        content,
+        createdAt: event.createdAt,
+        id: event.messageId || event.id,
+        runId,
+      }),
+      streamingText: "",
+    };
+  }
   const eventKey = event.id ?? `${event.runId ?? "run"}:${event.type}:${event.createdAt ?? ""}:${JSON.stringify(event.payload)}`;
   const events = state.events.some((item) =>
     (item.id ?? `${item.runId ?? "run"}:${item.type}:${item.createdAt ?? ""}:${JSON.stringify(item.payload)}`) === eventKey,
@@ -1769,9 +1798,28 @@ export function reduceHomechatClientState<
     };
   }
   if (event.type === "error") {
-    return { ...state, events, error: event.message || "The run reported an error.", phase: "error", slots };
+    return {
+      ...state,
+      events,
+      error: event.message || "The run reported an error.",
+      phase: "error",
+      runId: event.runId ?? state.runId,
+      slots,
+      status: "failed",
+      streamingText: "",
+    };
   }
   return { ...state, events, runId: event.runId ?? state.runId, slots };
+}
+
+function homechatClientTerminalStatus(
+  state: Pick<SharedHomechatClientState, "phase" | "status">,
+): Extract<SharedHomechatRunStatus, "completed" | "cancelled" | "failed"> | null {
+  if (state.status === "completed" || state.status === "cancelled" || state.status === "failed") return state.status;
+  if (state.phase === "completed") return "completed";
+  if (state.phase === "stopped") return "cancelled";
+  if (state.phase === "error") return "failed";
+  return null;
 }
 
 export function homechatClientPhaseForStatus(status: SharedHomechatRunStatus): SharedHomechatClientPhase {
@@ -1902,6 +1950,7 @@ export function createHomechatRunController<
         if (terminal || result?.terminal) return { cursor, terminal: true };
       } catch (error) {
         assertHomechatNotAborted(options.signal);
+        if (terminal) return { cursor, terminal: true };
         if (attempt >= maxReconnectAttempts) throw error;
         attempt += 1;
         await options.onReconnect?.(attempt, cursor, error);
@@ -2017,18 +2066,19 @@ export function createHomechatClientController<
 
     if (options.transport.streamRun) {
       try {
-        await runs.stream(run.id, {
+        const streamResult = await runs.stream(run.id, {
           cursor: followOptions.cursor,
           maxReconnectAttempts: followOptions.maxReconnectAttempts ?? 2,
           onCursor: followOptions.onCursor,
           onEvent: takeEvent,
           onReconnect: async (attempt, cursor, error) => {
-            dispatch({ type: "run.reconnecting", runId: run.id });
+            if (!homechatClientTerminalStatus(state)) dispatch({ type: "run.reconnecting", runId: run.id });
             await followOptions.onReconnect?.(attempt, cursor, error);
           },
           reconnectDelayMs: followOptions.reconnectDelayMs,
           signal: followOptions.signal,
         });
+        if (streamResult.terminal) return state;
       } catch (error) {
         if (isSharedHomechatRunControllerError(error, "aborted")) throw error;
       }
@@ -2084,6 +2134,7 @@ export function createHomechatClientController<
 
   async function reconnect(runId: string, followOptions: SharedHomechatFollowOptions = {}) {
     try {
+      if (state.runId === runId && homechatClientTerminalStatus(state)) return state;
       dispatch({ type: "run.reconnecting", runId });
       const run = await runs.get(runId, { signal: followOptions.signal, onSnapshot: takeSnapshot });
       const status = normalizeHomechatRunStatus(run.status);
