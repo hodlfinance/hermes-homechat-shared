@@ -36,6 +36,8 @@ test('the installed native client routes bootstrap, settings and canonical mutat
   assert.equal(calls.length, 6);
   assert.ok(calls.every(call => call.url.startsWith('https://finhermes.test/api/')));
   assert.ok(calls.every(call => new Headers(call.init?.headers).get('authorization') === 'Bearer test-session'));
+  await transport.reportLatency('test-session', 'run_a', { outcome: 'success' });
+  assert.deepEqual(JSON.parse(String(calls.at(-1)?.init?.body)), { summary: { outcome: 'success' } });
   // A malformed status response can fail validation, but it must use the same
   // host transport rather than leaking to an ambient/global fetch.
   await workspaceStatusTruthRequest(client).catch(() => undefined);

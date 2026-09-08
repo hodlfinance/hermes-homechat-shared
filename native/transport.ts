@@ -38,7 +38,7 @@ export function createNativeR8Transport(options: {
     firstConversation: (token) => request(token, "/workspace/first-conversation"),
     guidedSetup,
     reportLatency: async (token, runId, summary) => {
-      await request(token, `/hermes/runs/${encodeURIComponent(runId)}/latency`, { method: "POST", body: JSON.stringify(summary) });
+      await request(token, `/hermes/runs/${encodeURIComponent(runId)}/latency`, { method: "POST", body: JSON.stringify({ summary }) });
     },
   };
 }
