@@ -9,8 +9,12 @@ export function createNativeR8Transport(options: {
   fetch: typeof fetch;
   identity: NativeR8ChannelIdentity;
 }): NativeR8Transport {
+  const nativeFetch: typeof fetch = (input, init) => options.fetch(
+    input,
+    init?.credentials === "same-origin" ? { ...init, credentials: "omit" } : init,
+  );
   const request = async (token: string, path: string, init: RequestInit = {}) => {
-    const response = await options.fetch(`${options.baseUrl}${path}`, {
+    const response = await nativeFetch(`${options.baseUrl}${path}`, {
       ...init,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...init.headers },
     });
@@ -29,12 +33,12 @@ export function createNativeR8Transport(options: {
     return mutation ? guidedSetup(token) : response.state;
   };
   return {
-    createApiClient: (input) => createApiClient({ ...input, fetchImpl: options.fetch }),
+    createApiClient: (input) => createApiClient({ ...input, fetchImpl: nativeFetch }),
     createCanonicalClient: (input) => createNativeR8CanonicalController(
-      createHermesApiClient({ ...input, fetchImpl: options.fetch }), options.identity),
-    createSupportClient: (input) => createSupportRequestClient({ ...input, fetchImpl: options.fetch }),
-    createAnonymousSupportClient: (input) => createAnonymousSupportRequestClient({ ...input, fetchImpl: options.fetch }),
-    fetchStream: options.fetch,
+      createHermesApiClient({ ...input, fetchImpl: nativeFetch }), options.identity),
+    createSupportClient: (input) => createSupportRequestClient({ ...input, fetchImpl: nativeFetch }),
+    createAnonymousSupportClient: (input) => createAnonymousSupportRequestClient({ ...input, fetchImpl: nativeFetch }),
+    fetchStream: nativeFetch,
     firstConversation: (token) => request(token, "/workspace/first-conversation"),
     guidedSetup,
     reportLatency: async (token, runId, summary) => {
