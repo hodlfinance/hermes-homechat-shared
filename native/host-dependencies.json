@@ -1,0 +1,5 @@
+{
+  "react-native": ">=0.77 <0.82",
+  "react-native-svg": ">=15.12 <16",
+  "lucide-react-native": "^1.16.0"
+}

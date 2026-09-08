@@ -20,3 +20,4 @@ jobs:
       - run: npm test --workspaces=false
       - run: npm run build --workspaces=false
       - run: npm run test:packed-consumer --workspaces=false
+      - run: npm run test:native --workspaces=false

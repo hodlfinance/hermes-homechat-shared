@@ -240,17 +240,19 @@ test("fails closed across product, account, and workspace boundaries", () => {
     scope,
     states: [stateAt("daily-brief", "tried", "eligible", "2026-07-01T00:00:00.000Z")],
   };
+  const originalState = base.states[0];
+  assert.ok(originalState);
   assert.equal(errorCode(() => selectSharedSuggestion({
     ...base,
     scope: { ...scope, productId: "fin" },
   })), "scope_mismatch");
   assert.equal(errorCode(() => selectSharedSuggestion({
     ...base,
-    states: [{ ...base.states[0], scope: { ...scope, accountId: "acct_immutable_B" } }],
+    states: [{ ...originalState, scope: { ...scope, accountId: "acct_immutable_B" } }],
   })), "scope_mismatch");
   assert.equal(errorCode(() => selectSharedSuggestion({
     ...base,
-    states: [{ ...base.states[0], scope: { ...scope, workspaceId: "workspace_B" } }],
+    states: [{ ...originalState, scope: { ...scope, workspaceId: "workspace_B" } }],
   })), "scope_mismatch");
 });
 

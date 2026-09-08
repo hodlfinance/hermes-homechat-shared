@@ -28,6 +28,13 @@ try {
   tarballPath = join(packageRoot, packed[0].filename);
   const packedFiles = new Set(packed[0].files.map((file) => file.path));
   for (const required of [
+    "native/host-dependencies.json",
+    "native/index.ts",
+    "native/host.ts",
+    "native/policy.ts",
+    "native/src/surface.tsx",
+    "native/r8-source.json",
+    "native/assets/baby-dragon-neutral.png",
     "LICENSE",
     "README.md",
     "dist/index.d.ts",
@@ -54,6 +61,10 @@ try {
   );
   const coreManifest = JSON.parse(readFileSync(join(coreConsumer, "node_modules/@hodlfinance/hermes-homechat-shared/package.json"), "utf8"));
   assert.equal(coreManifest.exports["./core"].import, "./dist/index.js");
+  for (const nativeSdk of ["react-native", "react-native-svg", "lucide-react-native"]) {
+    assert.equal(coreManifest.peerDependencies?.[nativeSdk], undefined, "Core consumers must not acquire native SDK peers");
+    assert.equal(coreManifest.dependencies?.[nativeSdk], undefined, "Core consumers must not acquire native SDK dependencies");
+  }
 
   const reactConsumer = join(temporaryRoot, "react-consumer");
   run("mkdir", ["-p", reactConsumer], temporaryRoot);
