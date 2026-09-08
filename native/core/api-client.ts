@@ -29,7 +29,6 @@ import type {
   ConnectionSetupRequest,
   ConnectionToolCatalog,
   CreateApprovalCardRequest,
-  CreateBrowserResultCardRequest,
   CreateConnectionSetupRequest,
   AuthSession,
   BackupJob,
@@ -839,8 +838,6 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
       request<WorkspaceBookmark>(`/bookmarks/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     archiveBookmark: (id: string) =>
       request<WorkspaceBookmark>(`/bookmarks/${id}`, { method: "DELETE" }),
-    createBrowserResultCard: (body: CreateBrowserResultCardRequest) =>
-      request<BrowserResultCard>("/runtime-adapter/browser-results", { method: "POST", body: JSON.stringify(body) }),
     saveBrowserResultBookmark: (id: string) =>
       request<BrowserResultCard>(`/browser-results/${encodeURIComponent(id)}/save-bookmark`, { method: "POST" }),
     rankedTasks: () => request<RankedTaskCollection>("/tasks/ranked"),

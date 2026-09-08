@@ -48,3 +48,6 @@ or fail immediately when the broker authority is revoked.
 Native support is React 18.3/19, React Native 0.77–0.81 and SVG 15.12–15.x.
 Type checks and source tests do not establish an iOS artifact, deployment,
 provider configuration or device acceptance.
+
+The native API client omits the unused server-side browser-result producer
+method. Private runtime-producer authority is not part of a UI host.
