@@ -51,3 +51,9 @@ provider configuration or device acceptance.
 
 The native API client omits the unused server-side browser-result producer
 method. Private runtime-producer authority is not part of a UI host.
+
+Native SDK dependency ranges are declared in `host-dependencies.json` and
+installed by each native host. They are not root package peers: even optional
+React Native peers make npm include mobile SDK dependencies in server-only
+workspace production/audit graphs. Core and server policy consumers must not
+acquire the native SDK through this package.
