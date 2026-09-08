@@ -1,0 +1,416 @@
+{
+  "release": "Hey Internal R8",
+  "appBuild": 89,
+  "sourceCommit": "53b5e7d69c66c9525d0ad94a227bc6b49359322e",
+  "sourceFilesSha256": {
+    "apps/mobile/src/AccountDeletionSection.tsx": "530112957b45d8da24c133e13d8a4f70b9be2040c0009afa78dce52cec6fb9a3",
+    "apps/mobile/src/AutomationCard.tsx": "6399488191046782a6372e03f2e085fadcd4a15806db481b78acf7f728541f00",
+    "apps/mobile/src/MobilePrivacySheet.tsx": "15afe51165c10bc1835f5311e853c985a9d06b04c0f6bfe2f7d105be8b40ab73",
+    "apps/mobile/src/PluginCatalogScreen.tsx": "71684ee7dec16a50757e30a3871de19265e8162ae29d9daa5643e3ef6e9bc2e3",
+    "apps/mobile/src/RankedTaskList.tsx": "0ab28ffb16aeea3ca05faaaba4fa22ea10def0649de31398ca8f637757037f92",
+    "apps/mobile/src/SecureConnectionCredentialForm.tsx": "6c75dfaea226c8fe578994bf8425a092958704fbceea501aa80da736f1e7251f",
+    "apps/mobile/src/SecureSecretEntryForm.tsx": "c93d342836bfa3732c25c6aa4badee7f7f1c7259d02d46de2e250c8f811ecb67",
+    "apps/mobile/src/SupportRequestForm.tsx": "e4b6abf2ebbaca99e78a0aaca07bb3482044d4e29cf04a44af41341a7d8d3270",
+    "apps/mobile/src/account-deletion.ts": "93f1ce6bfd415968e09adc2d758eebdedb309fabfe6858762eb0be7ca9e5864f",
+    "apps/mobile/src/appI18n.ts": "329b96d4df9068e82e4adbda07105d27b87a51d547bb7b496647e6c8d441504c",
+    "apps/mobile/src/assets.d.ts": "ea273a0cad22ea19fda0666f96d909b63572d6f6bf5adf96aab8bafb94655670",
+    "apps/mobile/src/audio-residue.ts": "c9daf710bca9bb039b0c2b0405229ab14e13469ae88da5c0c1c06df09a406a56",
+    "apps/mobile/src/hermes-canonical.ts": "c0cc5561a351b620b7fbd71bb11f55946239496b34870b62a199ae821eb9c2ba",
+    "apps/mobile/src/homechat-stream.ts": "c903597384a8696d9eb410c790cb672d861bd792900d9aa0bf522387dcf7c753",
+    "apps/mobile/src/ios-paywall.ts": "3bb0161d07386621b9af4237f50b581c919f85f95381b22c083e5f626d1299b2",
+    "apps/mobile/src/localized-ui-message.ts": "c32cdaba25eb03b9106bcc5adce9160f0c69a16a6843c4e12f6ba68125697c40",
+    "apps/mobile/src/mobile-account-action.ts": "fa872bb926fcb74584fe3fa41073d58aa5c06cfe66f0a0f02be5b4e27d85489b",
+    "apps/mobile/src/mobile-ai-access-brand-marks.tsx": "fc5d9aacb144bc11110888082e5bb8e6455e4f6f418ba8c7d93dbc9d14a1f7ef",
+    "apps/mobile/src/mobile-ai-access-logo.ts": "4438effd4dcd7a035d948e8b0d2c62ce9cdcf4a4b5886980846300d2f29a00a4",
+    "apps/mobile/src/mobile-ai-access-oauth-start.ts": "1e27f704e711db88e9d66cc93a1c60439572212f0ee04f0d17aa023b0a7e8767",
+    "apps/mobile/src/mobile-ai-access-state.ts": "c367f1872fe1b0dc8d5697001d243361ccac3da5c5ee49813b1bead668a5aefb",
+    "apps/mobile/src/mobile-attachments.ts": "95951ca569cbcd9d1a0e04dc6650eee06163edc1b35a609667b0ec332c71a133",
+    "apps/mobile/src/mobile-automation-card.ts": "14e2c270adc56cc9a2cb048402e1c74483eeeb597bd7cab2f1e04168e3587287",
+    "apps/mobile/src/mobile-browser-session.ts": "f97924a7f7c4abb6e842ad70c0965c2f7150b280b621d8de4dbae5a187b28e1b",
+    "apps/mobile/src/mobile-chat-activity.ts": "95bc964edecc1d7ffecbb07f838ab0adeb426d5312e70302c8cbb5e2ddfd449f",
+    "apps/mobile/src/mobile-connection-marks.ts": "8ec8659f70c190b2ee2dad68bcc1944b9c33f438385620a58925f1d5d3ee19db",
+    "apps/mobile/src/mobile-connection-secure-entry.ts": "f698ae67db42f1e911f554b1d2dcb756e24188f18d4446d46e5144d97b8b17fc",
+    "apps/mobile/src/mobile-first-conversation-presentation.ts": "6dc626d7558b65e923b599c78d2614a48e9973e545079600a6a1086944f2c185",
+    "apps/mobile/src/mobile-gmail-oauth.ts": "82fd949e6c52b137b18b79d6417b5a676db2bde10417d19e383f7990c45b5346",
+    "apps/mobile/src/mobile-guided-setup-action.ts": "e8b320416045d616162d262e9aa1745bd949483a0fac3a8f8a005c8e0d2507fa",
+    "apps/mobile/src/mobile-home-chat-startup.ts": "7f0a08e88d50e70d797fb01f6352b410ef6b8e350afb8f7d058ade01d435e03c",
+    "apps/mobile/src/mobile-live-run-status.ts": "9b522fdd6fbadc51a58b1e0ad3167a912c18c248ff86a22fd3ffc53c6718ae03",
+    "apps/mobile/src/mobile-local-action.ts": "c0b3f5703ee4f8b2031a928a654a0ce81e5097c6b2035d24a68b83c1b41ceefb",
+    "apps/mobile/src/mobile-markdown.ts": "8c7b91a3422341805e904775dd91b82f7cb216f8076886ea5aa9d3926db50bb9",
+    "apps/mobile/src/mobile-message-links.ts": "8ac84e54b24e2a832712592565728e0c43671637c9b4bf6ed0727b9f503de3e6",
+    "apps/mobile/src/mobile-message-send.ts": "4cd4e069cfbeabb174dd9cbea0215d9b681008c0e4dc382af98c658d017b31bc",
+    "apps/mobile/src/mobile-message-style.ts": "2a48d58052407738fb3766288a47c8401206f57beaebc08dc71f94b57a4bed61",
+    "apps/mobile/src/mobile-native-confirmation.ts": "8461b61b26ec0c9d1c9ae1f685da2b45540a8f2129f7886cab65372192d6375a",
+    "apps/mobile/src/mobile-notification-target.ts": "eab861e1ab488224e9de893a223b1ad7109822f5c224ab80af1a9bc00b0a67d2",
+    "apps/mobile/src/mobile-page-menu-row.tsx": "7aceb84eb31b38ee5bc99dd95627be089b7788f783889d4cab2cdf480a453089",
+    "apps/mobile/src/mobile-palette.ts": "3aea628cd809dcf0c467f39f71d2a83d44e93c9aef07a90484ee1a03e40e5a27",
+    "apps/mobile/src/mobile-product-access.ts": "0c9d1f5899064b85295965f3df19bdd510d84e6322d6b9b7296e29dc870582b5",
+    "apps/mobile/src/mobile-read-aloud.ts": "3763d497cf6648c9fa4a47e367325c89aac9f4fa982c8ef749850a79b2412936",
+    "apps/mobile/src/mobile-reduce-motion-store.ts": "fe5fc028f2df1c599b5875504fd2859d01e79ce1708550d167417682b43e35c1",
+    "apps/mobile/src/mobile-route-gate.ts": "e3cdba0e88b54332f783acbd568a3ea64b558c26dd3bc93d90db686d178d9c00",
+    "apps/mobile/src/mobile-run-binding.ts": "b8f587c7da2d8b7057eee7bd200f18e22554cc7d534da2c3673368e238def425",
+    "apps/mobile/src/mobile-scroll-intent.ts": "30d967c5b8f2a40e9448c73efeea0d3e83c22d2c948f9c90b20dd9622c3dc5ba",
+    "apps/mobile/src/mobile-security-access-view.ts": "5f3ca07bfdb480ed28bef8ebde04c4f280eb61e7d4cf6d08a1478d8a2a5eadb3",
+    "apps/mobile/src/mobile-security-receipt.ts": "14e780eed7c09e95eb1df12d8241d43eb0fdd8787df8237e2c2922ce298f9f1f",
+    "apps/mobile/src/mobile-session-storage.ts": "7a75f89b5f884b5ef709b3a805006d1ae93e0c5f30b01efba68182cec1f2c365",
+    "apps/mobile/src/mobile-status-shimmer.tsx": "1eda162deae18a2fcb8ca24194ee4adfe3baf7c36c23714a0671c805430978df",
+    "apps/mobile/src/mobile-subthread-view.ts": "4b1eedd3ba7ced36301eda7df52f3afa997863a58398097190fd63f9142c6db7",
+    "apps/mobile/src/mobile-swipe-remove-row.tsx": "5d96078d8613c94cebe12954a99cc048352f092c7804fbe0938705962aaf13fa",
+    "apps/mobile/src/mobile-system-surface.tsx": "8f6c15c0b0f84e599739864f06939b15b2449d5c84880fa3ce033181cd169b27",
+    "apps/mobile/src/mobile-voice-note.ts": "747cdc038c5cb8f0b8e35afebcec0c555b77e686d5d4e3a6ada4240de3970ad0",
+    "apps/mobile/src/mobile-working-dragon.tsx": "93017058995a100fd02fc38fda81953c61813c1d89fc9dff6a32fbd97466e6b4",
+    "apps/mobile/src/mobile-workspace-export.ts": "e6c426913e2262ff2794edc0641b2844f2f5a6c7a986c164d844aa6584eaa120",
+    "apps/mobile/src/plugin-catalog-copy.ts": "ba529d8067b8e8f508420acf6e6371d1c4951027e275055697b38d31a283d524",
+    "apps/mobile/src/revenuecat-purchases.ts": "08e8ccd9af3f243e43149145fcdce7702623a95098dc68b4d1e35476d2ed572d",
+    "apps/mobile/src/secure-connection-copy.ts": "dcc8ff3f67534542a530edfbdc7069b7ffd84342df9d0bdd42edc64cc6e684b6",
+    "apps/mobile/src/static-ui-copy.ts": "936ee7d05aa3c1fd89ca1d620f2374ff37efe01b11e33dc1669e8739902663de",
+    "apps/mobile/assets/baby-dragon-neutral.png": "5d7b896285767764d1e483ba6ff2aaac52cab7e234d27ef0ade86b1b0a9e91ef",
+    "apps/mobile/assets/baby-dragon-opposite-wing.png": "2d4f5d6bd944d924abbc8b336bf490a399b10a13d914025249ca6e14890e3636",
+    "apps/mobile/assets/baby-dragon-wink-wing.png": "da03b15b8fee83b128053ba439c23a8c0cc8d25bac0f34997ae20412f2155366",
+    "apps/mobile/assets/connections/discord.png": "f6c1a66250d366d213789faefab59a9ec6ac6334e6c4be0af254680c148810dc",
+    "apps/mobile/assets/connections/gmail.png": "e057ce78b788890abf1c3311be810686f82528caeba21eece1ce24a4348f9f68",
+    "apps/mobile/assets/connections/google-calendar.png": "4734a49a934c276bf15267c2520c29f6baa7ef370f9bc51ebef26e46c5eace8e",
+    "apps/mobile/assets/connections/google-drive.png": "39e2c15449e7fa75ebe3a29f3f99e2e9ee11b5ef36aebf4dda3d30e484635495",
+    "apps/mobile/assets/connections/slack.png": "568bd0d33b14abbff1e64bb1cec8e10e7d4d10395c969d9a2f2d36be368a8198",
+    "apps/mobile/assets/connections/telegram.png": "88afe4caad9d3ef9d7b4a5301d1b2b4378b54d233038079f0145e2f387f4eed9",
+    "apps/mobile/assets/connections/whatsapp.png": "c625e9105f2e27a4af88f547ff2e38d4e8b1ae9c0ae9a9b2f728cf24b6bbb6fc",
+    "apps/mobile/src/MobileApp.tsx": "b811df747f07572a37fef40df3352df6d2cfe336852f6f59282fd2535e289754"
+  },
+  "nativeDependencyFiles": [
+    {
+      "path": "native/core/account-page-view.ts",
+      "sourcePath": "packages/core/src/account-page-view.ts",
+      "sourceSha256": "f3bef897e8fd3557761dd59cd053ac49c3da8abd73ce78765f3b6ed2db64cac1"
+    },
+    {
+      "path": "native/core/admin-ui-copy.ts",
+      "sourcePath": "packages/core/src/admin-ui-copy.ts",
+      "sourceSha256": "d1aae02b8612894a482be0f356bdc3048c3ae69866f05aefb44c7dfb6d1f7f6f"
+    },
+    {
+      "path": "native/core/ai-access.ts",
+      "sourcePath": "packages/core/src/ai-access.ts",
+      "sourceSha256": "73052c6796340b6b90ec63a586cbb52b15631166562005faa45ad118f967a7d5"
+    },
+    {
+      "path": "native/core/api-client.ts",
+      "sourcePath": "packages/core/src/api-client.ts",
+      "sourceSha256": "227fc70091b54e7497e2a8b6816cfe79fe257c4969bb6c2b29bbfc0d973a33ed"
+    },
+    {
+      "path": "native/core/assistant-message-links.ts",
+      "sourcePath": "packages/core/src/assistant-message-links.ts",
+      "sourceSha256": "b4810069de131d38166bbff434ae4c4a41ed19c81554a2a10949419da59d33e7"
+    },
+    {
+      "path": "native/core/auth-ui-copy.ts",
+      "sourcePath": "packages/core/src/auth-ui-copy.ts",
+      "sourceSha256": "f9489c5c7a217bf002f3771fbc6580dec953c3f029f28eb382a4201c0055f1cb"
+    },
+    {
+      "path": "native/core/budget.ts",
+      "sourcePath": "packages/core/src/budget.ts",
+      "sourceSha256": "914617e9bf0526c4d1e8e7ffcd537f106374b646c6a6e51348c96e75c7d06c5e"
+    },
+    {
+      "path": "native/core/capability-copy.ts",
+      "sourcePath": "packages/core/src/capability-copy.ts",
+      "sourceSha256": "1d30049645ce0a43c1f553428dbbc388baff995d41808fac12b84783ccc1a6de"
+    },
+    {
+      "path": "native/core/chat-run-activity.ts",
+      "sourcePath": "packages/core/src/chat-run-activity.ts",
+      "sourceSha256": "f8884834285b26f8c54900c3b7166f5470ebc4d4e7e90723389c783a76ece2a7"
+    },
+    {
+      "path": "native/core/chat-send-reliability.ts",
+      "sourcePath": "packages/core/src/chat-send-reliability.ts",
+      "sourceSha256": "374e2d29dc025b8b8bba28c4cfa3ccd6967d2644d00058f073a55236ad71ccd7"
+    },
+    {
+      "path": "native/core/chat-streaming.ts",
+      "sourcePath": "packages/core/src/chat-streaming.ts",
+      "sourceSha256": "02f7fc0c222f89004c2d1273664ca30c24ec9b9d5d95f61c133633c55508e748"
+    },
+    {
+      "path": "native/core/chatgpt-connection.ts",
+      "sourcePath": "packages/core/src/chatgpt-connection.ts",
+      "sourceSha256": "68c6ac07055580ba4f1917884403f0cf3456286e91b1068bd2333c074a8587a8"
+    },
+    {
+      "path": "native/core/connection-setup.ts",
+      "sourcePath": "packages/core/src/connection-setup.ts",
+      "sourceSha256": "604e7461c2bdc0ab0e9d5e38ccf0bebce38661eac36fcef7490b4bd53f7acf8b"
+    },
+    {
+      "path": "native/core/connection-ui-copy.ts",
+      "sourcePath": "packages/core/src/connection-ui-copy.ts",
+      "sourceSha256": "794696261644f93090ee4ce39eb46230419407cee4640a519626847577c5769d"
+    },
+    {
+      "path": "native/core/connections-view.ts",
+      "sourcePath": "packages/core/src/connections-view.ts",
+      "sourceSha256": "6c254bf152bce1dcea781adefae86e4244a584d65aa411b78a3ee74e966b4f3f"
+    },
+    {
+      "path": "native/core/delegated-tasks-view.ts",
+      "sourcePath": "packages/core/src/delegated-tasks-view.ts",
+      "sourceSha256": "4f6db7fba7fd872e6960098bf5fb85bd30537e3604e7053148aacefb2180c4ec"
+    },
+    {
+      "path": "native/core/first-conversation-view.ts",
+      "sourcePath": "packages/core/src/first-conversation-view.ts",
+      "sourceSha256": "1e5605a043c36d39b0944c0c84335212cecd5d062d964d40aa17c9879cf9ba72"
+    },
+    {
+      "path": "native/core/google-actions.ts",
+      "sourcePath": "packages/core/src/google-actions.ts",
+      "sourceSha256": "69f00b2e18cf0e16f809defb81200e227d8da326ab602e226a73fe4c50a6451e"
+    },
+    {
+      "path": "native/core/google-consent.ts",
+      "sourcePath": "packages/core/src/google-consent.ts",
+      "sourceSha256": "f9d753af1528ec77d23fb3e32c2df07d23e6018715714af0f6d61b12c3fcd957"
+    },
+    {
+      "path": "native/core/guided-setup.ts",
+      "sourcePath": "packages/core/src/guided-setup.ts",
+      "sourceSha256": "380aad5e763b429486ca0b22e033cb379031ae8cae9ad2cbe842eba102a02d78"
+    },
+    {
+      "path": "native/core/hermes-api.ts",
+      "sourcePath": "packages/core/src/hermes-api.ts",
+      "sourceSha256": "4b99cfe9d09f86f33856556360cd512555f49dc613f8b2ac548e1e1a03e6bf2e"
+    },
+    {
+      "path": "native/core/hermes-api-client.ts",
+      "sourcePath": "packages/core/src/hermes-api-client.ts",
+      "sourceSha256": "b0a309136850a23bfd23097ee788665861961cfbe0ccb2dcf8e8ecfa5f173b4c"
+    },
+    {
+      "path": "native/core/hermes-api-compatibility.fixture.ts",
+      "sourcePath": "packages/core/src/hermes-api-compatibility.fixture.ts",
+      "sourceSha256": "c1078cfdfd7ea100032e0f0dae33c139306bd8e2b6c3136b7bb33a87c6a1726a"
+    },
+    {
+      "path": "native/core/hermes-channel.ts",
+      "sourcePath": "packages/core/src/hermes-channel.ts",
+      "sourceSha256": "c6bb3fbcb96eca051c6609f0b8e52f098b231395a41200528b17072fda808b11"
+    },
+    {
+      "path": "native/core/homechat.ts",
+      "sourcePath": "packages/core/src/homechat.ts",
+      "sourceSha256": "2ee5c14acdd3897699c34b25f1ce8db502b86b85d7259de7cbcda91e55087098"
+    },
+    {
+      "path": "native/core/index.ts",
+      "sourcePath": "packages/core/src/index.ts",
+      "sourceSha256": "72cd30b44271d22474bcb7b4e2956df76829799b967bfffec8c4ebee5b49f4b8"
+    },
+    {
+      "path": "native/core/interaction-ui-copy.ts",
+      "sourcePath": "packages/core/src/interaction-ui-copy.ts",
+      "sourceSha256": "c2abe95d3fd721b7ad41d1ac17c40c8da85a60426b0fa111eb3806013dfe079c"
+    },
+    {
+      "path": "native/core/legal.ts",
+      "sourcePath": "packages/core/src/legal.ts",
+      "sourceSha256": "5b8ee1210561b1f76f390583edff502000ea3051a5abc18997f0692a98357177"
+    },
+    {
+      "path": "native/core/managed-model-receipt.ts",
+      "sourcePath": "packages/core/src/managed-model-receipt.ts",
+      "sourceSha256": "f9e5bf8bd8e6f557f9ca4656e74c6fc81ff37dd3bef138ce940371abe8b35dce"
+    },
+    {
+      "path": "native/core/memory-config.ts",
+      "sourcePath": "packages/core/src/memory-config.ts",
+      "sourceSha256": "ca0bd01d0aa4828341a9662c076a66422a893b6278b916e62402d4d6050fc453"
+    },
+    {
+      "path": "native/core/model-comparison.ts",
+      "sourcePath": "packages/core/src/model-comparison.ts",
+      "sourceSha256": "98d60977e964a22c2de6e4b9fca71e6d54b1e6f415a760763f87652b3d6a7707"
+    },
+    {
+      "path": "native/core/plugin-catalog.ts",
+      "sourcePath": "packages/core/src/plugin-catalog.ts",
+      "sourceSha256": "7691da51016cdaf44ece0be0791861405b50f7fbaa2390242f2a8084ec03abb4"
+    },
+    {
+      "path": "native/core/plugin-catalog-view.ts",
+      "sourcePath": "packages/core/src/plugin-catalog-view.ts",
+      "sourceSha256": "feb9bc77329aba002dc5f2de3ce4dc127b52255e322e290101bbf0f5c74d4263"
+    },
+    {
+      "path": "native/core/plugin-chat-fallback.ts",
+      "sourcePath": "packages/core/src/plugin-chat-fallback.ts",
+      "sourceSha256": "329953c97a192beeb131467d54c3e85ac91ef505bd8ff4abc78dade734f7335e"
+    },
+    {
+      "path": "native/core/product.ts",
+      "sourcePath": "packages/core/src/product.ts",
+      "sourceSha256": "a3d10fa0d0f6c94907e1157ec9fbc8ef319e584fdb633973a0a0537161b6d2ca"
+    },
+    {
+      "path": "native/core/ranked-task-automations.ts",
+      "sourcePath": "packages/core/src/ranked-task-automations.ts",
+      "sourceSha256": "a665b9f93d51d7d8daaaf91ed0bb72f372970068618062489a2fdf2699118094"
+    },
+    {
+      "path": "native/core/ranked-task-chat.ts",
+      "sourcePath": "packages/core/src/ranked-task-chat.ts",
+      "sourceSha256": "6bb465fd81b55148445e27d8cf0d935989e23f5f7b010cfb209fba56615c791f"
+    },
+    {
+      "path": "native/core/ranked-task-history.ts",
+      "sourcePath": "packages/core/src/ranked-task-history.ts",
+      "sourceSha256": "173fbbdd50da3e01d2117be86467f28302f38465388e2c0bf0240f84a9b79553"
+    },
+    {
+      "path": "native/core/ranked-task-list-view.ts",
+      "sourcePath": "packages/core/src/ranked-task-list-view.ts",
+      "sourceSha256": "49e3eca100e74cf07b99290b0ac5247e20f9c7fadded43847fae6acac7c09e8a"
+    },
+    {
+      "path": "native/core/ranked-task-projection.ts",
+      "sourcePath": "packages/core/src/ranked-task-projection.ts",
+      "sourceSha256": "f7099c69b08459324df974cbc808b38e9cf06cbea6e0d8a47370bac43a6d3946"
+    },
+    {
+      "path": "native/core/ranked-task-refresh.ts",
+      "sourcePath": "packages/core/src/ranked-task-refresh.ts",
+      "sourceSha256": "001f906abab332fb94a7193a3f28f15339bb82a2d2c8ac109f53bcaad1224e98"
+    },
+    {
+      "path": "native/core/ranked-task-reminders.ts",
+      "sourcePath": "packages/core/src/ranked-task-reminders.ts",
+      "sourceSha256": "c3a5472d998b849ce5549cc47185ba2f187588832c0659eeebd5395027810092"
+    },
+    {
+      "path": "native/core/ranked-tasks.ts",
+      "sourcePath": "packages/core/src/ranked-tasks.ts",
+      "sourceSha256": "97974f0eca20cd99ce535d40b8698fb301cf0324a82c53baa10feb3a8ca0ac68"
+    },
+    {
+      "path": "native/core/runtime-delivery-mode.ts",
+      "sourcePath": "packages/core/src/runtime-delivery-mode.ts",
+      "sourceSha256": "09bc9edcd470c66b5af7d240988c15e31745b91e9034e843082cc5b028242cad"
+    },
+    {
+      "path": "native/core/runtime-readiness.ts",
+      "sourcePath": "packages/core/src/runtime-readiness.ts",
+      "sourceSha256": "0386c4bfb739373edc30b4ef5014c10b1e8a954fe3d601c7ec12909fc9a5d76f"
+    },
+    {
+      "path": "native/core/scheduled-view.ts",
+      "sourcePath": "packages/core/src/scheduled-view.ts",
+      "sourceSha256": "bb3f7745b0b29ad6347d99dc44718e045bad4fdc445ee4254ff35ff3cd8f3db2"
+    },
+    {
+      "path": "native/core/secure-secret-entry.ts",
+      "sourcePath": "packages/core/src/secure-secret-entry.ts",
+      "sourceSha256": "0dffc83589653a4bc12e2d41f7053c78beedb7deb067dc15cf1065b07f8a5146"
+    },
+    {
+      "path": "native/core/secure-secret-entry-copy.ts",
+      "sourcePath": "packages/core/src/secure-secret-entry-copy.ts",
+      "sourceSha256": "7bc1a947772f0efb80c5b68b41c7ffd81d4f0b5f905ab1a380dadc331b023e69"
+    },
+    {
+      "path": "native/core/secure-secret-entry-view.ts",
+      "sourcePath": "packages/core/src/secure-secret-entry-view.ts",
+      "sourceSha256": "105ca3da788c58f1f9ae9b3b7c198280fb30cf7f5172cf7cc2626c8cc2465f36"
+    },
+    {
+      "path": "native/core/status-panel-copy.ts",
+      "sourcePath": "packages/core/src/status-panel-copy.ts",
+      "sourceSha256": "5e07162e32e94148cbeae7563947609b11a0e28da2093182f2d3223af5e2c1b9"
+    },
+    {
+      "path": "native/core/status-summary-copy.ts",
+      "sourcePath": "packages/core/src/status-summary-copy.ts",
+      "sourceSha256": "32e4d5832213c4dbbb8789b75c9f4493a739d9ca35c9e443205c29de879c7967"
+    },
+    {
+      "path": "native/core/status-truth.ts",
+      "sourcePath": "packages/core/src/status-truth.ts",
+      "sourceSha256": "28b71c293647119a7aa2467cf9dd46aa01925202083d268c1a24c7e10f8e3266"
+    },
+    {
+      "path": "native/core/status-truth-view.ts",
+      "sourcePath": "packages/core/src/status-truth-view.ts",
+      "sourceSha256": "c28ba46111628bc17b62efc54e7faed2d936cb30333dae16e8e7c2534f2a9ae3"
+    },
+    {
+      "path": "native/core/subthread-view.ts",
+      "sourcePath": "packages/core/src/subthread-view.ts",
+      "sourceSha256": "47aee3a6785d1781cf033a22795a973c1b2e67f95264fe013a4c7bdd8dca9c86"
+    },
+    {
+      "path": "native/core/suggestions.ts",
+      "sourcePath": "packages/core/src/suggestions.ts",
+      "sourceSha256": "451e99df6a91ac0c0abd8ee5614470576b7f1415fd3023afe0a3c13b191f2c6f"
+    },
+    {
+      "path": "native/core/suggestions-client.ts",
+      "sourcePath": "packages/core/src/suggestions-client.ts",
+      "sourceSha256": "185961e7e116bfe181cdd9d9533f8dc2dc0fd910d6839cca024efd059f1aa607"
+    },
+    {
+      "path": "native/core/support-access-copy.ts",
+      "sourcePath": "packages/core/src/support-access-copy.ts",
+      "sourceSha256": "34a5392f62e16b2540a39540147480bbfc6a470f532f9c066ada0daea950f120"
+    },
+    {
+      "path": "native/core/support-request.ts",
+      "sourcePath": "packages/core/src/support-request.ts",
+      "sourceSha256": "6fe93e70be0d557e9c9da8cb91d88495cc87c012cb9824c5368de5ef632f9f5a"
+    },
+    {
+      "path": "native/core/support-request-copy.ts",
+      "sourcePath": "packages/core/src/support-request-copy.ts",
+      "sourceSha256": "b79c3bb53dd8bd34d7589d0bdb13e84c7a29123019227acf4f56fbfdc7f5f7df"
+    },
+    {
+      "path": "native/core/types.ts",
+      "sourcePath": "packages/core/src/types.ts",
+      "sourceSha256": "0c14321e8c117e1fb4e4c5a995e5badd0c28ea82446f8ddd83574d0d269fefc9"
+    },
+    {
+      "path": "native/ui/index.ts",
+      "sourcePath": "packages/ui/src/index.ts",
+      "sourceSha256": "4d5d5d0c46a120afff49e6f15914305ab42d6a61094074fb3a0cf52df424cf5d"
+    },
+    {
+      "path": "native/ui/navigation-structure.ts",
+      "sourcePath": "packages/ui/src/navigation-structure.ts",
+      "sourceSha256": "bb49cbca37aa886f2269fc6a333240d868466821f9f0851b2afd5cedcf093395"
+    },
+    {
+      "path": "native/ui/page-menu-copy.ts",
+      "sourcePath": "packages/ui/src/page-menu-copy.ts",
+      "sourceSha256": "62668e1c3e94ab6a0409e51d209bb03fb36ec027aca1f70699990859e3d53af7"
+    },
+    {
+      "path": "native/ui/page-starter-copy.ts",
+      "sourcePath": "packages/ui/src/page-starter-copy.ts",
+      "sourceSha256": "5790e3a479b6575f6b71e600e3db8885b86e4dbf2c7d0be948bc0d41e4ddf705"
+    },
+    {
+      "path": "native/ui/page-starter-state.ts",
+      "sourcePath": "packages/ui/src/page-starter-state.ts",
+      "sourceSha256": "ab75614e589d11fa80825dc0540c4332269f1a12eec066369de18247cecf62ef"
+    },
+    {
+      "path": "native/ui/workspace-privacy-copy.ts",
+      "sourcePath": "packages/ui/src/workspace-privacy-copy.ts",
+      "sourceSha256": "e8dc4d75f9d22abc34b60e1843e21802c4519d533d3cd7cbc6ee67f2df3f1801"
+    },
+    {
+      "path": "native/ui/workspace-privacy-identity.ts",
+      "sourcePath": "packages/ui/src/workspace-privacy-identity.ts",
+      "sourceSha256": "21f8382a71331f0516b36a778248b87d21772bab8eb1dd918e9f452045311fbc"
+    }
+  ]
+}

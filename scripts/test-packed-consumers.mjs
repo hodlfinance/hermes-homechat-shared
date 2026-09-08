@@ -28,6 +28,12 @@ try {
   tarballPath = join(packageRoot, packed[0].filename);
   const packedFiles = new Set(packed[0].files.map((file) => file.path));
   for (const required of [
+    "native/index.ts",
+    "native/host.ts",
+    "native/policy.ts",
+    "native/src/surface.tsx",
+    "native/r8-source.json",
+    "native/assets/baby-dragon-neutral.png",
     "LICENSE",
     "README.md",
     "dist/index.d.ts",
