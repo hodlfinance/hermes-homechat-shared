@@ -58,6 +58,7 @@ import {
   KeyRound,
   Download,
   LogOut,
+  Lock,
   LockKeyhole,
   Mail,
   Menu,
@@ -287,7 +288,7 @@ import {
   type MobileConfirmationAction,
 } from "./mobile-native-confirmation";
 import { mobileAssistantLinkSegments } from "./mobile-message-links";
-import { mobileMarkdownBlocks } from "./mobile-markdown";
+import { mobileMarkdownBlocks, type MobileMarkdownInlineSegment } from "./mobile-markdown";
 import {
   mobileMessagesForFailedRunNotice,
   mobileRunOwnsEvent,
@@ -6989,7 +6990,18 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
               : tab === "chat" ? activeChatSession?.title || snapshot.me.email : snapshot.me.email}
           </Text>
         </View>
-        <View style={styles.mobileAppBarSpacer} />
+        {tab === "chat" ? (
+          <Pressable
+            style={({ pressed }) => [styles.mobilePrivacyButton, pressed && styles.systemRowPressed]}
+            onPress={() => setPrivacyWorkspace(snapshot.workspace.id)}
+            accessibilityRole="button"
+            accessibilityLabel={t.settings.privacy}
+          >
+            <Lock size={27} strokeWidth={1.4} color={palette.muted} />
+          </Pressable>
+        ) : (
+          <View style={styles.mobileAppBarSpacer} />
+        )}
       </View>
 
       {dashboardOpenState !== "idle" ? (
@@ -9071,6 +9083,49 @@ function assistantSegmentRenderStyle(kind: AssistantMessageSegmentKind) {
   return assistantSegmentStyleName(kind) === "messageTextBold" ? styles.messageTextBold : styles.messageText;
 }
 
+function MobileMarkdownInlineText({
+  segments,
+  variant = "paragraph",
+}: {
+  segments: MobileMarkdownInlineSegment[];
+  variant?: "paragraph" | "table_header" | "table_cell";
+}) {
+  const textStyle = variant === "table_header"
+    ? styles.markdownTableHeaderText
+    : variant === "table_cell"
+      ? styles.markdownTableCellText
+      : styles.messageText;
+  return (
+    <Text style={textStyle} selectable accessibilityRole={variant === "table_header" ? "header" : "text"}>
+      {segments.flatMap((markdownSegment, segmentIndex) => {
+        if (markdownSegment.kind === "inline_code") {
+          return <Text key={`${segmentIndex}-${markdownSegment.text}`} style={styles.inlineCode}>{markdownSegment.text}</Text>;
+        }
+        return mobileAssistantLinkSegments(markdownSegment.text).map((segment, linkIndex) => {
+          const kind = markdownSegment.kind === "bold" ? "bold" : segment.kind;
+          const kindStyle = variant === "paragraph"
+            ? assistantSegmentRenderStyle(kind)
+            : kind === "bold"
+              ? styles.markdownTableBoldText
+              : undefined;
+          const href = segment.href ? mobileMessageUrl(segment.href) : null;
+          if (!href) return <Text key={`${segmentIndex}-${linkIndex}-${segment.text}`} style={kindStyle}>{segment.text}</Text>;
+          return (
+            <Text
+              key={`${segmentIndex}-${linkIndex}-${segment.text}`}
+              style={[kindStyle, styles.messageLink]}
+              accessibilityRole="link"
+              onPress={() => void Linking.openURL(href)}
+            >
+              {segment.text}
+            </Text>
+          );
+        });
+      })}
+    </Text>
+  );
+}
+
 function LinkedMessageText({ text }: { text: string }) {
   return (
     <View style={styles.markdownBlocks}>
@@ -9085,30 +9140,39 @@ function LinkedMessageText({ text }: { text: string }) {
           {block.language ? <Text style={styles.codeLanguage}>{block.language}</Text> : null}
           <Text style={styles.codeBlockText} selectable>{block.text}</Text>
         </View>
+      ) : block.kind === "table" ? (
+        <View
+          key={`table-${blockIndex}`}
+          style={styles.markdownTableViewport}
+          accessibilityLabel="Table"
+        >
+          <View style={styles.markdownTable}>
+            {[block.header, ...block.rows].map((row, rowIndex) => (
+              <View
+                key={`table-${blockIndex}-row-${rowIndex}`}
+                style={[styles.markdownTableRow, rowIndex > 0 && styles.markdownTableRowBorder]}
+              >
+                {row.map((cell, cellIndex) => (
+                  <View
+                    key={`table-${blockIndex}-row-${rowIndex}-cell-${cellIndex}`}
+                    style={[
+                      styles.markdownTableCell,
+                      rowIndex === 0 && styles.markdownTableHeaderCell,
+                      cellIndex > 0 && styles.markdownTableColumnBorder,
+                    ]}
+                  >
+                    <MobileMarkdownInlineText
+                      segments={cell}
+                      variant={rowIndex === 0 ? "table_header" : "table_cell"}
+                    />
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        </View>
       ) : (
-        <Text key={`paragraph-${blockIndex}`} style={styles.messageText} selectable>
-          {block.segments.flatMap((markdownSegment, segmentIndex) => {
-            if (markdownSegment.kind === "inline_code") {
-              return <Text key={`${segmentIndex}-${markdownSegment.text}`} style={styles.inlineCode}>{markdownSegment.text}</Text>;
-            }
-            return mobileAssistantLinkSegments(markdownSegment.text).map((segment, linkIndex) => {
-              const kind = markdownSegment.kind === "bold" ? "bold" : segment.kind;
-              const kindStyle = assistantSegmentRenderStyle(kind);
-              const href = segment.href ? mobileMessageUrl(segment.href) : null;
-              if (!href) return <Text key={`${segmentIndex}-${linkIndex}-${segment.text}`} style={kindStyle}>{segment.text}</Text>;
-              return (
-                <Text
-                  key={`${segmentIndex}-${linkIndex}-${segment.text}`}
-                  style={[kindStyle, styles.messageLink]}
-                  accessibilityRole="link"
-                  onPress={() => void Linking.openURL(href)}
-                >
-                  {segment.text}
-                </Text>
-              );
-            });
-          })}
-        </Text>
+        <MobileMarkdownInlineText key={`paragraph-${blockIndex}`} segments={block.segments} />
       ))}
     </View>
   );
@@ -11186,6 +11250,13 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
   },
+  mobilePrivacyButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   mobileMenuLayer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 50,
@@ -11980,6 +12051,57 @@ const styles = StyleSheet.create({
   markdownBlocks: {
     gap: 10,
     alignSelf: "stretch",
+  },
+  markdownTableViewport: {
+    alignSelf: "stretch",
+    maxWidth: "100%",
+    minWidth: 0,
+  },
+  markdownTable: {
+    alignSelf: "stretch",
+    maxWidth: "100%",
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: palette.surface,
+  },
+  markdownTableRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  markdownTableRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: palette.line,
+  },
+  markdownTableCell: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    justifyContent: "flex-start",
+  },
+  markdownTableHeaderCell: {
+    backgroundColor: palette.tealSoft,
+  },
+  markdownTableColumnBorder: {
+    borderLeftWidth: 1,
+    borderLeftColor: palette.line,
+  },
+  markdownTableHeaderText: {
+    color: palette.ink,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "800",
+  },
+  markdownTableCellText: {
+    color: palette.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  markdownTableBoldText: {
+    fontWeight: "700",
   },
   inlineCode: {
     color: palette.ink,

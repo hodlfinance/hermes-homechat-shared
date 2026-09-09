@@ -43,3 +43,35 @@ test('the installed native client routes bootstrap, settings and canonical mutat
   await workspaceStatusTruthRequest(client).catch(() => undefined);
   assert.match(calls.at(-1)!.url, /\/workspace\/status-truth/);
 });
+
+test('the native transport never passes browser-only same-origin credentials to the host fetch', async () => {
+  const credentials: Array<RequestCredentials | null> = [];
+  const strictNativeFetch: typeof fetch = async (_url, init = {}) => {
+    credentials.push(init.credentials ?? null);
+    if (init.credentials === 'same-origin') {
+      throw new TypeError('Cannot cast same-origin to NativeRequestCredentials');
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  const transport = createNativeR8Transport({
+    baseUrl: 'https://heyhermes.test/api',
+    identity: {
+      surface: 'hey_hermes',
+      channel: 'hey_hermes_mobile',
+      allowedSurfaces: ['hey_hermes'],
+    },
+    fetch: strictNativeFetch,
+  });
+
+  await transport.createApiClient({
+    baseUrl: 'https://heyhermes.test/api',
+    token: 'test-session',
+  }).logout();
+  await transport.fetchStream('https://heyhermes.test/api/events', {
+    credentials: 'include',
+  });
+
+  assert.deepEqual(credentials, ['omit', 'include']);
+});
