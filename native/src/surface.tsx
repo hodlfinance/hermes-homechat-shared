@@ -12195,7 +12195,7 @@ const styles = StyleSheet.create({
     borderLeftColor: palette.coral,
   },
   activityTrailWorking: {
-    borderLeftColor: palette.accent,
+    borderLeftColor: palette.line,
   },
   activityTrailNeutral: {
     borderLeftColor: palette.line,

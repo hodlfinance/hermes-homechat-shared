@@ -65,8 +65,8 @@ const iosPalette: MobilePalette = {
   amberSoft: DynamicColorIOS({ light: lightPalette.amberSoft, dark: "rgba(253,230,138,0.14)" }),
   violet: DynamicColorIOS({ light: lightPalette.violet, dark: "#d2cefd" }),
   violetSoft: DynamicColorIOS({ light: lightPalette.violetSoft, dark: "#3f424d" }),
-  green: DynamicColorIOS({ light: lightPalette.green, dark: "#d2cefd" }),
-  greenSoft: DynamicColorIOS({ light: lightPalette.greenSoft, dark: "#3f424d" }),
+  green: DynamicColorIOS({ light: lightPalette.green, dark: "#86efac" }),
+  greenSoft: DynamicColorIOS({ light: lightPalette.greenSoft, dark: "#193528" }),
 };
 
 export const palette: MobilePalette = Platform.OS === "ios" ? iosPalette : lightPalette;
