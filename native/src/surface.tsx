@@ -58,6 +58,7 @@ import {
   KeyRound,
   Download,
   LogOut,
+  Lock,
   LockKeyhole,
   Mail,
   Menu,
@@ -6989,7 +6990,18 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
               : tab === "chat" ? activeChatSession?.title || snapshot.me.email : snapshot.me.email}
           </Text>
         </View>
-        <View style={styles.mobileAppBarSpacer} />
+        {tab === "chat" ? (
+          <Pressable
+            style={({ pressed }) => [styles.mobilePrivacyButton, pressed && styles.systemRowPressed]}
+            onPress={() => setPrivacyWorkspace(snapshot.workspace.id)}
+            accessibilityRole="button"
+            accessibilityLabel={t.settings.privacy}
+          >
+            <Lock size={27} strokeWidth={1.4} color={palette.muted} />
+          </Pressable>
+        ) : (
+          <View style={styles.mobileAppBarSpacer} />
+        )}
       </View>
 
       {dashboardOpenState !== "idle" ? (
@@ -11237,6 +11249,13 @@ const styles = StyleSheet.create({
   mobileAppBarSpacer: {
     width: 44,
     height: 44,
+  },
+  mobilePrivacyButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
   mobileMenuLayer: {
     ...StyleSheet.absoluteFillObject,
