@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { ActionSheetIOS, Alert, Platform, Pressable, StyleSheet, Text, View, type ColorValue } from "react-native";
 import { createMobileRemovalGate, type MobileRemovableNavigationEntry } from "./mobile-swipe-remove-row";
+import { mobileSystemSurfaceMetrics } from "./mobile-system-surface";
 
 /** HPD-619: only removes a bookmark; the caller retains ownership of its content. */
 export function MobilePageMenuRow({
@@ -66,7 +67,10 @@ export function MobilePageMenuRow({
         accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: pending, busy: pending }}
         accessibilityActions={[{ name: "remove", label: copy.remove }]}
         onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === "remove") openActions(); }}>
-        {icon}<Text style={[styles.label, { color }]}>{label}</Text>
+        <View style={styles.iconColumn} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {icon}
+        </View>
+        <Text style={[styles.label, { color }]} allowFontScaling>{label}</Text>
       </Pressable>
       <Pressable style={styles.more} onPress={openActions} disabled={pending}
         accessibilityRole="button" accessibilityLabel={`${copy.remove}: ${label}`}>
@@ -81,7 +85,25 @@ export function MobilePageMenuRow({
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center" },
-  open: { flex: 1, minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingVertical: 10 },
+  open: {
+    flex: 1,
+    minHeight: mobileSystemSurfaceMetrics.minimumTouchTarget,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: mobileSystemSurfaceMetrics.horizontalInset,
+    paddingVertical: 10,
+  },
+  iconColumn: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: mobileSystemSurfaceMetrics.columnGap,
+    width: mobileSystemSurfaceMetrics.iconColumnWidth,
+  },
   label: { flex: 1, fontSize: 17 },
-  more: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  more: {
+    minWidth: mobileSystemSurfaceMetrics.minimumTouchTarget,
+    minHeight: mobileSystemSurfaceMetrics.minimumTouchTarget,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });
