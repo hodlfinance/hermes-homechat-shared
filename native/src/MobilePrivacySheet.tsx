@@ -15,21 +15,21 @@ export function MobilePrivacySheet({ client, workspaceId, locale, onClose }: { c
   return <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
     <View style={{ flex: 1, backgroundColor: palette.pageBg }} accessibilityViewIsModal>
       <View style={{ padding: 24, paddingBottom: 8, flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <Text accessibilityRole="header" style={{ flex: 1, color: palette.text, fontSize: 24, fontWeight: "700" }}>{copy.title}</Text>
+        <Text accessibilityRole="header" style={{ flex: 1, color: palette.ink, fontSize: 24, lineHeight: 30, fontWeight: "600" }}>{copy.title}</Text>
         <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={copy.close}
           style={{ minHeight: 44, minWidth: 44, alignItems: "center", justifyContent: "center" }}>
-          <X size={24} color={palette.text} accessible={false} />
+          <X size={22} color={palette.ink} accessible={false} />
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 8, gap: 16 }}>
-        <Text style={{ color: palette.text, fontSize: 17 }}>{copy.body}</Text>
-        <Text style={{ color: palette.text, fontSize: 14, lineHeight: 20 }}>{copy.support}</Text>
+        <Text style={{ color: palette.text, fontSize: 17, lineHeight: 25 }}>{copy.body}</Text>
+        <Text style={{ color: palette.secondary, fontSize: 14, lineHeight: 20 }}>{copy.support}</Text>
         <Pressable onPress={() => setExpanded(!expanded)} accessibilityRole="button" accessibilityState={{ expanded }} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12 }}>
           <Text style={{ flex: 1, color: palette.teal, fontSize: 17 }}>{copy.details}</Text>
           {expanded ? <ChevronDown size={20} color={palette.teal} accessible={false} /> : <ChevronRight size={20} color={palette.teal} accessible={false} />}
         </Pressable>
-        {expanded ? <View style={{ gap: 12 }}>{rows.map(([label, value]) => <View key={label}>
-          <Text style={{ color: palette.muted }}>{label}</Text><Text selectable style={{ color: palette.text, fontSize: 17 }}>{value || copy.unavailable}</Text>
+        {expanded ? <View style={{ gap: 12, borderLeftColor: palette.accent, borderLeftWidth: 2, paddingLeft: 12 }}>{rows.map(([label, value]) => <View key={label}>
+          <Text style={{ color: palette.muted, fontSize: 13 }}>{label}</Text><Text selectable style={{ color: palette.ink, fontSize: 17 }}>{value || copy.unavailable}</Text>
         </View>)}</View> : null}
         <Pressable onPress={() => void Linking.openURL(HEY_LEGAL_LINKS.privacy)} accessibilityRole="link" style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12 }}>
           <Text style={{ flex: 1, color: palette.teal, fontSize: 17 }}>{copy.policy}</Text>
