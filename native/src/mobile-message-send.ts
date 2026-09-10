@@ -353,9 +353,9 @@ export function mobileQueuedFollowUpNoticeVisible(input: {
 
 export function mobileQueuedFollowUpShouldEnterTranscript(input: {
   status: ChatRunStatus;
-  startedAt: string | null;
+  startedAt?: string | null;
 }) {
-  return input.startedAt !== null || input.status === "running" || input.status === "waiting_for_approval";
+  return input.startedAt != null || input.status === "running" || input.status === "waiting_for_approval";
 }
 
 export function mobileQueuedFollowUpNoticeActionState(

@@ -12,8 +12,12 @@ const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "ut
 
 test("a queued follow-up enters the transcript only after takeover", () => {
   assert.equal(mobileQueuedFollowUpShouldEnterTranscript({ status: "queued", startedAt: null }), false);
+  assert.equal(mobileQueuedFollowUpShouldEnterTranscript({ status: "queued" }), false);
+  assert.equal(mobileQueuedFollowUpShouldEnterTranscript({ status: "cancelled" }), false);
   assert.equal(mobileQueuedFollowUpShouldEnterTranscript({ status: "queued", startedAt: "2026-09-10T12:00:00.000Z" }), true);
   assert.equal(mobileQueuedFollowUpShouldEnterTranscript({ status: "running", startedAt: null }), true);
+  assert.equal(mobileQueuedFollowUpShouldEnterTranscript({ status: "running" }), true);
+  assert.equal(mobileQueuedFollowUpShouldEnterTranscript({ status: "waiting_for_approval" }), true);
 });
 
 test("the queue card leaves when the follow-up is running", () => {
