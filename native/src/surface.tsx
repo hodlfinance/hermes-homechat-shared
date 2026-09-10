@@ -7465,7 +7465,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                 accessibilityRole="button"
                 accessibilityLabel={staticUiCopy(appLocale)["Scroll to latest message"]}
               >
-                <ChevronDown size={20} color={palette.accentText} />
+                <ChevronDown size={20} color={palette.surface} />
               </Pressable>
             ) : null}
             <MobileDelegatedTasksIndicator locale={appLocale}
@@ -12595,7 +12595,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: palette.accentStrong,
+    backgroundColor: palette.accent,
     borderColor: palette.accent,
     borderWidth: 1,
     alignItems: "center",
