@@ -3169,7 +3169,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     const automationLoadKey = token && snapshot?.workspace.id
       ? `${snapshot.workspace.id}:${accountSessionGenerationRef.current}`
       : null;
-    if (tab !== "automations" || !automationLoadKey) return;
+    // This is an entry guard, not an account-lifetime cache: a cron can finish
+    // while the customer is elsewhere. Reopening must read its new evidence.
+    if (tab !== "automations") {
+      automationsAutoLoadKeyRef.current = null;
+      return;
+    }
+    if (!automationLoadKey) return;
     if (automationsAutoLoadKeyRef.current === automationLoadKey) return;
     automationsAutoLoadKeyRef.current = automationLoadKey;
     void Promise.all([loadAutomations(), loadRankedTaskAutomations()]);
