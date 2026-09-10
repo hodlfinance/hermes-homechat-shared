@@ -263,6 +263,7 @@ import {
   mobileQueuedFollowUpBlocksComposer,
   mobileQueuedFollowUpNoticeActionState,
   mobileQueuedFollowUpNoticeVisible,
+  mobileQueuedFollowUpShouldEnterTranscript,
   mobileQueuedFollowUpTerminalStatus,
   mobileFailedMessageHasCompleted,
   mobileFailedMessageRetryKey,
@@ -4990,7 +4991,7 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
       onState: (state) => {
         if (!shouldAcceptUpdates()) return;
         const runId = currentRunId;
-        if (ownsVisibleConversation()) {
+        if (reflectLiveProgress && ownsVisibleConversation()) {
           const merged = reconcileMobileRunBoundMessages({
             conversationSessionId: input.conversationSessionId,
             current: messagesStateRef.current,
@@ -5103,6 +5104,18 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
     return status === "running" || status === "waiting_for_approval" ? "running" : "queued";
   }
 
+  function promoteQueuedFollowUpToTranscript(queued: MobileQueuedFollowUpRef, run: ChatRun) {
+    if (!mobileQueuedFollowUpShouldEnterTranscript(run)) return;
+    if (queued.conversationSessionId !== activeConversationSessionIdRef.current) return;
+    const merged = reconcileMobileRunBoundMessages({
+      conversationSessionId: queued.conversationSessionId,
+      current: messagesStateRef.current,
+      incoming: run.messages,
+    });
+    messagesStateRef.current = merged;
+    setMessages(merged);
+  }
+
   async function finishQueuedFollowUp(queued: MobileQueuedFollowUpRef) {
     try {
       const finalState = await queued.session.waitForBackgroundFollow();
@@ -5169,6 +5182,7 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
         ) return;
         current.status = queuedFollowUpStatusFromRun(snapshotRun.status);
         updateQueuedFollowUp(current, { content: current.content, runId: snapshotRun.id, status: current.status });
+        promoteQueuedFollowUpToTranscript(current, snapshotRun);
       },
       reflectLiveProgress: false,
       runId: run.id,
@@ -5236,6 +5250,7 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
           runId: run.id,
           status: queued.status,
         });
+        promoteQueuedFollowUpToTranscript(queued, run);
       },
       onSnapshot: (run) => {
         const queued = queuedFollowUpRef.current.get(ownershipToken);
@@ -5247,6 +5262,7 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
           runId: run.id,
           status: queued.status,
         });
+        promoteQueuedFollowUpToTranscript(queued, run);
       },
       reflectLiveProgress: false,
       shouldAcceptUpdates: () => queuedFollowUpRef.current.has(ownershipToken),
