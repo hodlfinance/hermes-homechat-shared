@@ -319,6 +319,7 @@ import {
   type MobileRunActivityView,
 } from "./mobile-chat-activity";
 import { mobileLiveRunActivityView } from "./mobile-live-run-status";
+import { createMobileRankedTaskObserver, mobileRankedTaskNoticeAfterRead } from "./mobile-ranked-task-observer";
 import { delegatedTasksView, mobileDelegatedTaskIsTerminal } from "../core/delegated-tasks-view";
 import {
   subthreadAfterConversationChange,
@@ -1575,6 +1576,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [rankedTaskState, setRankedTaskState] = useState<RankedTaskLoadState>({ phase: "idle" });
   const [taskNotice, setTaskNotice] = useState<"load_error" | "change_error" | null>(null);
   const rankedTaskRequestRef = useRef(0);
+  const rankedTasksVisibleRef = useRef(false);
+  rankedTasksVisibleRef.current = tab === "tasks" && rankedTaskState.phase === "ready";
   const [nativeCapabilities, setNativeCapabilities] = useState<NativeCapabilitiesView | null>(null);
   const [nativeCapabilitiesBusy, setNativeCapabilitiesBusy] = useState(false);
   const [nativeCapabilitiesError, setNativeCapabilitiesError] = useState<string | null>(null);
@@ -1998,13 +2001,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   }
 
   const api = useMemo(() => createApiClient({ baseUrl: API_BASE, token: token || "missing" }), [token]);
-  const loadRankedTasks = useCallback(async () => {
+  const loadRankedTasks = useCallback(async (background = false) => {
     if (!host.policy.preinstalledRanker || !token) return;
     const requestToken = token;
     const sessionGeneration = accountSessionGenerationRef.current;
     const requestId = ++rankedTaskRequestRef.current;
-    setRankedTaskState({ phase: "loading" });
-    setTaskNotice(null);
+    if (!background) setRankedTaskState({ phase: "loading" });
+    setTaskNotice((previous) => mobileRankedTaskNoticeAfterRead(previous, "started", background));
     try {
       const collection = await api.rankedTasks();
       if (
@@ -2013,16 +2016,21 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         accountSessionTokenRef.current !== requestToken
       ) return;
       setRankedTaskState({ phase: "ready", collection });
+      setTaskNotice((previous) => mobileRankedTaskNoticeAfterRead(previous, "succeeded", background));
     } catch {
       if (
         rankedTaskRequestRef.current !== requestId ||
         accountSessionGenerationRef.current !== sessionGeneration ||
         accountSessionTokenRef.current !== requestToken
       ) return;
-      setRankedTaskState({ phase: "error" });
-      setTaskNotice("load_error");
+      if (!background) setRankedTaskState({ phase: "error" });
+      setTaskNotice((previous) => mobileRankedTaskNoticeAfterRead(previous, "failed", background));
     }
   }, [api, token]);
+  const rankedTaskObserver = useMemo(() => createMobileRankedTaskObserver({
+    shouldObserve: () => rankedTasksVisibleRef.current,
+    reload: () => loadRankedTasks(true),
+  }), [loadRankedTasks]);
   const pluginCatalogRequestRef = useRef(0);
   const loadPluginCatalog = useCallback(async () => {
     const requestId = ++pluginCatalogRequestRef.current;
@@ -4179,6 +4187,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     let cancelled = false;
     let requestController: AbortController | null = null;
     const poll = () => {
+      // HPD-649: deferred and scheduled ranking can finish without navigation.
+      // Reuse this existing shell observation tick for the visible Tasks list;
+      // this only reads the product projection and never triggers the ranker.
+      void rankedTaskObserver.observe();
       requestController?.abort();
       requestController = new AbortController();
       void hermesApi.delegatedTasks({ signal: requestController.signal })
@@ -4194,7 +4206,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       requestController?.abort();
       clearInterval(timer);
     };
-  }, [hermesApi, snapshot?.workspace.id, token]);
+  }, [hermesApi, rankedTaskObserver, snapshot?.workspace.id, token]);
 
   useEffect(() => {
     if (!snapshot || chatGptAccountConnectionView(snapshot).ready || chatGptConnection) return;
@@ -7825,11 +7837,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                 ...(rankedTaskAutomationsView?.automations ?? []).map(automationCardFromManaged),
               ]}
               timeZone={rankedTaskAutomationsView?.workspaceTimeZone ?? null}
-              loaded={automationsView && automationsView.source !== "unavailable"}
+              // Both readers contribute cards; the generic job list finishing
+              // does not make retained managed-job statuses current yet.
+              loaded={automationsView && automationsView.source !== "unavailable"
+                && !automationsBusy && !rankedTaskAutomationsBusy}
               unavailable={automationsView?.source === "unavailable"}
               error={automationsError}
               onDismissError={() => setAutomationsError(null)}
-              busy={automationsBusy}
+              busy={automationsBusy || rankedTaskAutomationsBusy}
               mutationBusy={rankedTaskAutomationsBusy}
               mutationError={rankedTaskAutomationsError}
               onDismissMutationError={() => setRankedTaskAutomationsError(null)}
