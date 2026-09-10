@@ -166,15 +166,13 @@ function localizedDate(value: string, locale: string) {
 
 const styles = StyleSheet.create({
   section: {
-    borderTopWidth: 1,
-    borderTopColor: palette.line,
-    paddingTop: 14,
+    paddingTop: 8,
     marginTop: 4,
     gap: 8,
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: "800",
+    fontWeight: "600",
     color: palette.ink,
   },
   muted: {
@@ -183,22 +181,23 @@ const styles = StyleSheet.create({
   },
   hint: {
     color: palette.muted,
-    fontSize: 12,
+    fontSize: 13,
+    lineHeight: 18,
     marginTop: -4,
   },
   input: {
     minHeight: 44,
     borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
+    borderColor: palette.lineStrong,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: palette.surface,
     color: palette.text,
   },
   dangerButton: {
-    minHeight: 42,
-    borderRadius: 8,
+    minHeight: 44,
+    borderRadius: 12,
     backgroundColor: palette.coralSoft,
     paddingHorizontal: 14,
     alignItems: "center",
@@ -208,7 +207,8 @@ const styles = StyleSheet.create({
   },
   dangerButtonText: {
     color: palette.coral,
-    fontWeight: "800",
+    fontSize: 15,
+    fontWeight: "600",
   },
   disabledButton: {
     opacity: 0.45,

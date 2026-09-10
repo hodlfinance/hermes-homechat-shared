@@ -5,43 +5,21 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
   type AccessibilityRole,
   type AccessibilityState,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { palette } from "./mobile-palette";
 
 export const mobileSystemSurfaceMetrics = Object.freeze({
   columnGap: 12,
-  horizontalInset: 20,
+  horizontalInset: 16,
   iconColumnWidth: 28,
-  minimumTouchTarget: 44,
-  sectionGap: 28,
+  minimumTouchTarget: 48,
+  sectionGap: 24,
 });
-
-const lightPalette = Object.freeze({
-  background: "#F2F2F7",
-  error: "#D70015",
-  label: "#000000",
-  secondaryLabel: "#5C5C60",
-  separator: "rgba(60, 60, 67, 0.29)",
-  spinner: "#007AFF",
-});
-
-const darkPalette = Object.freeze({
-  background: "#000000",
-  error: "#FF6961",
-  label: "#FFFFFF",
-  secondaryLabel: "#AEAEB2",
-  separator: "rgba(84, 84, 88, 0.65)",
-  spinner: "#0A84FF",
-});
-
-function useMobileSystemSurfacePalette() {
-  return useColorScheme() === "dark" ? darkPalette : lightPalette;
-}
 
 export type MobileSystemScreenProps = Readonly<{
   children: ReactNode;
@@ -50,10 +28,9 @@ export type MobileSystemScreenProps = Readonly<{
 }>;
 
 export function MobileSystemScreen({ children, contentContainerStyle, testID }: MobileSystemScreenProps) {
-  const palette = useMobileSystemSurfacePalette();
   return (
     <ScrollView
-      style={[styles.screen, { backgroundColor: palette.background }]}
+      style={[styles.screen, { backgroundColor: palette.pageBg }]}
       contentContainerStyle={[styles.screenContent, contentContainerStyle]}
       contentInsetAdjustmentBehavior="automatic"
       testID={testID}
@@ -78,17 +55,16 @@ export function MobileSystemSection({
   testID,
   title,
 }: MobileSystemSectionProps) {
-  const palette = useMobileSystemSurfacePalette();
   return (
     <View style={styles.section} accessibilityLabel={accessibilityLabel} testID={testID}>
       {title ? (
-        <Text style={[styles.sectionHeader, { color: palette.secondaryLabel }]} allowFontScaling>
+        <Text style={[styles.sectionHeader, { color: palette.muted }]} allowFontScaling>
           {title}
         </Text>
       ) : null}
-      <View>{children}</View>
+      <View style={[styles.sectionCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>{children}</View>
       {footer ? (
-        <Text style={[styles.sectionFooter, { color: palette.secondaryLabel }]} allowFontScaling>
+        <Text style={[styles.sectionFooter, { color: palette.muted }]} allowFontScaling>
           {footer}
         </Text>
       ) : null}
@@ -133,7 +109,6 @@ export function MobileSystemRow({
   testID,
   trailing,
 }: MobileSystemRowProps) {
-  const palette = useMobileSystemSurfacePalette();
   const selected = accessibilityState?.selected === true;
   const showIconColumn = Boolean(icon) || reserveIconSpace;
   const rowDisabled = disabled || pending;
@@ -167,17 +142,17 @@ export function MobileSystemRow({
           </View>
         ) : null}
         <View style={styles.textColumn}>
-          <Text style={[styles.label, { color: palette.label }]} allowFontScaling>
+          <Text style={[styles.label, { color: palette.ink }]} allowFontScaling>
             {label}
           </Text>
           {detail ? (
-            <Text style={[styles.detail, { color: palette.secondaryLabel }]} allowFontScaling>
+            <Text style={[styles.detail, { color: palette.text }]} allowFontScaling>
               {detail}
             </Text>
           ) : null}
           {outcome ? (
             <Text
-              style={[styles.outcome, { color: error ? palette.error : palette.secondaryLabel }]}
+              style={[styles.outcome, { color: error ? palette.coral : palette.muted }]}
               accessibilityLiveRegion="polite"
               accessibilityRole={error ? "alert" : "text"}
               allowFontScaling
@@ -192,11 +167,11 @@ export function MobileSystemRow({
           importantForAccessibility="no-hide-descendants"
         >
           {pending ? (
-            <ActivityIndicator color={palette.spinner} size="small" />
+            <ActivityIndicator color={palette.accent} size="small" />
           ) : trailing}
         </View>
       </Pressable>
-      {separator ? <View style={[styles.separator, { backgroundColor: palette.separator }]} /> : null}
+      {separator ? <View style={[styles.separator, { backgroundColor: palette.line }]} /> : null}
     </View>
   );
 }
@@ -211,18 +186,26 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: mobileSystemSurfaceMetrics.sectionGap,
+    paddingHorizontal: mobileSystemSurfaceMetrics.horizontalInset,
+  },
+  sectionCard: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
   },
   sectionHeader: {
     fontSize: 13,
     fontWeight: "600",
     marginBottom: 8,
-    paddingHorizontal: mobileSystemSurfaceMetrics.horizontalInset,
+    paddingHorizontal: 4,
     textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   sectionFooter: {
     fontSize: 13,
     marginTop: 8,
-    paddingHorizontal: mobileSystemSurfaceMetrics.horizontalInset,
+    lineHeight: 18,
+    paddingHorizontal: 4,
   },
   rowShell: {
     alignSelf: "stretch",
@@ -232,13 +215,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     minHeight: mobileSystemSurfaceMetrics.minimumTouchTarget,
     paddingHorizontal: mobileSystemSurfaceMetrics.horizontalInset,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   rowPressed: {
-    backgroundColor: "rgba(127, 127, 127, 0.16)",
+    backgroundColor: palette.tealSoft,
   },
   rowSelected: {
-    backgroundColor: "rgba(127, 127, 127, 0.16)",
+    backgroundColor: palette.tealSoft,
   },
   iconColumn: {
     alignItems: "center",
@@ -252,15 +235,18 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 17,
+    lineHeight: 22,
   },
   detail: {
     flexShrink: 1,
     fontSize: 15,
+    lineHeight: 20,
     marginTop: 3,
   },
   outcome: {
     flexShrink: 1,
     fontSize: 13,
+    lineHeight: 18,
     marginTop: 4,
   },
   trailingColumn: {
@@ -270,10 +256,7 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    marginLeft:
-      mobileSystemSurfaceMetrics.horizontalInset
-      + mobileSystemSurfaceMetrics.iconColumnWidth
-      + mobileSystemSurfaceMetrics.columnGap,
-    marginRight: mobileSystemSurfaceMetrics.horizontalInset,
+    marginLeft: 0,
+    marginRight: 0,
   },
 });

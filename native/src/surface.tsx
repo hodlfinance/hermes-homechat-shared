@@ -6690,7 +6690,7 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
                       screen. */}
                   <TextInput value={accessCode} onChangeText={setAccessCode} autoCapitalize="none" autoCorrect={false} autoComplete="off" textContentType="none" placeholder={staticUiCopy(appLocale)["Access code (if you have not set a password)"]} style={styles.input} />
                   <Pressable style={[styles.primaryButtonWide, !canSubmitLogin && styles.disabledButton]} onPress={login} disabled={!canSubmitLogin}>
-                    {busy ? <ActivityIndicator color="white" /> : <ShieldCheck size={18} color="white" />}
+                    {busy ? <ActivityIndicator color={palette.accentText} /> : <ShieldCheck size={18} color={palette.accentText} />}
                     <Text style={styles.primaryButtonText}>{busyLabel ? staticUiMessage(appLocale, busyLabel) : staticUiCopy(appLocale)["Sign in"]}</Text>
                   </Pressable>
                 </View>
@@ -7341,7 +7341,7 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
                 accessibilityRole="button"
                 accessibilityLabel={staticUiCopy(appLocale)["Scroll to latest message"]}
               >
-                <ChevronDown size={20} color="white" />
+                <ChevronDown size={20} color={palette.accentText} />
               </Pressable>
             ) : null}
             <MobileDelegatedTasksIndicator locale={appLocale}
@@ -7450,7 +7450,7 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
                     accessibilityRole="button"
                     accessibilityLabel={t.chat.sendVoiceNote}
                   >
-                    <ArrowUp size={19} color="white" />
+                    <ArrowUp size={19} color={palette.accentText} />
                   </Pressable>
                 ) : voiceTranscriptionFailed ? (
                   <View style={styles.voiceFailureActions}>
@@ -7495,8 +7495,8 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
                         accessibilityLabel={composerActions.stopLabel ?? "Stop"}
                       >
                         {activeDelegatedTask && stoppingDelegatedTaskIds.includes(activeDelegatedTask.taskId)
-                          ? <ActivityIndicator color="white" />
-                          : <Square size={18} color="white" />}
+                          ? <ActivityIndicator color={palette.accentText} />
+                          : <Square size={18} color={palette.accentText} />}
                       </Pressable>
                     ) : null}
                     {input.trim() || attachmentVoiceComposer.showAttachmentSend ? (
@@ -7507,7 +7507,7 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
                         accessibilityRole="button"
                         accessibilityLabel={composerActions.sendLabel}
                       >
-                        {composerActions.sendButtonShowsBusy ? <ActivityIndicator color="white" /> : <ArrowUp size={19} color="white" />}
+                        {composerActions.sendButtonShowsBusy ? <ActivityIndicator color={palette.accentText} /> : <ArrowUp size={19} color={palette.accentText} />}
                       </Pressable>
                     ) : (
                       <Pressable
@@ -8239,7 +8239,7 @@ function PendingProductAccessModal({
             onPress={() => void onCheckAgain()}
             style={[styles.primaryButtonWide, busy && styles.disabledButton]}
           >
-            {busy ? <ActivityIndicator color="white" /> : null}
+            {busy ? <ActivityIndicator color={palette.accentText} /> : null}
             <Text style={styles.primaryButtonText}>{copy.checkAgain}</Text>
           </Pressable>
           <Pressable
@@ -8344,7 +8344,7 @@ function IosPaywallPanel({ locale,
           accessibilityRole="button"
           accessibilityLabel={view.purchaseLabel}
         >
-          {phase === "purchasing" ? <ActivityIndicator color="white" /> : <ShieldCheck size={18} color="white" />}
+          {phase === "purchasing" ? <ActivityIndicator color={palette.accentText} /> : <ShieldCheck size={18} color={palette.accentText} />}
           <Text style={styles.primaryButtonText}>{view.purchaseLabel}</Text>
         </Pressable>
       ) : null}
@@ -8879,7 +8879,7 @@ function MessageBubble({
         <View style={styles.userAttachmentList}>
           {uploadReferences.map((reference) => (
             <View key={`${reference.id}:${reference.version}`} style={styles.userAttachmentChip}>
-              <FileText size={13} color="white" />
+              <FileText size={13} color={palette.ink} />
               <Text style={styles.userAttachmentText} numberOfLines={1}>
                 {reference.label || "Attachment"}
               </Text>
@@ -9600,7 +9600,7 @@ function MobileAiAccessPanel({
               }}
             />
             <Pressable style={[styles.primaryButtonWide, (!claudeCode.trim() || state.busyRoute === "claude_account") && styles.disabledButton]} disabled={!claudeCode.trim() || state.busyRoute === "claude_account"} onPress={() => void onCompleteClaude()}>
-              <Check size={18} color="white" /><Text style={styles.primaryButtonText}>{copy.completeConnection}</Text>
+              <Check size={18} color={palette.accentText} /><Text style={styles.primaryButtonText}>{copy.completeConnection}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -10618,7 +10618,7 @@ function ChatGptPanel({ locale,
             <Text style={styles.secondaryButtonText}>{staticUiMessage(locale, isOpening ? "Opening..." : "Open ChatGPT")}</Text>
           </Pressable>
           <Pressable style={[styles.primaryButtonWide, busy && styles.disabledButton]} onPress={onComplete} disabled={busy}>
-            {isChecking ? <ActivityIndicator color="white" /> : <Check size={17} color="white" />}
+            {isChecking ? <ActivityIndicator color={palette.accentText} /> : <Check size={17} color={palette.accentText} />}
             <Text style={styles.primaryButtonText}>{staticUiMessage(locale, isChecking ? "Checking..." : "I signed in")}</Text>
           </Pressable>
           <Pressable style={[styles.secondaryButtonWide, busy && styles.disabledButton]} onPress={onConnect} disabled={busy}>
@@ -10628,7 +10628,7 @@ function ChatGptPanel({ locale,
         </View>
       ) : !connected ? (
         <Pressable style={[styles.primaryButtonWide, busy && styles.disabledButton]} onPress={onConnect} disabled={busy}>
-          {isStarting ? <ActivityIndicator color="white" /> : <KeyRound size={17} color="white" />}
+          {isStarting ? <ActivityIndicator color={palette.accentText} /> : <KeyRound size={17} color={palette.accentText} />}
           <Text style={styles.primaryButtonText}>
             {staticUiMessage(locale, isStarting ? "Starting..." : chatGptAccount.reconnectRequired ? "Reconnect ChatGPT" : "Connect ChatGPT")}
           </Text>
@@ -11064,7 +11064,7 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 22,
     lineHeight: 28,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   pendingAccessBody: {
     color: palette.text,
@@ -11102,7 +11102,8 @@ const styles = StyleSheet.create({
   authTitle: {
     color: palette.ink,
     fontSize: 28,
-    fontWeight: "800",
+    lineHeight: 34,
+    fontWeight: "600",
     letterSpacing: -0.5,
   },
   authSubtitle: {
@@ -11113,7 +11114,9 @@ const styles = StyleSheet.create({
   },
   authModeSwitch: {
     backgroundColor: palette.tealSoft,
-    borderRadius: 10,
+    borderColor: palette.lineStrong,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     padding: 3,
   },
@@ -11132,8 +11135,8 @@ const styles = StyleSheet.create({
   },
   authModeText: {
     color: palette.muted,
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "500",
   },
   authModeTextSelected: {
     color: palette.ink,
@@ -11154,8 +11157,8 @@ const styles = StyleSheet.create({
   },
   authSupportText: {
     color: palette.teal,
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "500",
   },
   paywallScreen: {
     padding: 18,
@@ -11218,16 +11221,16 @@ const styles = StyleSheet.create({
   },
   brand: {
     fontSize: 17,
-    fontWeight: "800",
+    fontWeight: "600",
     color: palette.ink,
   },
   mobileAppBar: {
-    minHeight: 58,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    minHeight: 56,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: palette.line,
-    backgroundColor: palette.surface,
+    borderBottomColor: palette.chromeLine,
+    backgroundColor: palette.pageBg,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -11240,9 +11243,8 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: palette.line,
-    backgroundColor: palette.surface,
+    borderWidth: 0,
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -11271,8 +11273,8 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     left: 0,
-    width: "84%",
-    maxWidth: 360,
+    width: 318,
+    maxWidth: "88%",
     backgroundColor: palette.surface,
     borderRightWidth: 1,
     borderRightColor: palette.line,
@@ -11283,9 +11285,9 @@ const styles = StyleSheet.create({
     elevation: 60,
   },
   mobileDrawerHeader: {
-    minHeight: 58,
-    paddingHorizontal: 14,
-    paddingBottom: 10,
+    minHeight: 56,
+    paddingHorizontal: 12,
+    paddingBottom: 0,
     borderBottomWidth: 1,
     borderBottomColor: palette.line,
     flexDirection: "row",
@@ -11296,12 +11298,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mobileDrawerNavInner: {
+    paddingHorizontal: 8,
     paddingVertical: 12,
+    gap: 4,
   },
   mobileDrawerButton: {
-    minHeight: 42,
-    borderRadius: 8,
-    paddingHorizontal: 10,
+    minHeight: 48,
+    borderRadius: 12,
+    paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -11313,8 +11317,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     color: palette.text,
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 17,
+    fontWeight: "500",
   },
   mobileDrawerButtonTextActive: {
     color: palette.teal,
@@ -11328,8 +11332,8 @@ const styles = StyleSheet.create({
   },
   drawerEmptyText: {
     color: palette.muted,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 18,
     paddingVertical: 6,
   },
   mobileDrawerSessionButton: {
@@ -11381,36 +11385,39 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   mobileDrawerAccountButton: {
-    minHeight: 58,
+    minHeight: 52,
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 8,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    backgroundColor: palette.tealSoft,
+    borderColor: palette.line,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   // The weight this label carried before the move, at a size one step above
   // the 17 it was given there — the "leicht größere Schrift" Justus asked for.
   mobileDrawerAccountLabel: {
     color: palette.ink,
-    fontWeight: "800",
-    fontSize: 18,
+    fontWeight: "500",
+    fontSize: 15,
     flexShrink: 1,
   },
   mobileDrawerAccountButtonActive: {
     backgroundColor: palette.tealSoft,
   },
   sidebarAccountAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: palette.tealSoft,
+    backgroundColor: palette.ink,
   },
   sidebarAccountAvatarText: {
-    color: palette.teal,
-    fontWeight: "900",
+    color: palette.pageBg,
+    fontWeight: "600",
   },
   mobileDrawerAccountMenu: {
     borderWidth: 1,
@@ -11451,8 +11458,8 @@ const styles = StyleSheet.create({
   },
   mobileDrawerLanguageButtonText: {
     color: palette.text,
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "500",
   },
   mobileDrawerLanguageButtonTextActive: {
     color: palette.teal,
@@ -11463,7 +11470,7 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   mobileDrawerAccountMenuRow: {
-    minHeight: 44,
+    minHeight: 36,
     borderRadius: 8,
     paddingHorizontal: 6,
     flexDirection: "row",
@@ -11477,7 +11484,7 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 15,
     lineHeight: 20,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   content: {
     flex: 1,
@@ -11500,7 +11507,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   systemSurfaceNotice: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     // HPD-443: without a top padding the text sat against the divider above it.
     paddingTop: 8,
     paddingBottom: 8,
@@ -11546,17 +11553,19 @@ const styles = StyleSheet.create({
   },
   chatHeaderTitle: {
     color: palette.ink,
-    fontWeight: "800",
-    fontSize: 16,
+    fontWeight: "600",
+    fontSize: 17,
+    lineHeight: 22,
   },
   subthreadHeaderTitle: {
     color: palette.brandBlue,
-    fontWeight: "800",
+    fontWeight: "600",
     fontSize: 16,
   },
   chatHeaderSubtitle: {
     color: palette.muted,
-    fontSize: 12,
+    fontSize: 13,
+    lineHeight: 16,
     maxWidth: 220,
   },
   chatNoticeStack: {
@@ -11602,13 +11611,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontWeight: "800",
+    fontWeight: "600",
     color: palette.ink,
     flexShrink: 1,
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: "800",
+    fontWeight: "600",
     color: palette.ink,
     textTransform: "capitalize",
   },
@@ -11618,8 +11627,8 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: palette.teal,
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "600",
     letterSpacing: 0.8,
     textTransform: "uppercase",
   },
@@ -11700,8 +11709,8 @@ const styles = StyleSheet.create({
   },
   heySuggestionState: {
     color: palette.teal,
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "600",
   },
   heySuggestionActions: {
     flexDirection: "row",
@@ -11775,7 +11784,7 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 14,
     lineHeight: 19,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   foregroundNotificationBody: {
     color: palette.text,
@@ -11817,12 +11826,12 @@ const styles = StyleSheet.create({
   },
   statusValue: {
     color: palette.ink,
-    fontWeight: "800",
+    fontWeight: "600",
     fontSize: 15,
   },
   statusHint: {
     color: palette.muted,
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 17,
   },
   pushPanel: {
@@ -11844,7 +11853,7 @@ const styles = StyleSheet.create({
   },
   privacyNote: {
     color: palette.muted,
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 17,
   },
   privacyList: {
@@ -11885,7 +11894,7 @@ const styles = StyleSheet.create({
   },
   permissionTitle: {
     color: palette.ink,
-    fontWeight: "800",
+    fontWeight: "600",
     fontSize: 13,
   },
   flexOne: {
@@ -11898,10 +11907,10 @@ const styles = StyleSheet.create({
   chatMessagesInner: {
     flexGrow: 1,
     justifyContent: "flex-start",
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 12,
-    gap: 10,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 14,
+    gap: 14,
   },
   messages: {
     minHeight: 300,
@@ -11909,20 +11918,19 @@ const styles = StyleSheet.create({
   },
   chatEmptyState: {
     minHeight: 180,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: palette.line,
-    borderRadius: 8,
+    borderWidth: 0,
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
-    padding: 18,
-    backgroundColor: palette.surface,
+    paddingHorizontal: 28,
+    paddingVertical: 18,
+    backgroundColor: "transparent",
   },
   chatEmptyTitle: {
     color: palette.ink,
-    fontWeight: "800",
-    fontSize: 15,
+    fontWeight: "600",
+    fontSize: 22,
+    lineHeight: 28,
   },
   suggestionChipWrap: {
     marginTop: 6,
@@ -11932,12 +11940,12 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   suggestionChip: {
-    minHeight: 34,
+    minHeight: 44,
     borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    borderColor: palette.lineStrong,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     backgroundColor: palette.surface,
   },
   suggestionChipUsed: {
@@ -11945,13 +11953,15 @@ const styles = StyleSheet.create({
   },
   suggestionChipText: {
     color: palette.ink,
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "400",
   },
   message: {
-    maxWidth: "92%",
-    borderRadius: 16,
-    padding: 11,
+    maxWidth: "82%",
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
     gap: 8,
   },
   assistantMessage: {
@@ -11963,9 +11973,9 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   userMessage: {
-    backgroundColor: palette.accentStrong,
+    backgroundColor: palette.userTint,
     alignSelf: "flex-end",
-    borderBottomRightRadius: 3,
+    borderBottomRightRadius: 6,
   },
   userAttachmentList: {
     alignSelf: "stretch",
@@ -11979,13 +11989,13 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     paddingHorizontal: 8,
     paddingVertical: 6,
-    backgroundColor: "rgba(255,255,255,0.16)",
+    backgroundColor: palette.tealSoft,
   },
   userAttachmentText: {
     flexShrink: 1,
-    color: "white",
-    fontSize: 12,
-    fontWeight: "700",
+    color: palette.ink,
+    fontSize: 13,
+    fontWeight: "500",
   },
   pendingMessage: {
     alignItems: "stretch",
@@ -12043,13 +12053,13 @@ const styles = StyleSheet.create({
     lineHeight: 25,
   },
   messageTextBold: {
-    color: palette.text,
+    color: palette.ink,
     fontSize: 17,
     lineHeight: 25,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   markdownBlocks: {
-    gap: 10,
+    gap: 12,
     alignSelf: "stretch",
   },
   markdownTableViewport: {
@@ -12091,13 +12101,13 @@ const styles = StyleSheet.create({
   },
   markdownTableHeaderText: {
     color: palette.ink,
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 20,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   markdownTableCellText: {
     color: palette.text,
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 20,
   },
   markdownTableBoldText: {
@@ -12107,26 +12117,28 @@ const styles = StyleSheet.create({
     color: palette.ink,
     backgroundColor: palette.tealSoft,
     fontFamily: Platform.select({ ios: "Menlo", android: "monospace" }),
-    fontSize: 15,
+    fontSize: 16,
   },
   codeBlock: {
     alignSelf: "stretch",
     borderRadius: 8,
     backgroundColor: "#111827",
+    borderColor: palette.line,
+    borderWidth: StyleSheet.hairlineWidth,
     padding: 10,
     gap: 6,
   },
   codeLanguage: {
     color: "#9ca3af",
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "600",
     textTransform: "uppercase",
   },
   codeBlockText: {
     color: "#f9fafb",
     fontFamily: Platform.select({ ios: "Menlo", android: "monospace" }),
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 15,
+    lineHeight: 22,
   },
   confirmationActions: {
     flexDirection: "row",
@@ -12134,16 +12146,18 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   confirmationPrimaryButton: {
-    minHeight: 38,
-    borderRadius: 8,
+    minHeight: 44,
+    borderRadius: 12,
     backgroundColor: palette.accentStrong,
+    borderColor: palette.accent,
+    borderWidth: 1,
     paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   confirmationSecondaryButton: {
-    minHeight: 38,
-    borderRadius: 8,
+    minHeight: 44,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: palette.line,
     backgroundColor: palette.surface,
@@ -12152,24 +12166,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   confirmationPrimaryText: {
-    color: "white",
+    color: palette.accentText,
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   confirmationSecondaryText: {
     color: palette.teal,
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   messageLink: {
     color: palette.teal,
-    fontWeight: "800",
+    fontWeight: "600",
     textDecorationLine: "underline",
   },
   activityTrail: {
     marginTop: 2,
-    borderLeftWidth: 2,
-    paddingLeft: 9,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    paddingLeft: 10,
     gap: 7,
     alignSelf: "stretch",
     maxWidth: "100%",
@@ -12190,7 +12204,7 @@ const styles = StyleSheet.create({
     minHeight: 28,
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 8,
     alignSelf: "stretch",
     maxWidth: "100%",
   },
@@ -12203,27 +12217,27 @@ const styles = StyleSheet.create({
     color: palette.muted,
     // Same size as the sub thread line beneath it, so the two status texts on
     // this screen read as one family rather than two.
-    fontSize: 11,
-    lineHeight: 16,
-    fontWeight: "600",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "500",
     // Never `flex: 1` here. The assistant bubble is sized to its content, so a
     // flexible width resolves to the space left over beside the dragon, which is
     // none: the line measured zero and nothing was painted at all.
     flexShrink: 1,
   },
   userMessageText: {
-    color: "white",
+    color: palette.ink,
     fontSize: 17,
     lineHeight: 25,
   },
   messageTime: {
     alignSelf: "flex-end",
     color: palette.muted,
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 13,
+    lineHeight: 18,
   },
   userMessageTime: {
-    color: "rgba(255,255,255,0.76)",
+    color: palette.muted,
   },
   messageActions: {
     flexDirection: "row",
@@ -12247,8 +12261,8 @@ const styles = StyleSheet.create({
   },
   messageActionText: {
     color: palette.teal,
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "600",
     flexShrink: 1,
   },
   loadOlderMessagesButton: {
@@ -12285,8 +12299,8 @@ const styles = StyleSheet.create({
   },
   readAloudText: {
     color: palette.muted,
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "600",
   },
   readAloudControls: {
     flexDirection: "row",
@@ -12306,8 +12320,8 @@ const styles = StyleSheet.create({
   },
   readAloudStopText: {
     color: palette.coral,
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "600",
   },
   diagnosticRow: {
     borderTopWidth: 1,
@@ -12321,9 +12335,11 @@ const styles = StyleSheet.create({
     gap: 4,
     borderWidth: 1,
     borderColor: palette.line,
-    borderRadius: 24,
+    borderRadius: 26,
     backgroundColor: palette.surface,
-    padding: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    minHeight: 52,
   },
   voiceRecordingInline: {
     flex: 1,
@@ -12340,7 +12356,7 @@ const styles = StyleSheet.create({
     color: palette.coral,
     fontSize: 15,
     lineHeight: 20,
-    fontWeight: "800",
+    fontWeight: "600",
     fontVariant: ["tabular-nums"],
   },
   voiceFailureInline: {
@@ -12351,7 +12367,7 @@ const styles = StyleSheet.create({
   },
   voiceFailureText: {
     color: palette.coral,
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 16,
     fontWeight: "700",
   },
@@ -12360,12 +12376,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   chatComposerDock: {
-    borderTopWidth: 1,
-    borderTopColor: palette.line,
-    backgroundColor: palette.surface,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 12,
+    borderTopWidth: 0,
+    backgroundColor: palette.pageBg,
+    paddingHorizontal: 14,
+    paddingTop: 6,
+    paddingBottom: 10,
     gap: 8,
   },
   delegatedTasksIndicator: {
@@ -12404,15 +12419,15 @@ const styles = StyleSheet.create({
   },
   delegatedTaskLink: {
     color: palette.teal,
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 16,
-    fontWeight: "800",
+    fontWeight: "600",
     textDecorationLine: "underline",
     maxWidth: 210,
   },
   delegatedTaskMeta: {
     color: palette.muted,
-    fontSize: 11,
+    fontSize: 13,
     lineHeight: 16,
     fontVariant: ["tabular-nums"],
     flexShrink: 0,
@@ -12421,10 +12436,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 18,
     bottom: 92,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: palette.accentStrong,
+    borderColor: palette.accent,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
@@ -12436,12 +12453,12 @@ const styles = StyleSheet.create({
   },
   copyNotice: {
     color: palette.teal,
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "600",
   },
   attachmentNotice: {
     color: palette.coral,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "700",
   },
   attachmentChips: {
@@ -12461,19 +12478,20 @@ const styles = StyleSheet.create({
   attachmentChipText: {
     maxWidth: 160,
     color: palette.ink,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "700",
   },
   input: {
     flex: 1,
     minHeight: 44,
     borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
+    borderColor: palette.lineStrong,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: palette.surface,
     color: palette.text,
+    fontSize: 15,
   },
   chatInput: {
     minHeight: 38,
@@ -12483,8 +12501,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 8,
     backgroundColor: "transparent",
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 17,
+    lineHeight: 22,
   },
   inputDisabled: {
     backgroundColor: "#f4f7f7",
@@ -12496,7 +12514,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     color: palette.text,
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   secretList: {
     gap: 8,
@@ -12515,7 +12533,7 @@ const styles = StyleSheet.create({
   },
   secretTitle: {
     color: palette.ink,
-    fontWeight: "800",
+    fontWeight: "600",
     fontSize: 13,
   },
   segmentedControl: {
@@ -12540,8 +12558,8 @@ const styles = StyleSheet.create({
   },
   segmentButtonText: {
     color: palette.text,
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "600",
   },
   segmentButtonTextActive: {
     color: palette.teal,
@@ -12565,20 +12583,22 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sendButton: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 999,
     backgroundColor: palette.accentStrong,
+    borderColor: palette.accent,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
   composerIconButton: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: palette.surface,
+    backgroundColor: "transparent",
   },
   chatGptPanelHeaderActions: {
     flexDirection: "row",
@@ -12593,8 +12613,10 @@ const styles = StyleSheet.create({
   },
   primaryButtonWide: {
     minHeight: 44,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: palette.accentStrong,
+    borderColor: palette.accent,
+    borderWidth: 1,
     paddingHorizontal: 14,
     alignItems: "center",
     justifyContent: "center",
@@ -12602,13 +12624,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   primaryButtonText: {
-    color: "white",
-    fontWeight: "800",
+    color: palette.accentText,
+    fontSize: 15,
+    fontWeight: "600",
   },
   secondaryButtonWide: {
-    minHeight: 42,
-    borderRadius: 8,
-    backgroundColor: palette.tealSoft,
+    minHeight: 44,
+    borderRadius: 12,
+    backgroundColor: "transparent",
+    borderColor: palette.lineStrong,
+    borderWidth: 1,
     paddingHorizontal: 14,
     alignItems: "center",
     justifyContent: "center",
@@ -12616,13 +12641,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   secondaryButtonText: {
-    color: palette.teal,
-    fontWeight: "800",
+    color: palette.ink,
+    fontSize: 15,
+    fontWeight: "600",
   },
   newPageButton: {
-    minHeight: 40,
-    borderRadius: 8,
+    minHeight: 44,
+    borderRadius: 12,
     backgroundColor: palette.accentStrong,
+    borderColor: palette.accent,
+    borderWidth: 1,
     paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
@@ -12649,7 +12677,7 @@ const styles = StyleSheet.create({
   },
   dangerButtonText: {
     color: palette.coral,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   settingsRow: {
     flexDirection: "row",
@@ -12674,7 +12702,7 @@ const styles = StyleSheet.create({
   },
   settingsRowHint: {
     color: palette.muted,
-    fontSize: 12,
+    fontSize: 13,
     marginTop: 1,
   },
   settingsRowChevron: {
@@ -12709,7 +12737,7 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 28,
     lineHeight: 33,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   paywallHeroBody: {
     color: palette.text,
@@ -12719,7 +12747,7 @@ const styles = StyleSheet.create({
   paywallPrice: {
     color: palette.ink,
     fontSize: 24,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   paywallDisclosure: {
     color: palette.text,
@@ -12728,7 +12756,7 @@ const styles = StyleSheet.create({
   },
   paywallAge: {
     color: palette.muted,
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 17,
     fontWeight: "600",
   },
@@ -12788,8 +12816,8 @@ const styles = StyleSheet.create({
   },
   languageButtonText: {
     color: palette.text,
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "600",
   },
   languageButtonTextActive: {
     color: palette.teal,
@@ -12873,7 +12901,7 @@ const styles = StyleSheet.create({
   },
   rowTitle: {
     color: palette.ink,
-    fontWeight: "800",
+    fontWeight: "600",
     flexShrink: 1,
   },
   emptyState: {
@@ -12939,7 +12967,7 @@ const styles = StyleSheet.create({
   },
   statusPillText: {
     color: palette.teal,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   connectedPill: {
     minHeight: 28,
@@ -12953,7 +12981,7 @@ const styles = StyleSheet.create({
   },
   connectedPillText: {
     color: palette.teal,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   attentionPill: {
     minHeight: 28,
@@ -12967,7 +12995,7 @@ const styles = StyleSheet.create({
   },
   attentionPillText: {
     color: palette.amber,
-    fontWeight: "800",
+    fontWeight: "600",
   },
 });
 

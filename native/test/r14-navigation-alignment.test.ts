@@ -10,8 +10,8 @@ test("custom Page rows reuse the built-in navigation icon and text columns", () 
     [...systemRows.matchAll(/^  (columnGap|horizontalInset|iconColumnWidth|minimumTouchTarget): (\d+),$/gm)]
       .map((match) => [match[1], Number(match[2])]),
   );
-  assert.deepEqual(metrics, { columnGap: 12, horizontalInset: 20, iconColumnWidth: 28, minimumTouchTarget: 44 });
-  assert.equal(metrics.horizontalInset + metrics.iconColumnWidth + metrics.columnGap, 60);
+  assert.deepEqual(metrics, { columnGap: 12, horizontalInset: 16, iconColumnWidth: 28, minimumTouchTarget: 48 });
+  assert.equal(metrics.horizontalInset + metrics.iconColumnWidth + metrics.columnGap, 56);
   assert.match(pageRow, /import \{ mobileSystemSurfaceMetrics \} from "\.\/mobile-system-surface"/);
   assert.match(pageRow, /<View style=\{styles\.iconColumn\}[\s\S]*?\{icon\}[\s\S]*?<Text style=\{\[styles\.label/);
   assert.match(pageRow, /paddingLeft: mobileSystemSurfaceMetrics\.horizontalInset/);
