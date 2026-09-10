@@ -6594,7 +6594,60 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
     return () => { active = false; };
   }, [token, snapshot?.workspace.id, navigationRequest?.requestId]);
 
+  const renderChatOpening = (message: string, retry = false) => (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
+      <View style={styles.mobileAppBar}>
+        <Pressable
+          style={[styles.mobileMenuButton, styles.disabledButton]}
+          disabled
+          accessibilityRole="button"
+          accessibilityLabel={t.nav.openMenu}
+          accessibilityState={{ disabled: true }}
+        >
+          <Menu size={22} color={palette.ink} />
+        </Pressable>
+        <View style={styles.mobileAppBarTitle}>
+          <Text style={styles.chatHeaderTitle}>{mobileScreenTitle("chat", null, t)}</Text>
+          <Text style={styles.chatHeaderSubtitle} numberOfLines={1}>{appCopy.productName}</Text>
+        </View>
+        <View style={styles.mobileAppBarSpacer} />
+      </View>
+      <View style={styles.externalOpeningBody} accessibilityLiveRegion="polite">
+        {isRefreshing ? <ActivityIndicator color={palette.teal} /> : null}
+        <Text style={[styles.externalOpeningMessage, error && styles.externalOpeningError]}>{message}</Text>
+        {retry ? (
+          <Pressable
+            style={[styles.secondaryButtonWide, isRefreshing && styles.disabledButton]}
+            onPress={() => void refresh()}
+            disabled={isRefreshing}
+            accessibilityRole="button"
+          >
+            <RefreshCcw size={17} color={palette.teal} />
+            <Text style={styles.secondaryButtonText}>{isRefreshing ? staticUiCopy(appLocale)["Checking..."] : staticUiCopy(appLocale)["Retry now"]}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      <View style={styles.chatComposerDock}>
+        <View style={[styles.composer, styles.disabledButton]}>
+          <TextInput
+            editable={false}
+            placeholder={appCopy.chatPlaceholder}
+            accessibilityLabel={staticUiCopy(appLocale)["Message"]}
+            style={[styles.input, styles.chatInput, styles.inputDisabled]}
+          />
+          <View style={[styles.composerIconButton, styles.disabledButton]}>
+            <Mic size={18} color={palette.ink} />
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+
   if (!sessionRestored) {
+    if (host.presentation?.openingMode === "chat") {
+      return renderChatOpening(host.presentation.openingStatus || "Connecting to Hermes...");
+    }
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
@@ -6751,6 +6804,12 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
   }
 
   if (!snapshot) {
+    if (host.presentation?.openingMode === "chat") {
+      return renderChatOpening(
+        error ? staticUiMessage(appLocale, error) : host.presentation.openingStatus || "Connecting to Hermes...",
+        Boolean(error),
+      );
+    }
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
@@ -11192,6 +11251,23 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     maxWidth: 320,
     textAlign: "center",
+  },
+  externalOpeningBody: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+    paddingHorizontal: 24,
+  },
+  externalOpeningMessage: {
+    color: palette.muted,
+    fontSize: 16,
+    lineHeight: 23,
+    maxWidth: 340,
+    textAlign: "center",
+  },
+  externalOpeningError: {
+    color: palette.coral,
   },
   header: {
     paddingHorizontal: 16,

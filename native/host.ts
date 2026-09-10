@@ -126,6 +126,10 @@ export type NativeR8Host = {
     copy: { productName: string; tagline: string; trialCta: string; provisioningTitle: string; chatPlaceholder: string };
   };
   theme?: Record<string, ColorValue>;
+  presentation?: {
+    openingMode?: "brand" | "chat";
+    openingStatus?: string;
+  };
   session: NativeR8SessionHost;
   policy: { preinstalledRanker: boolean; preinstalledEmailScanner: boolean };
   transport: NativeR8Transport;
