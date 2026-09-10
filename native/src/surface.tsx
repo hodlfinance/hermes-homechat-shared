@@ -6599,20 +6599,60 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
       <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
       <View style={styles.mobileAppBar}>
         <Pressable
-          style={[styles.mobileMenuButton, styles.disabledButton]}
-          disabled
+          style={styles.mobileMenuButton}
+          onPress={() => setMenuOpen(true)}
           accessibilityRole="button"
           accessibilityLabel={t.nav.openMenu}
-          accessibilityState={{ disabled: true }}
         >
           <Menu size={22} color={palette.ink} />
         </Pressable>
         <View style={styles.mobileAppBarTitle}>
-          <Text style={styles.chatHeaderTitle}>{mobileScreenTitle("chat", null, t)}</Text>
+          <Text style={styles.chatHeaderTitle}>{mobileScreenTitle(tab, settingsSection, t)}</Text>
           <Text style={styles.chatHeaderSubtitle} numberOfLines={1}>{appCopy.productName}</Text>
         </View>
         <View style={styles.mobileAppBarSpacer} />
       </View>
+      {menuOpen ? (
+        <View style={styles.mobileMenuLayer} pointerEvents="box-none">
+          <Pressable style={styles.mobileMenuBackdrop} onPress={() => setMenuOpen(false)} accessibilityRole="button" accessibilityLabel={t.nav.closeMenu} />
+          <View style={[styles.mobileDrawer, { paddingTop: Platform.OS === "ios" ? Math.max(Constants.statusBarHeight ?? 0, 20) + 8 : 10, paddingBottom: Platform.OS === "ios" ? 18 : 10 }]}>
+            <View style={styles.mobileDrawerHeader}>
+              <LogoMark />
+              <View style={styles.flexOne}>
+                <Text style={styles.brand}>{appCopy.productName}</Text>
+              </View>
+              <Pressable style={styles.headerIconButton} onPress={() => setMenuOpen(false)} accessibilityRole="button" accessibilityLabel={t.nav.closeMenu}>
+                <X size={18} color={palette.ink} />
+              </Pressable>
+            </View>
+            <ScrollView style={styles.mobileDrawerNav} contentContainerStyle={styles.mobileDrawerNavInner}>
+              <MobileSystemRow
+                accessibilityState={{ selected: tab === "chat" }}
+                icon={<MessageSquare size={18} color={tab === "chat" ? palette.teal : palette.text} />}
+                label={t.nav.chat}
+                onPress={() => selectMobileScreen("chat")}
+              />
+              <MobileSystemRow
+                accessibilityState={{ selected: tab === "automations" }}
+                icon={<CalendarClock size={18} color={tab === "automations" ? palette.teal : palette.text} />}
+                label={t.nav.automations}
+                onPress={() => selectMobileScreen("automations")}
+              />
+              <MobileSystemRow
+                accessibilityState={{ selected: tab === "ai_access" }}
+                icon={<Bot size={18} color={tab === "ai_access" ? palette.teal : palette.text} />}
+                label={t.nav.aiAccess}
+                onPress={() => selectMobileScreen("ai_access")}
+              />
+              <MobileSystemRow
+                icon={<ExternalLink size={18} color={palette.text} />}
+                label={t.nav.dashboard}
+                onPress={() => void openNativeHermesDashboard()}
+              />
+            </ScrollView>
+          </View>
+        </View>
+      ) : null}
       <View style={styles.externalOpeningBody} accessibilityLiveRegion="polite">
         {isRefreshing ? <ActivityIndicator color={palette.teal} /> : null}
         <Text style={[styles.externalOpeningMessage, error && styles.externalOpeningError]}>{message}</Text>
@@ -6628,19 +6668,21 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
           </Pressable>
         ) : null}
       </View>
-      <View style={styles.chatComposerDock}>
-        <View style={[styles.composer, styles.disabledButton]}>
-          <TextInput
-            editable={false}
-            placeholder={appCopy.chatPlaceholder}
-            accessibilityLabel={staticUiCopy(appLocale)["Message"]}
-            style={[styles.input, styles.chatInput, styles.inputDisabled]}
-          />
-          <View style={[styles.composerIconButton, styles.disabledButton]}>
-            <Mic size={18} color={palette.ink} />
+      {tab === "chat" ? (
+        <View style={styles.chatComposerDock}>
+          <View style={[styles.composer, styles.disabledButton]}>
+            <TextInput
+              editable={false}
+              placeholder={appCopy.chatPlaceholder}
+              accessibilityLabel={staticUiCopy(appLocale)["Message"]}
+              style={[styles.input, styles.chatInput, styles.inputDisabled]}
+            />
+            <View style={[styles.composerIconButton, styles.disabledButton]}>
+              <Mic size={18} color={palette.ink} />
+            </View>
           </View>
         </View>
-      </View>
+      ) : null}
     </SafeAreaView>
   );
 
