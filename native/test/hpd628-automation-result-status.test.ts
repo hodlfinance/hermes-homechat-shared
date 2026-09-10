@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { appLocales } from "../core/index";
 import { mobileText } from "../src/appI18n";
-import { automationCardNotice } from "../src/mobile-automation-card";
+import { automationCardFromManaged, automationCardNotice } from "../src/mobile-automation-card";
 
 const modelSource = readFileSync(new URL("../src/mobile-automation-card.ts", import.meta.url), "utf8");
 const cardSource = readFileSync(new URL("../src/AutomationCard.tsx", import.meta.url), "utf8");
@@ -56,7 +56,22 @@ test("stored results do not rewrite missing or not-storing notices", () => {
   }
   assert.match(
     modelSource,
-    /automation\.stalled === "failing" \|\| automation\.stalled === "ai_route"/,
+    /automation\.stalled === "failing"/,
   );
   assert.doesNotMatch(modelSource, /notice\.(?:includes|match)/);
+});
+
+
+test("a stored result preserves the actionable AI Access notice", () => {
+  const fixture = {
+    metadata: { role: "email_scanner", nativeJobId: "scanner", activeUserVersion: 1 },
+    snapshot: { name: "Scanner", schedule: "0 8 * * *", delivery: "chat" },
+    versions: [], enabled: true, resultStatus: "stored", stalled: "ai_route",
+  } as unknown as Parameters<typeof automationCardFromManaged>[0];
+  const card = automationCardFromManaged(fixture);
+  const notice = automationCardNotice(card, mobileText("en").systemPages.automations.storedResultFailure);
+  assert.equal(card.resultStatus, "stored");
+  assert.equal(notice, card.notice);
+  assert.match(notice ?? "", /Open AI Access, choose your route again/);
+  assert.equal(card.nativeFailureAfterStoredResult, false);
 });

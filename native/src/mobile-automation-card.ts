@@ -108,7 +108,7 @@ export function automationCardFromManaged(automation: RankedTaskAutomationView):
     notice: automation.stalled ? rankedTaskAutomationLabels.stalled[automation.stalled] : null,
     resultStatus: automation.resultStatus,
     nativeFailureAfterStoredResult: automation.resultStatus === "stored"
-      && (automation.stalled === "failing" || automation.stalled === "ai_route"),
+      && automation.stalled === "failing",
     versions: automation.versions.map((version) => ({
       version: version.version,
       reason: version.reason,
