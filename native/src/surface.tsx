@@ -6647,7 +6647,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           chatSessionsBusy={chatSessionsBusy}
           chatSessionNotice={chatSessionNotice}
           onClose={() => setMenuOpen(false)}
-          onOpenHome={() => void openMobileHomeChat()}
+          onOpenHome={() => {
+            setMenuOpen(false);
+            setTab("chat");
+          }}
           onStartNew={() => void startNewMobileChat()}
           onToggleRecents={() => setChatSessionsOpen((current) => !current)}
           onOpenSession={loadMobileChatSession}
@@ -6656,9 +6659,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
             void openBookmark(href);
           }}
           appLocale={appLocale}
-          onLocaleChange={updatePreferredLocale}
+          onLocaleChange={setAppLocale}
           appearancePreference={appearancePreference}
           onAppearanceChange={updateAppearancePreference}
+          runtimeAvailable={false}
           onOpenTasks={() => selectMobileScreen("tasks")}
           showConnectGmail={false}
           onConnectGmail={() => undefined}
@@ -8547,6 +8551,7 @@ function MobileNavigationDrawer({
   onLocaleChange,
   appearancePreference,
   onAppearanceChange,
+  runtimeAvailable = true,
   onClose,
   onOpenHome,
   onStartNew,
@@ -8583,6 +8588,7 @@ function MobileNavigationDrawer({
   onLocaleChange: (locale: AppLocale) => void;
   appearancePreference: AppearancePreference;
   onAppearanceChange: (preference: AppearancePreference) => void;
+  runtimeAvailable?: boolean;
   onClose: () => void;
   onOpenHome: () => void;
   onStartNew: () => void;
@@ -8670,7 +8676,12 @@ function MobileNavigationDrawer({
             />
           ))}
 
-          <MobileSystemRow icon={<Plus size={18} color={palette.text} />} label={pageStarterCopy(appLocale).label} onPress={onNewPage} />
+          <MobileSystemRow
+            disabled={!runtimeAvailable}
+            icon={<Plus size={18} color={runtimeAvailable ? palette.text : palette.muted} />}
+            label={pageStarterCopy(appLocale).label}
+            onPress={onNewPage}
+          />
         </ScrollView>
 
         {/* HPD-462: the entrance to Settings and Account stands where it stood
@@ -8730,20 +8741,22 @@ function MobileNavigationDrawer({
                         : item.id === "support"
                           ? tab === "support"
                           : false;
+                const disabled = !runtimeAvailable;
                 const Icon = item.id === "ai_access" ? Bot : item.id === "connections" ? PlugZap : item.id === "automations" ? CalendarClock : item.id === "account" ? UserPlus : item.id === "support" ? MessageSquare : item.id === "privacy" ? LockKeyhole : item.id === "dashboard" ? ExternalLink : LogOut;
                 const label = item.id === "ai_access" ? t.nav.aiAccess : item.id === "connections" ? t.nav.plugins : item.id === "automations" ? t.nav.automations : item.id === "account" ? t.nav.account : item.id === "support" ? t.nav.support : item.id === "privacy" ? workspacePrivacyCopy(appLocale).title : item.id === "dashboard" ? t.nav.dashboard : t.nav.signOut;
                 const onPress = item.id === "ai_access" ? onOpenAiAccess : item.id === "connections" ? onOpenConnections : item.id === "automations" ? onOpenAutomations : item.id === "account" ? onOpenAccount : item.id === "support" ? onOpenSupport : item.id === "privacy" ? onOpenPrivacy : item.id === "dashboard" ? onOpenDashboard : onLogout;
                 return (
                   <Pressable
                     key={item.id}
-                    style={({ pressed }) => [styles.mobileDrawerAccountMenuRow, active && styles.mobileDrawerAccountMenuRowSelected, pressed && styles.systemRowPressed]}
+                    disabled={disabled}
+                    style={({ pressed }) => [styles.mobileDrawerAccountMenuRow, active && styles.mobileDrawerAccountMenuRowSelected, disabled && styles.mobileDrawerAccountMenuRowDisabled, pressed && styles.systemRowPressed]}
                     onPress={onPress}
                     accessibilityRole="button"
                     accessibilityLabel={label}
-                    accessibilityState={{ selected: active }}
+                    accessibilityState={{ disabled, selected: active }}
                   >
-                    <Icon size={18} color={active ? palette.teal : palette.ink} />
-                    <Text style={styles.mobileDrawerAccountMenuText}>{label}</Text>
+                    <Icon size={18} color={disabled ? palette.muted : active ? palette.teal : palette.ink} />
+                    <Text style={[styles.mobileDrawerAccountMenuText, disabled && styles.mobileDrawerAccountMenuTextDisabled]}>{label}</Text>
                   </Pressable>
                 );
               })}
@@ -11617,11 +11630,17 @@ const styles = StyleSheet.create({
   mobileDrawerAccountMenuRowSelected: {
     backgroundColor: palette.tealSoft,
   },
+  mobileDrawerAccountMenuRowDisabled: {
+    opacity: 0.5,
+  },
   mobileDrawerAccountMenuText: {
     color: palette.ink,
     fontSize: 15,
     lineHeight: 20,
     fontWeight: "500",
+  },
+  mobileDrawerAccountMenuTextDisabled: {
+    color: palette.muted,
   },
   content: {
     flex: 1,
