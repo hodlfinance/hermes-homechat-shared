@@ -132,7 +132,13 @@ export function createMobileHomechatEventStream(
         if (isTerminalHomechatEvent(event)) terminal = true;
       }
     } finally {
-      if (terminal) await reader.cancel().catch(() => undefined);
+      if (terminal) {
+        try {
+          reader.releaseLock();
+        } catch {
+          // A completed reply must not turn into a user-visible teardown error.
+        }
+      }
     }
 
     if (terminal && !observation.terminalObserved) {
