@@ -5127,12 +5127,26 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
         phase: finalState.phase,
       });
       if (outcome === "completed") {
+        // A recovered queue can reach terminal before a running snapshot. Its
+        // live listener deliberately does not project queued messages, so use
+        // the completed controller state before releasing the queue owner.
+        if (queued.conversationSessionId === activeConversationSessionIdRef.current) {
+          const merged = reconcileMobileRunBoundMessages({
+            conversationSessionId: queued.conversationSessionId,
+            current: messagesStateRef.current,
+            incoming: finalState.messages,
+          });
+          messagesStateRef.current = merged;
+          setMessages(merged);
+        }
         if (queued.runId) commitChatRunStatus(queued.runId, "completed");
         setFailedMessage((current) => current?.idempotencyKey === queued.idempotencyKey ? null : current);
         if (appError?.owner === queued.idempotencyKey) setAppError(null);
         removeQueuedFollowUpView(queued.ownershipToken);
         queuedFollowUpOwner.release(queued.ownershipToken);
-        await refresh();
+        // A foreground completion refresh may still contain this queued run.
+        // Do not join that stale read and lose the newly completed transcript.
+        await refresh(true);
         return;
       }
       if (outcome === "cancelled") {
