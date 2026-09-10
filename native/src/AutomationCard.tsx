@@ -4,7 +4,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import type { AppLocale } from "../core/index";
 import { palette } from "./mobile-palette";
 import { mobileSystemSurfaceMetrics } from "./mobile-system-surface";
-import { automationScheduleSentence, type AutomationCardModel } from "./mobile-automation-card";
+import { automationCardNotice, automationScheduleSentence, type AutomationCardModel } from "./mobile-automation-card";
 
 /**
  * The one automation card (HPD-463).
@@ -31,6 +31,7 @@ export type AutomationCardCopy = Readonly<{
     failed: string;
     not_stored: string;
   }>;
+  storedResultFailure: string;
   chat: string;
   chatAbout: string;
   edit: string;
@@ -133,6 +134,7 @@ export function AutomationCard({
   const nextRun = automation.nextRunAt
     ? `${copy.next}: ${new Date(automation.nextRunAt).toLocaleString(locale)}`
     : copy.noNext;
+  const notice = automationCardNotice(automation, copy.storedResultFailure);
 
   return (
     <View accessibilityLabel={automation.title} style={styles.card}>
@@ -152,8 +154,8 @@ export function AutomationCard({
         <Text style={styles.muted}>{copy.result[automation.resultStatus]}</Text>
       ) : null}
 
-      {automation.notice ? (
-        <Text accessibilityRole="alert" style={styles.notice}>{automation.notice}</Text>
+      {notice ? (
+        <Text accessibilityRole="alert" style={styles.notice}>{notice}</Text>
       ) : null}
 
       {/* Chat and Edit only open a conversation about this automation, so a
