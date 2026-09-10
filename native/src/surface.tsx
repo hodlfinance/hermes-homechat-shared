@@ -264,6 +264,7 @@ import {
   mobileQueuedFollowUpBlocksComposer,
   mobileQueuedFollowUpNoticeActionState,
   mobileQueuedFollowUpNoticeVisible,
+  mobileQueuedFollowUpShouldEnterTranscript,
   mobileQueuedFollowUpTerminalStatus,
   mobileFailedMessageHasCompleted,
   mobileFailedMessageRetryKey,
@@ -5012,7 +5013,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       onState: (state) => {
         if (!shouldAcceptUpdates()) return;
         const runId = currentRunId;
-        if (ownsVisibleConversation()) {
+        if (reflectLiveProgress && ownsVisibleConversation()) {
           const merged = reconcileMobileRunBoundMessages({
             conversationSessionId: input.conversationSessionId,
             current: messagesStateRef.current,
@@ -5125,6 +5126,18 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     return status === "running" || status === "waiting_for_approval" ? "running" : "queued";
   }
 
+  function promoteQueuedFollowUpToTranscript(queued: MobileQueuedFollowUpRef, run: ChatRun) {
+    if (!mobileQueuedFollowUpShouldEnterTranscript(run)) return;
+    if (queued.conversationSessionId !== activeConversationSessionIdRef.current) return;
+    const merged = reconcileMobileRunBoundMessages({
+      conversationSessionId: queued.conversationSessionId,
+      current: messagesStateRef.current,
+      incoming: run.messages,
+    });
+    messagesStateRef.current = merged;
+    setMessages(merged);
+  }
+
   async function finishQueuedFollowUp(queued: MobileQueuedFollowUpRef) {
     try {
       const finalState = await queued.session.waitForBackgroundFollow();
@@ -5136,12 +5149,26 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         phase: finalState.phase,
       });
       if (outcome === "completed") {
+        // A recovered queue can reach terminal before a running snapshot. Its
+        // live listener deliberately does not project queued messages, so use
+        // the completed controller state before releasing the queue owner.
+        if (queued.conversationSessionId === activeConversationSessionIdRef.current) {
+          const merged = reconcileMobileRunBoundMessages({
+            conversationSessionId: queued.conversationSessionId,
+            current: messagesStateRef.current,
+            incoming: finalState.messages,
+          });
+          messagesStateRef.current = merged;
+          setMessages(merged);
+        }
         if (queued.runId) commitChatRunStatus(queued.runId, "completed");
         setFailedMessage((current) => current?.idempotencyKey === queued.idempotencyKey ? null : current);
         if (appError?.owner === queued.idempotencyKey) setAppError(null);
         removeQueuedFollowUpView(queued.ownershipToken);
         queuedFollowUpOwner.release(queued.ownershipToken);
-        await refresh();
+        // A foreground completion refresh may still contain this queued run.
+        // Do not join that stale read and lose the newly completed transcript.
+        await refresh(true);
         return;
       }
       if (outcome === "cancelled") {
@@ -5191,6 +5218,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         ) return;
         current.status = queuedFollowUpStatusFromRun(snapshotRun.status);
         updateQueuedFollowUp(current, { content: current.content, runId: snapshotRun.id, status: current.status });
+        promoteQueuedFollowUpToTranscript(current, snapshotRun);
       },
       reflectLiveProgress: false,
       runId: run.id,
@@ -5258,6 +5286,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           runId: run.id,
           status: queued.status,
         });
+        promoteQueuedFollowUpToTranscript(queued, run);
       },
       onSnapshot: (run) => {
         const queued = queuedFollowUpRef.current.get(ownershipToken);
@@ -5269,6 +5298,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           runId: run.id,
           status: queued.status,
         });
+        promoteQueuedFollowUpToTranscript(queued, run);
       },
       reflectLiveProgress: false,
       shouldAcceptUpdates: () => queuedFollowUpRef.current.has(ownershipToken),

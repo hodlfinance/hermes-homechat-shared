@@ -339,6 +339,7 @@ export function mobileQueuedFollowUpNoticeVisible(input: {
 }) {
   const { runId, status } = input.queued;
   if (status === "cancelling" || status === "cancelled" || status === "failed") return true;
+  if (status === "running") return false;
   if (runId && runId === input.activeRunId) return false;
   // HPD-386: the card used to wait for the run's terminal status, which the
   // customer never sees. Measured from his session on 2026-08-22: the answer to
@@ -348,6 +349,13 @@ export function mobileQueuedFollowUpNoticeVisible(input: {
   if (runId && input.answerInTranscript) return false;
   if (runId && input.runStatus === "completed") return false;
   return true;
+}
+
+export function mobileQueuedFollowUpShouldEnterTranscript(input: {
+  status: ChatRunStatus;
+  startedAt: string | null;
+}) {
+  return input.startedAt !== null || input.status === "running" || input.status === "waiting_for_approval";
 }
 
 export function mobileQueuedFollowUpNoticeActionState(
