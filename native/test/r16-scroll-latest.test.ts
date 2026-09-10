@@ -21,6 +21,19 @@ test("an upward user scroll reveals the jump-to-latest button immediately", () =
   });
 });
 
+test("the native surface commits scroll intent while the user gesture is still active", () => {
+  assert.match(surface, /const messagesScrollDraggingRef = useRef\(false\);/);
+  assert.match(surface, /onScrollBeginDrag=\{\(\) => \{\s*messagesScrollDraggingRef\.current = true;\s*\}\}/);
+  assert.match(
+    surface,
+    /onScroll=\{\(event\) => \{\s*messagesScrollOffsetRef\.current = event\.nativeEvent\.contentOffset\.y;\s*if \(messagesScrollDraggingRef\.current\) commitMessagesScrollIntent\(event\.nativeEvent\);\s*\}\}/,
+  );
+  assert.match(
+    surface,
+    /onScrollEndDrag=\{\(event\) => \{\s*commitMessagesScrollIntent\(event\.nativeEvent\);\s*messagesScrollDraggingRef\.current = false;\s*\}\}/,
+  );
+});
+
 test("new content preserves reading position while the user is above the threshold", () => {
   assert.deepEqual(mobileScrollIntentAfterContent({ autoFollow: false, showScrollDown: true }), {
     autoFollow: false,

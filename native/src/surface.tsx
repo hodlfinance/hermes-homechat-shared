@@ -1742,6 +1742,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const messagesViewportHeightRef = useRef(0);
   const messagesScrollOffsetRef = useRef(0);
   const mobileScrollIntentRef = useRef(initialMobileScrollIntent);
+  const messagesScrollDraggingRef = useRef(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const preserveMessagesScrollRef = useRef(false);
   // Anchoring the transcript to its first row belongs to one moment only: the
@@ -7353,14 +7354,18 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
               }}
               onScroll={(event) => {
                 messagesScrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+                if (messagesScrollDraggingRef.current) commitMessagesScrollIntent(event.nativeEvent);
               }}
-              // Following the newest message is the customer's decision, and it
-              // is only readable where their gesture comes to rest. Reading it
-              // out of every scroll event counted the app's own scrolling as
-              // stepping away: a freshly opened chat parked itself in the
-              // middle of the conversation because the transcript was still
-              // growing while it scrolled.
-              onScrollEndDrag={(event) => commitMessagesScrollIntent(event.nativeEvent)}
+              // Programmatic scrolling must not count as stepping away, but the
+              // user's intent must be committed before a concurrent content-size
+              // change gets a chance to auto-follow back to the bottom.
+              onScrollBeginDrag={() => {
+                messagesScrollDraggingRef.current = true;
+              }}
+              onScrollEndDrag={(event) => {
+                commitMessagesScrollIntent(event.nativeEvent);
+                messagesScrollDraggingRef.current = false;
+              }}
               onMomentumScrollEnd={(event) => commitMessagesScrollIntent(event.nativeEvent)}
               scrollEventThrottle={16}
               onContentSizeChange={(_width, height) => {
