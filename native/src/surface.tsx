@@ -299,9 +299,11 @@ import {
 import { persistNativeSessionToken, readNativeSessionToken } from "./mobile-session-storage";
 import {
   initialMobileScrollIntent,
+  mobileScrollDistanceFromBottom,
   mobileScrollIntentAfterContent,
   mobileScrollIntentAfterJump,
   mobileScrollIntentAfterScroll,
+  mobileScrollMomentumExpected,
 } from "./mobile-scroll-intent";
 import {
   createMobileHomeChatSingleFlight,
@@ -1742,6 +1744,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const messagesViewportHeightRef = useRef(0);
   const messagesScrollOffsetRef = useRef(0);
   const mobileScrollIntentRef = useRef(initialMobileScrollIntent);
+  const messagesScrollDraggingRef = useRef(false);
+  const messagesScrollMomentumRef = useRef(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const preserveMessagesScrollRef = useRef(false);
   // Anchoring the transcript to its first row belongs to one moment only: the
@@ -5666,12 +5670,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     }
   }
 
-  function commitMessagesScrollIntent(event: NativeScrollEvent) {
+  function commitMessagesScrollIntent(event: NativeScrollEvent, intentOffsetY = event.contentOffset.y) {
     messagesScrollOffsetRef.current = event.contentOffset.y;
-    const distanceFromBottom = Math.max(
-      0,
-      event.contentSize.height - event.contentOffset.y - event.layoutMeasurement.height,
-    );
+    const distanceFromBottom = mobileScrollDistanceFromBottom({
+      contentHeight: event.contentSize.height,
+      offsetY: intentOffsetY,
+      viewportHeight: event.layoutMeasurement.height,
+    });
     const next = mobileScrollIntentAfterScroll(mobileScrollIntentRef.current, distanceFromBottom);
     mobileScrollIntentRef.current = next;
     setShowScrollDown(next.showScrollDown);
@@ -7353,15 +7358,28 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
               }}
               onScroll={(event) => {
                 messagesScrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+                if (messagesScrollDraggingRef.current || messagesScrollMomentumRef.current) commitMessagesScrollIntent(event.nativeEvent);
               }}
-              // Following the newest message is the customer's decision, and it
-              // is only readable where their gesture comes to rest. Reading it
-              // out of every scroll event counted the app's own scrolling as
-              // stepping away: a freshly opened chat parked itself in the
-              // middle of the conversation because the transcript was still
-              // growing while it scrolled.
-              onScrollEndDrag={(event) => commitMessagesScrollIntent(event.nativeEvent)}
-              onMomentumScrollEnd={(event) => commitMessagesScrollIntent(event.nativeEvent)}
+              // Programmatic scrolling must not count as stepping away, but the
+              // user's intent must be committed before a concurrent content-size
+              // change gets a chance to auto-follow back to the bottom.
+              onScrollBeginDrag={() => {
+                messagesScrollDraggingRef.current = true;
+              }}
+              onScrollEndDrag={(event) => {
+                const targetOffsetY = event.nativeEvent.targetContentOffset?.y ?? event.nativeEvent.contentOffset.y;
+                commitMessagesScrollIntent(event.nativeEvent, targetOffsetY);
+                messagesScrollMomentumRef.current = mobileScrollMomentumExpected(
+                  event.nativeEvent.contentOffset.y,
+                  event.nativeEvent.targetContentOffset?.y,
+                  event.nativeEvent.velocity?.y,
+                );
+                messagesScrollDraggingRef.current = false;
+              }}
+              onMomentumScrollEnd={(event) => {
+                if (messagesScrollMomentumRef.current) commitMessagesScrollIntent(event.nativeEvent);
+                messagesScrollMomentumRef.current = false;
+              }}
               scrollEventThrottle={16}
               onContentSizeChange={(_width, height) => {
                 messagesContentHeightRef.current = height;
@@ -7465,7 +7483,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                 accessibilityRole="button"
                 accessibilityLabel={staticUiCopy(appLocale)["Scroll to latest message"]}
               >
-                <ChevronDown size={20} color={palette.accentText} />
+                <ChevronDown size={20} color={palette.surface} />
               </Pressable>
             ) : null}
             <MobileDelegatedTasksIndicator locale={appLocale}
@@ -12595,7 +12613,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: palette.accentStrong,
+    backgroundColor: palette.accent,
     borderColor: palette.accent,
     borderWidth: 1,
     alignItems: "center",
