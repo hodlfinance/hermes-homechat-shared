@@ -1,4 +1,5 @@
 import { scheduledRunFailure } from "./scheduled-view";
+import type { ChatRunStatus } from "./types";
 
 export const rankedTaskAutomationRoles = ["email_scanner", "ranker"] as const;
 export type RankedTaskAutomationRole = (typeof rankedTaskAutomationRoles)[number];
@@ -253,6 +254,26 @@ export interface ManagedAutomationVersion {
  */
 export type RankedTaskAutomationStall = "ai_route" | "failing" | "missing" | "not_storing";
 
+export type RankedTaskAutomationResultStatus = "never" | "pending" | "stored" | "failed" | "not_stored";
+
+export interface RankedTaskAutomationEvidence {
+  readonly nativeExecution: Readonly<{
+    readonly executionId: string | null;
+    readonly occurredAt: string;
+    readonly status: string | null;
+  }> | null;
+  readonly canonicalRun: Readonly<{
+    readonly runId: string;
+    readonly executionId: string;
+    readonly status: ChatRunStatus;
+    readonly completedAt: string | null;
+  }> | null;
+  readonly persistedResult: Readonly<{
+    readonly executionId: string;
+    readonly completedAt: string;
+  }> | null;
+}
+
 export interface RankedTaskAutomationView {
   readonly metadata: RankedTaskAutomationMetadata;
   readonly snapshot: ManagedAutomationEditableSnapshot;
@@ -262,7 +283,9 @@ export interface RankedTaskAutomationView {
   readonly nativeState: string | null;
   readonly nextRunAt: string | null;
   readonly lastRunAt: string | null;
-  readonly lastStatus: string | null;
+  /** Only an exact structured scanner/projection write is reported as `stored`. */
+  readonly resultStatus: RankedTaskAutomationResultStatus;
+  readonly evidence: RankedTaskAutomationEvidence;
   /** `null` when there is nothing to say. */
   readonly stalled: RankedTaskAutomationStall | null;
 }

@@ -24,6 +24,13 @@ export type AutomationCardCopy = Readonly<{
   next: string;
   noNext: string;
   delivery: string;
+  result: Readonly<{
+    never: string;
+    pending: string;
+    stored: string;
+    failed: string;
+    not_stored: string;
+  }>;
   chat: string;
   chatAbout: string;
   edit: string;
@@ -141,6 +148,9 @@ export function AutomationCard({
       <Text style={styles.muted}>
         {[nextRun, automation.delivery ? `${copy.delivery}: ${automation.delivery}` : null].filter(Boolean).join(" · ")}
       </Text>
+      {automation.resultStatus ? (
+        <Text style={styles.muted}>{copy.result[automation.resultStatus]}</Text>
+      ) : null}
 
       {automation.notice ? (
         <Text accessibilityRole="alert" style={styles.notice}>{automation.notice}</Text>

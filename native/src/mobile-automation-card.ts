@@ -2,6 +2,7 @@ import { scheduledRhythm, type AppLocale, type HermesAutomationJob, type Schedul
 import {
   rankedTaskAutomationLabels,
   type RankedTaskAutomationRole,
+  type RankedTaskAutomationResultStatus,
   type RankedTaskAutomationView,
 } from "../core/ranked-task-automations";
 
@@ -54,6 +55,8 @@ export type AutomationCardModel = Readonly<{
   reinstallable: boolean;
   /** One sentence about why this automation is not doing its work. */
   notice: string | null;
+  /** Structured result truth for shipped scanner/ranker jobs; custom jobs have no such result contract. */
+  resultStatus: RankedTaskAutomationResultStatus | null;
   versions: readonly AutomationCardVersion[];
   /** Set for a shipped automation; the role its mutations are addressed to. */
   role: RankedTaskAutomationRole | null;
@@ -78,6 +81,7 @@ export function automationCardFromJob(job: HermesAutomationJob): AutomationCardM
     deletable: true,
     reinstallable: false,
     notice: null,
+    resultStatus: null,
     versions: [],
     role: null,
     jobId: job.id,
@@ -99,6 +103,7 @@ export function automationCardFromManaged(automation: RankedTaskAutomationView):
     deletable: false,
     reinstallable: automation.stalled === "missing",
     notice: automation.stalled ? rankedTaskAutomationLabels.stalled[automation.stalled] : null,
+    resultStatus: automation.resultStatus,
     versions: automation.versions.map((version) => ({
       version: version.version,
       reason: version.reason,
