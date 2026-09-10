@@ -1,11 +1,12 @@
 import type { ComponentType, ReactNode } from "react";
-import type { ColorValue, ImageSourcePropType, StyleProp, ViewStyle } from "react-native";
+import type { ImageSourcePropType, StyleProp, ViewStyle } from "react-native";
 import type { createApiClient, ApiClientOptions, AppLocale, ChatLatencySummary, FirstConversationSnapshot } from "./core/index";
 import type { GuidedSetupState, GuidedSetupConnectionId, GuidedSetupConnectionChoice } from "./core/guided-setup";
 import type { createSupportRequestClient, createAnonymousSupportRequestClient } from "./core/support-request";
 import type { createNativeR8CanonicalController } from "./src/hermes-canonical";
 import type { MobilePurchasesController } from "./src/revenuecat-purchases";
 import type { NativeSessionSecureStore } from "./src/mobile-session-storage";
+import type { MobilePalette } from "./src/mobile-palette";
 
 export type NativeAudioStatus = {
   playing: boolean; didJustFinish: boolean; isBuffering: boolean; currentTime: number;
@@ -125,7 +126,7 @@ export type NativeR8Host = {
     gmailRedirectUri?: string;
     copy: { productName: string; tagline: string; trialCta: string; provisioningTitle: string; chatPlaceholder: string };
   };
-  theme?: Record<string, ColorValue>;
+  theme?: Partial<MobilePalette>;
   presentation?: {
     openingMode?: "brand" | "chat";
     openingStatus?: string;
