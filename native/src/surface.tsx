@@ -165,7 +165,8 @@ import {
   type PluginChatFallbackProvider,
 } from "../core/plugin-chat-fallback";
 import { chatTranscriptScrollDecision } from "../ui/index";
-import { palette as defaultPalette } from "./mobile-palette";
+import { palette as defaultPalette, type MobilePalette } from "./mobile-palette";
+import { MobilePaletteProvider } from "./mobile-palette-context";
 import { connectionRows } from "../core/connections-view";
 import { googleConsentUrl } from "../core/google-consent";
 import {
@@ -454,7 +455,7 @@ export function createNativeR8Surface(host: NativeR8Host) {
     useAudioRecorder, useAudioRecorderState, FileSystem } = host.platform;
   const brandIcon = host.identity.icon;
   const appCopy = host.identity.copy;
-  const palette = { ...defaultPalette, ...host.theme };
+  const palette = { ...defaultPalette, ...host.theme } as MobilePalette;
   const createApiClient = host.transport.createApiClient;
   const createMobileHermesCanonicalClient = host.transport.createCanonicalClient;
   const createSupportRequestClient = host.transport.createSupportClient;
@@ -1461,7 +1462,24 @@ function diagnosticsText(entries: MobileLogEntry[], snapshot: AppSnapshot | null
   return [...header, "", ...lines].join("\n");
 }
 
-function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraft?: string; navigationRequest?: { conversationId: string; requestId: string; onAccepted?: ((id: string) => void) | null } } = {}) {
+type NativeR8SurfaceProps = {
+  initialDraft?: string;
+  navigationRequest?: {
+    conversationId: string;
+    requestId: string;
+    onAccepted?: ((id: string) => void) | null;
+  };
+};
+
+function NativeR8Surface(props: NativeR8SurfaceProps = {}) {
+  return (
+    <MobilePaletteProvider value={palette}>
+      <NativeR8SurfaceBody {...props} />
+    </MobilePaletteProvider>
+  );
+}
+
+function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8SurfaceProps = {}) {
   const systemColorScheme = useColorScheme();
   const reduceMotion = useReduceMotion();
   const [token, setToken] = useState<string | null>(null);
@@ -6613,45 +6631,46 @@ function NativeR8Surface({ initialDraft = "", navigationRequest }: { initialDraf
         <View style={styles.mobileAppBarSpacer} />
       </View>
       {menuOpen ? (
-        <View style={styles.mobileMenuLayer} pointerEvents="box-none">
-          <Pressable style={styles.mobileMenuBackdrop} onPress={() => setMenuOpen(false)} accessibilityRole="button" accessibilityLabel={t.nav.closeMenu} />
-          <View style={[styles.mobileDrawer, { paddingTop: Platform.OS === "ios" ? Math.max(Constants.statusBarHeight ?? 0, 20) + 8 : 10, paddingBottom: Platform.OS === "ios" ? 18 : 10 }]}>
-            <View style={styles.mobileDrawerHeader}>
-              <LogoMark />
-              <View style={styles.flexOne}>
-                <Text style={styles.brand}>{appCopy.productName}</Text>
-              </View>
-              <Pressable style={styles.headerIconButton} onPress={() => setMenuOpen(false)} accessibilityRole="button" accessibilityLabel={t.nav.closeMenu}>
-                <X size={18} color={palette.ink} />
-              </Pressable>
-            </View>
-            <ScrollView style={styles.mobileDrawerNav} contentContainerStyle={styles.mobileDrawerNavInner}>
-              <MobileSystemRow
-                accessibilityState={{ selected: tab === "chat" }}
-                icon={<MessageSquare size={18} color={tab === "chat" ? palette.teal : palette.text} />}
-                label={t.nav.chat}
-                onPress={() => selectMobileScreen("chat")}
-              />
-              <MobileSystemRow
-                accessibilityState={{ selected: tab === "automations" }}
-                icon={<CalendarClock size={18} color={tab === "automations" ? palette.teal : palette.text} />}
-                label={t.nav.automations}
-                onPress={() => selectMobileScreen("automations")}
-              />
-              <MobileSystemRow
-                accessibilityState={{ selected: tab === "ai_access" }}
-                icon={<Bot size={18} color={tab === "ai_access" ? palette.teal : palette.text} />}
-                label={t.nav.aiAccess}
-                onPress={() => selectMobileScreen("ai_access")}
-              />
-              <MobileSystemRow
-                icon={<ExternalLink size={18} color={palette.text} />}
-                label={t.nav.dashboard}
-                onPress={() => void openNativeHermesDashboard()}
-              />
-            </ScrollView>
-          </View>
-        </View>
+        <MobileNavigationDrawer
+          t={t}
+          email=""
+          plan=""
+          tab={tab}
+          isOwner={false}
+          isHomeChatActive={tab === "chat"}
+          bookmarks={[]}
+          onRemoveBookmark={archiveNavigationEntry}
+          onNewPage={() => void openPageEntry()}
+          chatSessions={chatSessions}
+          activeSessionId={activeConversationSessionId}
+          chatSessionsOpen={chatSessionsOpen}
+          chatSessionsBusy={chatSessionsBusy}
+          chatSessionNotice={chatSessionNotice}
+          onClose={() => setMenuOpen(false)}
+          onOpenHome={() => void openMobileHomeChat()}
+          onStartNew={() => void startNewMobileChat()}
+          onToggleRecents={() => setChatSessionsOpen((current) => !current)}
+          onOpenSession={loadMobileChatSession}
+          onOpenBookmark={(href) => {
+            setMenuOpen(false);
+            void openBookmark(href);
+          }}
+          appLocale={appLocale}
+          onLocaleChange={updatePreferredLocale}
+          appearancePreference={appearancePreference}
+          onAppearanceChange={updateAppearancePreference}
+          onOpenTasks={() => selectMobileScreen("tasks")}
+          showConnectGmail={false}
+          onConnectGmail={() => undefined}
+          onOpenAutomations={() => selectMobileScreen("automations")}
+          onOpenAiAccess={() => selectMobileScreen("ai_access")}
+          onOpenConnections={() => selectMobileScreen("connections_customer")}
+          onOpenAccount={() => selectMobileScreen("account")}
+          onOpenSupport={() => selectMobileScreen("support")}
+          onOpenPrivacy={() => setMenuOpen(false)}
+          onOpenDashboard={openNativeHermesDashboard}
+          onLogout={() => void logout()}
+        />
       ) : null}
       <View style={styles.externalOpeningBody} accessibilityLiveRegion="polite">
         {isRefreshing ? <ActivityIndicator color={palette.teal} /> : null}

@@ -11,7 +11,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { palette } from "./mobile-palette";
+import { useMobilePalette } from "./mobile-palette-context";
 
 export const mobileSystemSurfaceMetrics = Object.freeze({
   columnGap: 12,
@@ -28,6 +28,7 @@ export type MobileSystemScreenProps = Readonly<{
 }>;
 
 export function MobileSystemScreen({ children, contentContainerStyle, testID }: MobileSystemScreenProps) {
+  const palette = useMobilePalette();
   return (
     <ScrollView
       style={[styles.screen, { backgroundColor: palette.pageBg }]}
@@ -55,6 +56,7 @@ export function MobileSystemSection({
   testID,
   title,
 }: MobileSystemSectionProps) {
+  const palette = useMobilePalette();
   return (
     <View style={styles.section} accessibilityLabel={accessibilityLabel} testID={testID}>
       {title ? (
@@ -109,6 +111,7 @@ export function MobileSystemRow({
   testID,
   trailing,
 }: MobileSystemRowProps) {
+  const palette = useMobilePalette();
   const selected = accessibilityState?.selected === true;
   const showIconColumn = Boolean(icon) || reserveIconSpace;
   const rowDisabled = disabled || pending;
@@ -130,7 +133,11 @@ export function MobileSystemRow({
         accessibilityState={resolvedAccessibilityState}
         disabled={rowDisabled}
         onPress={onPress}
-        style={({ pressed }) => [styles.row, selected && styles.rowSelected, pressed && styles.rowPressed]}
+        style={({ pressed }) => [
+          styles.row,
+          selected && { backgroundColor: palette.tealSoft },
+          pressed && { backgroundColor: palette.tealSoft },
+        ]}
       >
         {showIconColumn ? (
           <View
@@ -216,12 +223,6 @@ const styles = StyleSheet.create({
     minHeight: mobileSystemSurfaceMetrics.minimumTouchTarget,
     paddingHorizontal: mobileSystemSurfaceMetrics.horizontalInset,
     paddingVertical: 12,
-  },
-  rowPressed: {
-    backgroundColor: palette.tealSoft,
-  },
-  rowSelected: {
-    backgroundColor: palette.tealSoft,
   },
   iconColumn: {
     alignItems: "center",
