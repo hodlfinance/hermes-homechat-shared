@@ -10,7 +10,9 @@ const opening = source.slice(
 
 test("the native chat menu stays available while the external runtime is connecting", () => {
   assert.match(opening, /onPress=\{\(\) => setMenuOpen\(true\)\}/);
-  assert.doesNotMatch(opening, /accessibilityState=\{\{ disabled: true \}\}/);
+  const menuButton = opening.slice(opening.indexOf("<Pressable"), opening.indexOf("</Pressable>") + "</Pressable>".length);
+  assert.doesNotMatch(menuButton, /disabled/);
+  assert.match(opening, /accessibilityState=\{\{ disabled: true \}\}/);
   assert.match(opening, /<MobileNavigationDrawer/);
   assert.match(opening, /onNewPage=\{/);
   assert.match(opening, /onOpenAutomations=\{/);
