@@ -49,6 +49,10 @@ test("an open status stream promotes a saved follow-up exactly once without wait
     transport: {
       getRun: async () => { throw new Error("No polling before terminal"); },
       streamRun: async (_id, context) => {
+        await context.onEvent({ type: "run.status", runId: queued.id, payload: {} });
+        await context.onEvent({ type: "run.status", runId: queued.id, payload: { action: "chat.tool_exposure" } });
+        assert.deepEqual(visible, []);
+        assert.equal(promotions, 0);
         await context.onEvent({ type: "run.status", runId: queued.id, payload: { status: "running" } });
         await context.onEvent({ type: "run.status", runId: queued.id, payload: { status: "running" } });
         observed();
@@ -59,7 +63,7 @@ test("an open status stream promotes a saved follow-up exactly once without wait
     onSnapshot: (run: typeof queued) => { snapshot = run; },
     onEvent: (event) => {
       if (event.type !== "run.status") return;
-      const adopted = mobileQueuedFollowUpSnapshotAfterStatus(snapshot, event.runId!, event.state as ChatRunStatus);
+      const adopted = mobileQueuedFollowUpSnapshotAfterStatus(snapshot, event.runId!, event.payload.status as ChatRunStatus);
       if (!adopted) return;
       snapshot = adopted;
       promotions += 1;

@@ -5133,9 +5133,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           commitChatRunStatus(legacy.runId, terminalStatus);
           closeLivePresentation();
         } else if (legacy.type === "status") {
-          const status = String(legacy.payload.status || "running");
-          if (isChatRunStatus(status)) {
-            const takeover = !terminalObserved && legacy.payload.status === status
+          // Canonical normalization defaults diagnostic/malformed statuses to
+          // running. Only the original gateway payload can prove takeover.
+          const status = event.payload.status;
+          if (typeof status === "string" && isChatRunStatus(status)) {
+            const takeover = !terminalObserved
               ? mobileQueuedFollowUpSnapshotAfterStatus(latestRunSnapshot, legacy.runId, status)
               : null;
             if (takeover) {
