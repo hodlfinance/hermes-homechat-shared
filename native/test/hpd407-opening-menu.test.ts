@@ -21,11 +21,13 @@ test("the native chat menu stays available while the external runtime is connect
   assert.doesNotMatch(opening, /<MobileSystemRow/);
 });
 
-test("the connecting drawer keeps local controls live and disables runtime destinations", () => {
-  assert.match(opening, /onOpenHome=\{\(\) => \{\s*setMenuOpen\(false\);\s*setTab\("chat"\);\s*\}\}/s);
+test("the connecting drawer keeps navigation live while runtime actions stay fail closed", () => {
+  assert.match(opening, /onOpenHome=\{\(\) => \{\s*setMenuOpen\(false\);\s*setOpeningDestinationTitle\(null\);\s*setTab\("chat"\);\s*\}\}/s);
   assert.match(opening, /onLocaleChange=\{setAppLocale\}/);
-  assert.match(opening, /runtimeAvailable=\{false\}/);
-  assert.match(source, /disabled=\{!runtimeAvailable\}/);
-  assert.match(source, /const disabled = !runtimeAvailable;/);
-  assert.match(source, /accessibilityState=\{\{ disabled, selected: active \}\}/);
+  assert.doesNotMatch(source, /runtimeAvailable/);
+  assert.match(opening, /onNewPage=\{\(\) => \{\s*setMenuOpen\(false\);\s*setOpeningDestinationTitle/s);
+  assert.match(opening, /onOpenDashboard=\{\(\) => \{\s*setMenuOpen\(false\);\s*setOpeningDestinationTitle/s);
+  assert.match(opening, /openingDestinationTitle \|\| tab !== "chat"/);
+  assert.match(opening, /mobileScreenTitle\(tab, settingsSection, t\)/);
+  assert.match(opening, /sessionFailureCopy\?\.body \|\| message/);
 });
