@@ -265,6 +265,7 @@ import {
   mobileQueuedFollowUpNoticeActionState,
   mobileQueuedFollowUpNoticeVisible,
   mobileQueuedFollowUpShouldEnterTranscript,
+  mobileQueuedFollowUpSnapshotAfterStatus,
   mobileQueuedFollowUpTerminalStatus,
   mobileFailedMessageHasCompleted,
   mobileFailedMessageRetryKey,
@@ -4982,6 +4983,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     shouldAcceptUpdates?: () => boolean;
   }) {
     let currentRunId = input.runId ?? null;
+    let latestRunSnapshot: ChatRun | null = null;
     let terminalObserved = false;
     const startedAt = input.startedAt ?? Date.now();
     const reflectLiveProgress = input.reflectLiveProgress !== false;
@@ -5018,6 +5020,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       onRunCreated: (run) => {
         if (!shouldAcceptUpdates()) return;
         currentRunId = run.id;
+        latestRunSnapshot = run;
         const adoptCreatedConversation = input.conversationSessionId === null && ownsLivePresentation();
         input.conversationSessionId = run.conversationSessionId ?? input.conversationSessionId;
         input.onRunCreated?.(run);
@@ -5060,6 +5063,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         if (!terminalUpdateContinuation.accept(run.id, shouldAcceptUpdates())) return;
         const expectedRunId = currentRunId;
         currentRunId = run.id;
+        latestRunSnapshot = run;
         input.onSnapshot?.(run);
         commitChatRunStatus(run.id, run.status);
         setChatEventsByRunId((current) => mergeChatRunEvents(current, run.id, run.events));
@@ -5125,11 +5129,21 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         }
         const terminalStatus = mobileRunStatusFromTerminalEvent(legacy);
         if (terminalStatus) {
+          if (latestRunSnapshot?.id === legacy.runId) latestRunSnapshot = { ...latestRunSnapshot, status: terminalStatus };
           commitChatRunStatus(legacy.runId, terminalStatus);
           closeLivePresentation();
         } else if (legacy.type === "status") {
-          const status = String(legacy.payload.status || "running");
-          if (isChatRunStatus(status)) {
+          // Canonical normalization defaults diagnostic/malformed statuses to
+          // running. Only the original gateway payload can prove takeover.
+          const status = event.payload.status;
+          if (typeof status === "string" && isChatRunStatus(status)) {
+            const takeover = !terminalObserved
+              ? mobileQueuedFollowUpSnapshotAfterStatus(latestRunSnapshot, legacy.runId, status)
+              : null;
+            if (takeover) {
+              latestRunSnapshot = takeover;
+              input.onSnapshot?.(takeover);
+            }
             commitChatRunStatus(legacy.runId, status);
           }
         }

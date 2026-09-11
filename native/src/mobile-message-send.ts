@@ -340,6 +340,7 @@ export function mobileQueuedFollowUpNoticeVisible(input: {
   const { runId, status } = input.queued;
   if (status === "cancelling" || status === "cancelled" || status === "failed") return true;
   if (status === "running") return false;
+  if (runId && (input.runStatus === "running" || input.runStatus === "waiting_for_approval")) return false;
   if (runId && runId === input.activeRunId) return false;
   // HPD-386: the card used to wait for the run's terminal status, which the
   // customer never sees. Measured from his session on 2026-08-22: the answer to
@@ -356,6 +357,17 @@ export function mobileQueuedFollowUpShouldEnterTranscript(input: {
   startedAt?: string | null;
 }) {
   return input.startedAt != null || input.status === "running" || input.status === "waiting_for_approval";
+}
+
+/** A confirmed takeover event promotes the already saved canonical messages. */
+export function mobileQueuedFollowUpSnapshotAfterStatus<Run extends { id: string; status: ChatRunStatus }>(
+  snapshot: Run | null,
+  runId: string,
+  status: ChatRunStatus,
+): Run | null {
+  if (!snapshot || snapshot.id !== runId || snapshot.status !== "queued") return null;
+  if (status !== "running" && status !== "waiting_for_approval") return null;
+  return { ...snapshot, status };
 }
 
 export function mobileQueuedFollowUpNoticeActionState(
