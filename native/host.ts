@@ -128,6 +128,7 @@ export type NativeR8Host = {
   };
   theme?: Partial<MobilePalette>;
   presentation?: {
+    centerChatTitle?: boolean;
     chatTitle?: string;
     hideChatSubtitle?: boolean;
     hideDrawerPreferences?: boolean;

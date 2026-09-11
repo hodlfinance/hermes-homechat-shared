@@ -35,6 +35,7 @@ test("the full drawer keeps the two HODL default-feature exclusions", () => {
 });
 
 test("an external host can use the shared Home Chat without app-owned preferences or auth chrome", () => {
+  assert.match(surface, /host\.presentation\?\.centerChatTitle/);
   assert.match(surface, /host\.presentation\?\.chatTitle/);
   assert.match(surface, /host\.presentation\?\.hideChatSubtitle/);
   assert.match(surface, /host\.presentation\?\.hideDrawerPreferences/);
