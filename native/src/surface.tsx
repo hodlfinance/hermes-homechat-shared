@@ -1646,6 +1646,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [chatSessionsOpen, setChatSessionsOpen] = useState(false);
   const [chatSessionsBusy, setChatSessionsBusy] = useState(false);
   const [chatSessionNotice, setChatSessionNotice] = useState<string | null>(null);
+  const [openingDestinationTitle, setOpeningDestinationTitle] = useState<string | null>(null);
   // Sub threads the customer has closed. They stay closed for this session; the
   // server list is unchanged, so nothing is destroyed by putting one away.
   const [dismissedDelegatedTaskIds, setDismissedDelegatedTaskIds] = useState<readonly string[]>([]);
@@ -3230,6 +3231,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   ) {
     stopReadAloud();
     setMenuOpen(false);
+    setOpeningDestinationTitle(null);
     setTab(nextTab);
     setSettingsSection(nextSettingsSection);
     setPluginCatalogManagementTarget(nextPluginCatalogManagementTarget);
@@ -6652,7 +6654,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           isHomeChatActive={tab === "chat"}
           bookmarks={[]}
           onRemoveBookmark={archiveNavigationEntry}
-          onNewPage={() => void openPageEntry()}
+          onNewPage={() => {
+            setMenuOpen(false);
+            setOpeningDestinationTitle(pageStarterCopy(appLocale).label);
+          }}
           chatSessions={chatSessions}
           activeSessionId={activeConversationSessionId}
           chatSessionsOpen={chatSessionsOpen}
@@ -6661,9 +6666,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           onClose={() => setMenuOpen(false)}
           onOpenHome={() => {
             setMenuOpen(false);
+            setOpeningDestinationTitle(null);
             setTab("chat");
           }}
-          onStartNew={() => void startNewMobileChat()}
+          onStartNew={() => {
+            setMenuOpen(false);
+            setOpeningDestinationTitle(t.nav.chat);
+          }}
           onToggleRecents={() => setChatSessionsOpen((current) => !current)}
           onOpenSession={loadMobileChatSession}
           onOpenBookmark={(href) => {
@@ -6674,7 +6683,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           onLocaleChange={setAppLocale}
           appearancePreference={appearancePreference}
           onAppearanceChange={updateAppearancePreference}
-          runtimeAvailable={false}
           onOpenTasks={() => selectMobileScreen("tasks")}
           showConnectGmail={false}
           onConnectGmail={() => undefined}
@@ -6683,13 +6691,37 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           onOpenConnections={() => selectMobileScreen("connections_customer")}
           onOpenAccount={() => selectMobileScreen("account")}
           onOpenSupport={() => selectMobileScreen("support")}
-          onOpenPrivacy={() => setMenuOpen(false)}
-          onOpenDashboard={openNativeHermesDashboard}
+          onOpenPrivacy={() => {
+            setMenuOpen(false);
+            setOpeningDestinationTitle(workspacePrivacyCopy(appLocale).title);
+          }}
+          onOpenDashboard={() => {
+            setMenuOpen(false);
+            setOpeningDestinationTitle(t.nav.dashboard);
+          }}
           onLogout={() => void logout()}
         />
       ) : null}
       <View style={styles.externalOpeningBody} accessibilityLiveRegion="polite">
-        {retry ? (
+        {openingDestinationTitle || tab !== "chat" ? (
+          <View style={styles.openingActivityTrail}>
+            <Text style={styles.chatHeaderTitle}>{openingDestinationTitle || mobileScreenTitle(tab, settingsSection, t)}</Text>
+            <Text style={styles.muted}>
+              {retry ? sessionFailureCopy?.body || message : message}
+            </Text>
+            <Pressable
+              style={styles.secondaryButtonWide}
+              onPress={() => {
+                setDismissedAppErrorKey(null);
+                void refresh();
+              }}
+              accessibilityRole="button"
+            >
+              <RefreshCcw size={16} color={palette.ink} />
+              <Text style={styles.secondaryButtonText}>{t.systemPages.dashboard.retry}</Text>
+            </Pressable>
+          </View>
+        ) : retry ? (
           <FailedMessageNotice
             text={sessionFailureCopy?.body || message}
             stage="session"
@@ -8587,7 +8619,6 @@ function MobileNavigationDrawer({
   onLocaleChange,
   appearancePreference,
   onAppearanceChange,
-  runtimeAvailable = true,
   onClose,
   onOpenHome,
   onStartNew,
@@ -8624,7 +8655,6 @@ function MobileNavigationDrawer({
   onLocaleChange: (locale: AppLocale) => void;
   appearancePreference: AppearancePreference;
   onAppearanceChange: (preference: AppearancePreference) => void;
-  runtimeAvailable?: boolean;
   onClose: () => void;
   onOpenHome: () => void;
   onStartNew: () => void;
@@ -8715,8 +8745,7 @@ function MobileNavigationDrawer({
           ))}
 
           <MobileSystemRow
-            disabled={!runtimeAvailable}
-            icon={<Plus size={18} color={runtimeAvailable ? palette.text : palette.muted} />}
+            icon={<Plus size={18} color={palette.text} />}
             label={pageStarterCopy(appLocale).label}
             onPress={onNewPage}
             separator={false}
@@ -8784,22 +8813,20 @@ function MobileNavigationDrawer({
                         : item.id === "support"
                           ? tab === "support"
                           : false;
-                const disabled = !runtimeAvailable;
                 const Icon = item.id === "ai_access" ? Bot : item.id === "connections" ? PlugZap : item.id === "automations" ? CalendarClock : item.id === "account" ? UserPlus : item.id === "support" ? MessageSquare : item.id === "privacy" ? LockKeyhole : item.id === "dashboard" ? ExternalLink : LogOut;
                 const label = item.id === "ai_access" ? t.nav.aiAccess : item.id === "connections" ? t.nav.plugins : item.id === "automations" ? t.nav.automations : item.id === "account" ? t.nav.account : item.id === "support" ? t.nav.support : item.id === "privacy" ? workspacePrivacyCopy(appLocale).title : item.id === "dashboard" ? t.nav.dashboard : t.nav.signOut;
                 const onPress = item.id === "ai_access" ? onOpenAiAccess : item.id === "connections" ? onOpenConnections : item.id === "automations" ? onOpenAutomations : item.id === "account" ? onOpenAccount : item.id === "support" ? onOpenSupport : item.id === "privacy" ? onOpenPrivacy : item.id === "dashboard" ? onOpenDashboard : onLogout;
                 return (
                   <Pressable
                     key={item.id}
-                    disabled={disabled}
-                    style={({ pressed }) => [styles.mobileDrawerAccountMenuRow, active && styles.mobileDrawerAccountMenuRowSelected, disabled && styles.mobileDrawerAccountMenuRowDisabled, pressed && styles.systemRowPressed]}
+                    style={({ pressed }) => [styles.mobileDrawerAccountMenuRow, active && styles.mobileDrawerAccountMenuRowSelected, pressed && styles.systemRowPressed]}
                     onPress={onPress}
                     accessibilityRole="button"
                     accessibilityLabel={label}
-                    accessibilityState={{ disabled, selected: active }}
+                    accessibilityState={{ selected: active }}
                   >
-                    <Icon size={18} color={disabled ? palette.muted : active ? palette.teal : palette.ink} />
-                    <Text style={[styles.mobileDrawerAccountMenuText, disabled && styles.mobileDrawerAccountMenuTextDisabled]}>{label}</Text>
+                    <Icon size={18} color={active ? palette.teal : palette.ink} />
+                    <Text style={styles.mobileDrawerAccountMenuText}>{label}</Text>
                   </Pressable>
                 );
               })}
