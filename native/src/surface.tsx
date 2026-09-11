@@ -6628,7 +6628,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         >
           <Menu size={22} color={palette.ink} />
         </Pressable>
-        <View style={styles.mobileAppBarTitle}>
+        <View style={[styles.mobileAppBarTitle, host.presentation?.centerChatTitle && styles.mobileAppBarTitleCentered]}>
           <Text style={styles.chatHeaderTitle}>{presentedChatTitle}</Text>
           {showPresentedChatSubtitle ? <Text style={styles.chatHeaderSubtitle} numberOfLines={1}>{appCopy.productName}</Text> : null}
         </View>
@@ -7132,7 +7132,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
             <Menu size={22} color={palette.ink} />
           </Pressable>
         )}
-        <View style={styles.mobileAppBarTitle}>
+        <View style={[
+          styles.mobileAppBarTitle,
+          activeSubthreadHeader.kind !== "subthread" && tab === "chat" && host.presentation?.centerChatTitle && styles.mobileAppBarTitleCentered,
+        ]}>
           {activeSubthreadHeader.kind === "subthread" ? (
             <Text style={styles.subthreadHeaderTitle} numberOfLines={1}>{activeSubthreadHeader.label}</Text>
           ) : (
@@ -11445,6 +11448,9 @@ const styles = StyleSheet.create({
   mobileAppBarTitle: {
     flex: 1,
     minWidth: 0,
+  },
+  mobileAppBarTitleCentered: {
+    alignItems: "center",
   },
   mobileMenuButton: {
     width: 44,
