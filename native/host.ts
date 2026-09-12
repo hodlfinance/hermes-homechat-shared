@@ -122,14 +122,25 @@ export type NativeR8Host = {
   apiBaseUrl: string;
   storageNamespace: string;
   identity: {
-    icon: ImageSourcePropType;
+    icon?: ImageSourcePropType;
     gmailRedirectUri?: string;
     copy: { productName: string; tagline: string; trialCta: string; provisioningTitle: string; chatPlaceholder: string };
   };
   theme?: Partial<MobilePalette>;
   presentation?: {
+    centerChatTitle?: boolean;
+    chatTitle?: string;
+    hideChatSubtitle?: boolean;
+    hideDrawerPreferences?: boolean;
     openingMode?: "brand" | "chat";
     openingStatus?: string;
+    showAssistantIdentity?: boolean;
+    sessionFailure?: {
+      title: string;
+      body: string;
+      retryLabel: string;
+      dismissLabel: string;
+    };
   };
   session: NativeR8SessionHost;
   policy: { preinstalledRanker: boolean; preinstalledEmailScanner: boolean };

@@ -89,6 +89,7 @@ export type MobileSystemRowProps = Readonly<{
   reserveIconSpace?: boolean;
   separator?: boolean;
   status?: string | null;
+  selectedIndicator?: boolean;
   testID?: string;
   trailing?: ReactNode;
 }>;
@@ -108,6 +109,7 @@ export function MobileSystemRow({
   reserveIconSpace = true,
   separator = true,
   status,
+  selectedIndicator = false,
   testID,
   trailing,
 }: MobileSystemRowProps) {
@@ -139,6 +141,9 @@ export function MobileSystemRow({
           pressed && { backgroundColor: palette.tealSoft },
         ]}
       >
+        {selected && selectedIndicator ? (
+          <View style={[styles.selectedIndicator, { backgroundColor: palette.accent }]} />
+        ) : null}
         {showIconColumn ? (
           <View
             style={styles.iconColumn}
@@ -223,6 +228,13 @@ const styles = StyleSheet.create({
     minHeight: mobileSystemSurfaceMetrics.minimumTouchTarget,
     paddingHorizontal: mobileSystemSurfaceMetrics.horizontalInset,
     paddingVertical: 12,
+  },
+  selectedIndicator: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    top: 0,
+    width: 3,
   },
   iconColumn: {
     alignItems: "center",

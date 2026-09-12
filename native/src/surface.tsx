@@ -458,7 +458,7 @@ export function createNativeR8Surface(host: NativeR8Host) {
     ImagePicker, AppleAuthentication, Google, WebBrowser, createAudioPlayer,
     RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync,
     useAudioRecorder, useAudioRecorderState, FileSystem } = host.platform;
-  const brandIcon = host.identity.icon;
+  const brandIcon = host.identity.icon ?? require("../assets/baby-dragon-neutral.png");
   const appCopy = host.identity.copy;
   const palette = { ...defaultPalette, ...host.theme } as MobilePalette;
   const createApiClient = host.transport.createApiClient;
@@ -1653,6 +1653,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [chatSessionsOpen, setChatSessionsOpen] = useState(false);
   const [chatSessionsBusy, setChatSessionsBusy] = useState(false);
   const [chatSessionNotice, setChatSessionNotice] = useState<string | null>(null);
+  const [openingDestinationTitle, setOpeningDestinationTitle] = useState<string | null>(null);
   // Sub threads the customer has closed. They stay closed for this session; the
   // server list is unchanged, so nothing is destroyed by putting one away.
   const [dismissedDelegatedTaskIds, setDismissedDelegatedTaskIds] = useState<readonly string[]>([]);
@@ -3250,6 +3251,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   ) {
     stopReadAloud();
     setMenuOpen(false);
+    setOpeningDestinationTitle(null);
     setTab(nextTab);
     setSettingsSection(nextSettingsSection);
     setPluginCatalogManagementTarget(nextPluginCatalogManagementTarget);
@@ -6679,6 +6681,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     return () => { active = false; };
   }, [token, snapshot?.workspace.id, navigationRequest?.requestId]);
 
+  const presentedChatTitle = host.presentation?.chatTitle || mobileScreenTitle(tab, settingsSection, t);
+  const showPresentedChatSubtitle = host.presentation?.hideChatSubtitle !== true;
+  const sessionFailureCopy = host.presentation?.sessionFailure;
+
   const renderChatOpening = (message: string, retry = false) => (
     <SafeAreaView style={styles.safe}>
       <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
@@ -6691,11 +6697,19 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         >
           <Menu size={22} color={palette.ink} />
         </Pressable>
-        <View style={styles.mobileAppBarTitle}>
-          <Text style={styles.chatHeaderTitle}>{mobileScreenTitle(tab, settingsSection, t)}</Text>
-          <Text style={styles.chatHeaderSubtitle} numberOfLines={1}>{appCopy.productName}</Text>
+        <View style={[styles.mobileAppBarTitle, host.presentation?.centerChatTitle && styles.mobileAppBarTitleCentered]}>
+          <Text style={styles.chatHeaderTitle}>{presentedChatTitle}</Text>
+          {showPresentedChatSubtitle ? <Text style={styles.chatHeaderSubtitle} numberOfLines={1}>{appCopy.productName}</Text> : null}
         </View>
-        <View style={styles.mobileAppBarSpacer} />
+        <View
+          style={[styles.mobilePrivacyButton, styles.disabledButton]}
+          accessible
+          accessibilityLabel={t.settings.privacy}
+          accessibilityRole="image"
+          accessibilityState={{ disabled: true }}
+        >
+          <Lock size={27} strokeWidth={1.4} color={palette.muted} />
+        </View>
       </View>
       {menuOpen ? (
         <MobileNavigationDrawer
@@ -6707,7 +6721,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           isHomeChatActive={tab === "chat"}
           bookmarks={[]}
           onRemoveBookmark={archiveNavigationEntry}
-          onNewPage={() => void openPageEntry()}
+          onNewPage={() => {
+            setMenuOpen(false);
+            setOpeningDestinationTitle(pageStarterCopy(appLocale).label);
+          }}
           chatSessions={chatSessions}
           activeSessionId={activeConversationSessionId}
           chatSessionsOpen={chatSessionsOpen}
@@ -6716,9 +6733,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           onClose={() => setMenuOpen(false)}
           onOpenHome={() => {
             setMenuOpen(false);
+            setOpeningDestinationTitle(null);
             setTab("chat");
           }}
-          onStartNew={() => void startNewMobileChat()}
+          onStartNew={() => {
+            setMenuOpen(false);
+            setOpeningDestinationTitle(t.nav.chat);
+          }}
           onToggleRecents={() => setChatSessionsOpen((current) => !current)}
           onOpenSession={loadMobileChatSession}
           onOpenBookmark={(href) => {
@@ -6729,7 +6750,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           onLocaleChange={setAppLocale}
           appearancePreference={appearancePreference}
           onAppearanceChange={updateAppearancePreference}
-          runtimeAvailable={false}
           onOpenTasks={() => selectMobileScreen("tasks")}
           showConnectGmail={false}
           onConnectGmail={() => undefined}
@@ -6738,25 +6758,64 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           onOpenConnections={() => selectMobileScreen("connections_customer")}
           onOpenAccount={() => selectMobileScreen("account")}
           onOpenSupport={() => selectMobileScreen("support")}
-          onOpenPrivacy={() => setMenuOpen(false)}
-          onOpenDashboard={openNativeHermesDashboard}
+          onOpenPrivacy={() => {
+            setMenuOpen(false);
+            setOpeningDestinationTitle(workspacePrivacyCopy(appLocale).title);
+          }}
+          onOpenDashboard={() => {
+            setMenuOpen(false);
+            setOpeningDestinationTitle(t.nav.dashboard);
+          }}
           onLogout={() => void logout()}
         />
       ) : null}
       <View style={styles.externalOpeningBody} accessibilityLiveRegion="polite">
-        {isRefreshing ? <ActivityIndicator color={palette.teal} /> : null}
-        <Text style={[styles.externalOpeningMessage, error && styles.externalOpeningError]}>{message}</Text>
-        {retry ? (
-          <Pressable
-            style={[styles.secondaryButtonWide, isRefreshing && styles.disabledButton]}
-            onPress={() => void refresh()}
+        {openingDestinationTitle || tab !== "chat" ? (
+          <View style={styles.openingActivityTrail}>
+            <Text style={styles.chatHeaderTitle}>{openingDestinationTitle || mobileScreenTitle(tab, settingsSection, t)}</Text>
+            <Text style={styles.muted}>
+              {retry ? sessionFailureCopy?.body || message : message}
+            </Text>
+            <Pressable
+              style={styles.secondaryButtonWide}
+              onPress={() => {
+                setDismissedAppErrorKey(null);
+                void refresh();
+              }}
+              accessibilityRole="button"
+            >
+              <RefreshCcw size={16} color={palette.ink} />
+              <Text style={styles.secondaryButtonText}>{t.systemPages.dashboard.retry}</Text>
+            </Pressable>
+          </View>
+        ) : retry ? (
+          <FailedMessageNotice
+            text={sessionFailureCopy?.body || message}
+            stage="session"
+            copy={t.chat}
+            sessionCopy={sessionFailureCopy}
             disabled={isRefreshing}
-            accessibilityRole="button"
-          >
-            <RefreshCcw size={17} color={palette.teal} />
-            <Text style={styles.secondaryButtonText}>{isRefreshing ? staticUiCopy(appLocale)["Checking..."] : staticUiCopy(appLocale)["Retry now"]}</Text>
-          </Pressable>
-        ) : null}
+            onRetry={() => {
+              setDismissedAppErrorKey(null);
+              void refresh();
+            }}
+            onDismiss={dismissAppError}
+          />
+        ) : (
+          <View style={styles.openingActivityTrail}>
+            <MobileWorkingDragon
+              animated={reduceMotion === false}
+              accessibilityLabel={staticUiCopy(appLocale)["Hermes is working"]}
+              size={24}
+            />
+            <MobileStatusShimmerText
+              animated={reduceMotion === false}
+              bandColor={palette.ink}
+              style={styles.openingActivityText}
+              text={message}
+            />
+          </View>
+        )}
       </View>
       {tab === "chat" ? (
         <View style={styles.chatComposerDock}>
@@ -7085,6 +7144,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     messages: pageStarterTranscript(homechatTranscriptMessages(messages, { includeEmpty: true }), pageStarter,
       { workspaceId: snapshot.workspace.id, conversationId: activeConversationSessionId ?? "" }, pageStarterCopy(appLocale).question),
   });
+  const firstVisibleAssistantMessageId = host.presentation?.showAssistantIdentity
+    ? visibleMobileMessages.find((message) => message.role === "assistant")?.id ?? null
+    : null;
   const chatGptPanel = mobileChatGptConnectionCardView({
     dismissedKey: dismissedChatGptPanelKey,
     pendingSessionId: chatGptConnection?.sessionId ?? null,
@@ -7169,17 +7231,22 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
             <Menu size={22} color={palette.ink} />
           </Pressable>
         )}
-        <View style={styles.mobileAppBarTitle}>
+        <View style={[
+          styles.mobileAppBarTitle,
+          activeSubthreadHeader.kind !== "subthread" && tab === "chat" && host.presentation?.centerChatTitle && styles.mobileAppBarTitleCentered,
+        ]}>
           {activeSubthreadHeader.kind === "subthread" ? (
             <Text style={styles.subthreadHeaderTitle} numberOfLines={1}>{activeSubthreadHeader.label}</Text>
           ) : (
-            <Text style={styles.chatHeaderTitle}>{mobileScreenTitle(tab, settingsSection, t)}</Text>
+            <Text style={styles.chatHeaderTitle}>{tab === "chat" ? presentedChatTitle : mobileScreenTitle(tab, settingsSection, t)}</Text>
           )}
-          <Text style={styles.chatHeaderSubtitle} numberOfLines={1}>
-            {activeSubthreadHeader.kind === "subthread"
-              ? activeSubthreadHeader.taskName || activeChatSession?.title || snapshot.me.email
-              : tab === "chat" ? activeChatSession?.title || snapshot.me.email : snapshot.me.email}
-          </Text>
+          {activeSubthreadHeader.kind === "subthread" || tab !== "chat" || showPresentedChatSubtitle ? (
+            <Text style={styles.chatHeaderSubtitle} numberOfLines={1}>
+              {activeSubthreadHeader.kind === "subthread"
+                ? activeSubthreadHeader.taskName || activeChatSession?.title || snapshot.me.email
+                : tab === "chat" ? activeChatSession?.title || snapshot.me.email : snapshot.me.email}
+            </Text>
+          ) : null}
         </View>
         {tab === "chat" ? (
           <Pressable
@@ -7511,6 +7578,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                   )}
                   locale={appLocale}
                   copy={t.chat}
+                  showAssistantIdentity={message.id === firstVisibleAssistantMessageId}
                   onVisibleTextLayout={
                     message.role === "assistant" && message.runId === chatLatencyRef.current?.runId
                       ? recordFirstVisibleMobileToken
@@ -8634,7 +8702,6 @@ function MobileNavigationDrawer({
   onLocaleChange,
   appearancePreference,
   onAppearanceChange,
-  runtimeAvailable = true,
   onClose,
   onOpenHome,
   onStartNew,
@@ -8671,7 +8738,6 @@ function MobileNavigationDrawer({
   onLocaleChange: (locale: AppLocale) => void;
   appearancePreference: AppearancePreference;
   onAppearanceChange: (preference: AppearancePreference) => void;
-  runtimeAvailable?: boolean;
   onClose: () => void;
   onOpenHome: () => void;
   onStartNew: () => void;
@@ -8736,6 +8802,8 @@ function MobileNavigationDrawer({
                 icon={<Icon size={18} color={active ? palette.teal : palette.text} />}
                 label={item.label}
                 onPress={onPress}
+                selectedIndicator
+                separator={false}
               />
             );
           })}
@@ -8760,10 +8828,10 @@ function MobileNavigationDrawer({
           ))}
 
           <MobileSystemRow
-            disabled={!runtimeAvailable}
-            icon={<Plus size={18} color={runtimeAvailable ? palette.text : palette.muted} />}
+            icon={<Plus size={18} color={palette.text} />}
             label={pageStarterCopy(appLocale).label}
             onPress={onNewPage}
+            separator={false}
           />
         </ScrollView>
 
@@ -8772,46 +8840,50 @@ function MobileNavigationDrawer({
         <View style={styles.mobileDrawerAccount}>
           {accountMenuOpen ? (
             <View style={styles.mobileDrawerAccountMenu}>
-              <View style={styles.mobileDrawerLanguagePicker}>
-                <Text style={styles.mobileDrawerLanguageLabel}>{t.settings.language}</Text>
-                <View style={styles.mobileDrawerLanguageButtonRow}>
-                  {mobileLocaleOptions.map((option) => (
-                    <Pressable
-                      key={option.locale}
-                      style={[styles.mobileDrawerLanguageButton, option.locale === appLocale && styles.mobileDrawerLanguageButtonActive]}
-                      onPress={() => onLocaleChange(option.locale)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: option.locale === appLocale }}
-                      accessibilityLabel={option.label}
-                    >
-                      <Text style={[styles.mobileDrawerLanguageButtonText, option.locale === appLocale && styles.mobileDrawerLanguageButtonTextActive]}>
-                        {option.shortLabel}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-              <View style={styles.mobileDrawerAccountMenuDivider} />
-              <View style={styles.mobileDrawerLanguagePicker}>
-                <Text style={styles.mobileDrawerLanguageLabel}>{t.nav.appearance}</Text>
-                <View style={styles.mobileDrawerLanguageButtonRow}>
-                  {(["system", "light", "dark"] as const).map((preference) => (
-                    <Pressable
-                      key={preference}
-                      style={[styles.mobileDrawerLanguageButton, preference === appearancePreference && styles.mobileDrawerLanguageButtonActive]}
-                      onPress={() => onAppearanceChange(preference)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: preference === appearancePreference }}
-                      accessibilityLabel={t.nav[preference]}
-                    >
-                      <Text style={[styles.mobileDrawerLanguageButtonText, preference === appearancePreference && styles.mobileDrawerLanguageButtonTextActive]}>
-                        {t.nav[preference]}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-              <View style={styles.mobileDrawerAccountMenuDivider} />
+              {host.presentation?.hideDrawerPreferences ? null : (
+                <>
+                  <View style={styles.mobileDrawerLanguagePicker}>
+                    <Text style={styles.mobileDrawerLanguageLabel}>{t.settings.language}</Text>
+                    <View style={styles.mobileDrawerLanguageButtonRow}>
+                      {mobileLocaleOptions.map((option) => (
+                        <Pressable
+                          key={option.locale}
+                          style={[styles.mobileDrawerLanguageButton, option.locale === appLocale && styles.mobileDrawerLanguageButtonActive]}
+                          onPress={() => onLocaleChange(option.locale)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: option.locale === appLocale }}
+                          accessibilityLabel={option.label}
+                        >
+                          <Text style={[styles.mobileDrawerLanguageButtonText, option.locale === appLocale && styles.mobileDrawerLanguageButtonTextActive]}>
+                            {option.shortLabel}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={styles.mobileDrawerAccountMenuDivider} />
+                  <View style={styles.mobileDrawerLanguagePicker}>
+                    <Text style={styles.mobileDrawerLanguageLabel}>{t.nav.appearance}</Text>
+                    <View style={styles.mobileDrawerLanguageButtonRow}>
+                      {(["system", "light", "dark"] as const).map((preference) => (
+                        <Pressable
+                          key={preference}
+                          style={[styles.mobileDrawerLanguageButton, preference === appearancePreference && styles.mobileDrawerLanguageButtonActive]}
+                          onPress={() => onAppearanceChange(preference)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: preference === appearancePreference }}
+                          accessibilityLabel={t.nav[preference]}
+                        >
+                          <Text style={[styles.mobileDrawerLanguageButtonText, preference === appearancePreference && styles.mobileDrawerLanguageButtonTextActive]}>
+                            {t.nav[preference]}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={styles.mobileDrawerAccountMenuDivider} />
+                </>
+              )}
               {mobileAccountMenuNavigation.filter((item) => host.session.mode === "standalone" || (item.id !== "account" && !["sign_out", "logout"].includes(item.id))).map((item) => {
                 const active = item.id === "ai_access"
                   ? tab === "ai_access"
@@ -8824,22 +8896,20 @@ function MobileNavigationDrawer({
                         : item.id === "support"
                           ? tab === "support"
                           : false;
-                const disabled = !runtimeAvailable;
                 const Icon = item.id === "ai_access" ? Bot : item.id === "connections" ? PlugZap : item.id === "automations" ? CalendarClock : item.id === "account" ? UserPlus : item.id === "support" ? MessageSquare : item.id === "privacy" ? LockKeyhole : item.id === "dashboard" ? ExternalLink : LogOut;
                 const label = item.id === "ai_access" ? t.nav.aiAccess : item.id === "connections" ? t.nav.plugins : item.id === "automations" ? t.nav.automations : item.id === "account" ? t.nav.account : item.id === "support" ? t.nav.support : item.id === "privacy" ? workspacePrivacyCopy(appLocale).title : item.id === "dashboard" ? t.nav.dashboard : t.nav.signOut;
                 const onPress = item.id === "ai_access" ? onOpenAiAccess : item.id === "connections" ? onOpenConnections : item.id === "automations" ? onOpenAutomations : item.id === "account" ? onOpenAccount : item.id === "support" ? onOpenSupport : item.id === "privacy" ? onOpenPrivacy : item.id === "dashboard" ? onOpenDashboard : onLogout;
                 return (
                   <Pressable
                     key={item.id}
-                    disabled={disabled}
-                    style={({ pressed }) => [styles.mobileDrawerAccountMenuRow, active && styles.mobileDrawerAccountMenuRowSelected, disabled && styles.mobileDrawerAccountMenuRowDisabled, pressed && styles.systemRowPressed]}
+                    style={({ pressed }) => [styles.mobileDrawerAccountMenuRow, active && styles.mobileDrawerAccountMenuRowSelected, pressed && styles.systemRowPressed]}
                     onPress={onPress}
                     accessibilityRole="button"
                     accessibilityLabel={label}
-                    accessibilityState={{ disabled, selected: active }}
+                    accessibilityState={{ selected: active }}
                   >
-                    <Icon size={18} color={disabled ? palette.muted : active ? palette.teal : palette.ink} />
-                    <Text style={[styles.mobileDrawerAccountMenuText, disabled && styles.mobileDrawerAccountMenuTextDisabled]}>{label}</Text>
+                    <Icon size={18} color={active ? palette.teal : palette.ink} />
+                    <Text style={styles.mobileDrawerAccountMenuText}>{label}</Text>
                   </Pressable>
                 );
               })}
@@ -9058,6 +9128,7 @@ function MessageBubble({
   onConfirm,
   locale,
   copy,
+  showAssistantIdentity,
   onVisibleTextLayout,
 }: {
   message: ChatMessage;
@@ -9067,6 +9138,7 @@ function MessageBubble({
   onConfirm: (action: MobileConfirmationAction) => void;
   locale: AppLocale;
   copy: ReturnType<typeof mobileText>["chat"];
+  showAssistantIdentity: boolean;
   onVisibleTextLayout?: () => void;
 }) {
   const isUser = message.role === "user";
@@ -9091,6 +9163,12 @@ function MessageBubble({
     <View
       style={[styles.message, isUser ? styles.userMessage : styles.assistantMessage]}
     >
+      {!isUser && showAssistantIdentity ? (
+        <View style={styles.assistantIdentity}>
+          <Image source={brandIcon} style={styles.assistantIdentityMark as ImageStyle} accessibilityIgnoresInvertColors />
+          <Text style={styles.assistantIdentityLabel}>{appCopy.productName}</Text>
+        </View>
+      ) : null}
       {uploadReferences.length ? (
         <View style={styles.userAttachmentList}>
           {uploadReferences.map((reference) => (
@@ -9427,45 +9505,52 @@ function FailedMessageNotice({
   text,
   stage,
   copy,
+  sessionCopy,
   disabled,
   onRetry,
   onDismiss,
 }: {
   text: string;
-  stage: MobileFailedMessageStage;
+  stage: MobileFailedMessageStage | "session";
   copy: MobileChatCopy;
+  sessionCopy?: { title: string; body: string; retryLabel: string; dismissLabel: string };
   disabled: boolean;
   onRetry: () => void;
   onDismiss: () => void;
 }) {
-  const title = stage === "no_answer" ? copy.failedNoAnswerTitle : copy.failedNotSentTitle;
+  const title = stage === "session"
+    ? sessionCopy?.title || copy.failedNoAnswerTitle
+    : stage === "no_answer" ? copy.failedNoAnswerTitle : copy.failedNotSentTitle;
+  const body = stage === "session" ? sessionCopy?.body || text : text;
+  const retryLabel = stage === "session" ? sessionCopy?.retryLabel || copy.failedRetry : copy.failedRetry;
+  const dismissLabel = stage === "session" ? sessionCopy?.dismissLabel || copy.failedDismiss : copy.failedDismiss;
   return (
     <View style={[styles.message, styles.failedMessage]}>
       <View style={styles.failedMessageHead}>
         <AlertTriangle size={15} color={palette.coral} />
         <Text style={styles.failedMessageTitle}>{title}</Text>
       </View>
-      <Text style={styles.failedMessageBody} numberOfLines={3}>
-        {text}
+      <Text style={styles.failedMessageBody} numberOfLines={stage === "session" ? undefined : 3}>
+        {body}
       </Text>
       <View style={styles.messageActions}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={copy.failedRetryHint}
+          accessibilityLabel={stage === "session" ? retryLabel : copy.failedRetryHint}
           style={[styles.messageActionButton, styles.failedRetryButton, disabled && styles.disabledButton]}
           onPress={onRetry}
           disabled={disabled}
         >
           <RefreshCcw size={14} color={palette.coral} />
-          <Text style={[styles.messageActionText, styles.failedRetryText]}>{copy.failedRetry}</Text>
+          <Text style={[styles.messageActionText, styles.failedRetryText]}>{retryLabel}</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={copy.failedDismiss}
+          accessibilityLabel={dismissLabel}
           style={styles.messageActionButton}
           onPress={onDismiss}
         >
-          <Text style={styles.messageActionText}>{copy.failedDismiss}</Text>
+          <Text style={styles.messageActionText}>{dismissLabel}</Text>
         </Pressable>
       </View>
     </View>
@@ -11411,20 +11496,22 @@ const styles = StyleSheet.create({
   },
   externalOpeningBody: {
     flex: 1,
+    alignItems: "stretch",
+    justifyContent: "flex-start",
+    paddingHorizontal: 18,
+    paddingTop: 20,
+  },
+  openingActivityTrail: {
     alignItems: "center",
-    justifyContent: "center",
-    gap: 14,
-    paddingHorizontal: 24,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 32,
   },
-  externalOpeningMessage: {
+  openingActivityText: {
     color: palette.muted,
-    fontSize: 16,
-    lineHeight: 23,
-    maxWidth: 340,
-    textAlign: "center",
-  },
-  externalOpeningError: {
-    color: palette.coral,
+    fontSize: 15,
+    lineHeight: 22,
   },
   header: {
     paddingHorizontal: 16,
@@ -11463,7 +11550,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderBottomWidth: 1,
     borderBottomColor: palette.chromeLine,
-    backgroundColor: palette.pageBg,
+    backgroundColor: palette.surface,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -11471,6 +11558,9 @@ const styles = StyleSheet.create({
   mobileAppBarTitle: {
     flex: 1,
     minWidth: 0,
+  },
+  mobileAppBarTitleCentered: {
+    alignItems: "center",
   },
   mobileMenuButton: {
     width: 44,
@@ -11793,8 +11883,8 @@ const styles = StyleSheet.create({
   chatHeaderTitle: {
     color: palette.ink,
     fontWeight: "600",
-    fontSize: 17,
-    lineHeight: 22,
+    fontSize: 18,
+    lineHeight: 24,
   },
   subthreadHeaderTitle: {
     color: palette.brandBlue,
@@ -12197,8 +12287,8 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   message: {
-    maxWidth: "82%",
-    borderRadius: 20,
+    maxWidth: "88%",
+    borderRadius: 14,
     paddingHorizontal: 15,
     paddingVertical: 11,
     gap: 8,
@@ -12214,7 +12304,25 @@ const styles = StyleSheet.create({
   userMessage: {
     backgroundColor: palette.userTint,
     alignSelf: "flex-end",
-    borderBottomRightRadius: 6,
+    borderColor: palette.lineStrong,
+    borderWidth: 1,
+  },
+  assistantIdentity: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 2,
+  },
+  assistantIdentityMark: {
+    borderRadius: 8,
+    height: 28,
+    width: 28,
+  },
+  assistantIdentityLabel: {
+    color: palette.ink,
+    fontSize: 15,
+    fontWeight: "600",
+    lineHeight: 20,
   },
   userAttachmentList: {
     alignSelf: "stretch",
@@ -12248,6 +12356,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     maxWidth: "100%",
     backgroundColor: palette.coralSoft,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: palette.coral,
     gap: 8,
@@ -12269,7 +12378,8 @@ const styles = StyleSheet.create({
   failedMessageTitle: {
     color: palette.coral,
     fontWeight: "600",
-    fontSize: 13,
+    fontSize: 15,
+    lineHeight: 20,
   },
   queuedFollowUpTitle: {
     color: palette.teal,
@@ -12278,7 +12388,8 @@ const styles = StyleSheet.create({
   },
   failedMessageBody: {
     color: palette.text,
-    fontSize: 13,
+    fontSize: 15,
+    lineHeight: 22,
   },
   failedRetryButton: {
     borderColor: palette.coral,
@@ -12574,11 +12685,11 @@ const styles = StyleSheet.create({
     gap: 4,
     borderWidth: 1,
     borderColor: palette.line,
-    borderRadius: 26,
+    borderRadius: 24,
     backgroundColor: palette.surface,
     paddingHorizontal: 4,
     paddingVertical: 4,
-    minHeight: 52,
+    minHeight: 48,
   },
   voiceRecordingInline: {
     flex: 1,
@@ -12616,7 +12727,7 @@ const styles = StyleSheet.create({
   },
   chatComposerDock: {
     borderTopWidth: 0,
-    backgroundColor: palette.pageBg,
+    backgroundColor: palette.surface,
     paddingHorizontal: 14,
     paddingTop: 6,
     paddingBottom: 10,
@@ -12744,7 +12855,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   inputDisabled: {
-    backgroundColor: "#f4f7f7",
+    backgroundColor: "transparent",
     color: palette.muted,
   },
   formStack: {
