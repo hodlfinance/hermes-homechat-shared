@@ -264,6 +264,8 @@ import {
   mobileQueuedFollowUpBlocksComposer,
   mobileQueuedFollowUpNoticeActionState,
   mobileQueuedFollowUpNoticeVisible,
+  mobileQueuedFollowUpShouldEnterTranscript,
+  mobileQueuedFollowUpSnapshotAfterStatus,
   mobileQueuedFollowUpTerminalStatus,
   mobileFailedMessageHasCompleted,
   mobileFailedMessageRetryKey,
@@ -299,9 +301,11 @@ import {
 import { persistNativeSessionToken, readNativeSessionToken } from "./mobile-session-storage";
 import {
   initialMobileScrollIntent,
+  mobileScrollDistanceFromBottom,
   mobileScrollIntentAfterContent,
   mobileScrollIntentAfterJump,
   mobileScrollIntentAfterScroll,
+  mobileScrollMomentumExpected,
 } from "./mobile-scroll-intent";
 import {
   createMobileHomeChatSingleFlight,
@@ -319,6 +323,7 @@ import {
   type MobileRunActivityView,
 } from "./mobile-chat-activity";
 import { mobileLiveRunActivityView } from "./mobile-live-run-status";
+import { createMobileRankedTaskObserver, mobileRankedTaskNoticeAfterRead } from "./mobile-ranked-task-observer";
 import { delegatedTasksView, mobileDelegatedTaskIsTerminal } from "../core/delegated-tasks-view";
 import {
   subthreadAfterConversationChange,
@@ -1575,6 +1580,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [rankedTaskState, setRankedTaskState] = useState<RankedTaskLoadState>({ phase: "idle" });
   const [taskNotice, setTaskNotice] = useState<"load_error" | "change_error" | null>(null);
   const rankedTaskRequestRef = useRef(0);
+  const rankedTasksVisibleRef = useRef(false);
+  rankedTasksVisibleRef.current = tab === "tasks" && rankedTaskState.phase === "ready";
   const [nativeCapabilities, setNativeCapabilities] = useState<NativeCapabilitiesView | null>(null);
   const [nativeCapabilitiesBusy, setNativeCapabilitiesBusy] = useState(false);
   const [nativeCapabilitiesError, setNativeCapabilitiesError] = useState<string | null>(null);
@@ -1743,6 +1750,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const messagesViewportHeightRef = useRef(0);
   const messagesScrollOffsetRef = useRef(0);
   const mobileScrollIntentRef = useRef(initialMobileScrollIntent);
+  const messagesScrollDraggingRef = useRef(false);
+  const messagesScrollMomentumRef = useRef(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const preserveMessagesScrollRef = useRef(false);
   // Anchoring the transcript to its first row belongs to one moment only: the
@@ -1999,13 +2008,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   }
 
   const api = useMemo(() => createApiClient({ baseUrl: API_BASE, token: token || "missing" }), [token]);
-  const loadRankedTasks = useCallback(async () => {
+  const loadRankedTasks = useCallback(async (background = false) => {
     if (!host.policy.preinstalledRanker || !token) return;
     const requestToken = token;
     const sessionGeneration = accountSessionGenerationRef.current;
     const requestId = ++rankedTaskRequestRef.current;
-    setRankedTaskState({ phase: "loading" });
-    setTaskNotice(null);
+    if (!background) setRankedTaskState({ phase: "loading" });
+    setTaskNotice((previous) => mobileRankedTaskNoticeAfterRead(previous, "started", background));
     try {
       const collection = await api.rankedTasks();
       if (
@@ -2014,16 +2023,21 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         accountSessionTokenRef.current !== requestToken
       ) return;
       setRankedTaskState({ phase: "ready", collection });
+      setTaskNotice((previous) => mobileRankedTaskNoticeAfterRead(previous, "succeeded", background));
     } catch {
       if (
         rankedTaskRequestRef.current !== requestId ||
         accountSessionGenerationRef.current !== sessionGeneration ||
         accountSessionTokenRef.current !== requestToken
       ) return;
-      setRankedTaskState({ phase: "error" });
-      setTaskNotice("load_error");
+      if (!background) setRankedTaskState({ phase: "error" });
+      setTaskNotice((previous) => mobileRankedTaskNoticeAfterRead(previous, "failed", background));
     }
   }, [api, token]);
+  const rankedTaskObserver = useMemo(() => createMobileRankedTaskObserver({
+    shouldObserve: () => rankedTasksVisibleRef.current,
+    reload: () => loadRankedTasks(true),
+  }), [loadRankedTasks]);
   const pluginCatalogRequestRef = useRef(0);
   const loadPluginCatalog = useCallback(async () => {
     const requestId = ++pluginCatalogRequestRef.current;
@@ -3162,7 +3176,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     const automationLoadKey = token && snapshot?.workspace.id
       ? `${snapshot.workspace.id}:${accountSessionGenerationRef.current}`
       : null;
-    if (tab !== "automations" || !automationLoadKey) return;
+    // This is an entry guard, not an account-lifetime cache: a cron can finish
+    // while the customer is elsewhere. Reopening must read its new evidence.
+    if (tab !== "automations") {
+      automationsAutoLoadKeyRef.current = null;
+      return;
+    }
+    if (!automationLoadKey) return;
     if (automationsAutoLoadKeyRef.current === automationLoadKey) return;
     automationsAutoLoadKeyRef.current = automationLoadKey;
     void Promise.all([loadAutomations(), loadRankedTaskAutomations()]);
@@ -4181,6 +4201,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     let cancelled = false;
     let requestController: AbortController | null = null;
     const poll = () => {
+      // HPD-649: deferred and scheduled ranking can finish without navigation.
+      // Reuse this existing shell observation tick for the visible Tasks list;
+      // this only reads the product projection and never triggers the ranker.
+      void rankedTaskObserver.observe();
       requestController?.abort();
       requestController = new AbortController();
       void hermesApi.delegatedTasks({ signal: requestController.signal })
@@ -4196,7 +4220,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       requestController?.abort();
       clearInterval(timer);
     };
-  }, [hermesApi, snapshot?.workspace.id, token]);
+  }, [hermesApi, rankedTaskObserver, snapshot?.workspace.id, token]);
 
   useEffect(() => {
     if (!snapshot || chatGptAccountConnectionView(snapshot).ready || chatGptConnection) return;
@@ -4961,6 +4985,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     shouldAcceptUpdates?: () => boolean;
   }) {
     let currentRunId = input.runId ?? null;
+    let latestRunSnapshot: ChatRun | null = null;
     let terminalObserved = false;
     const startedAt = input.startedAt ?? Date.now();
     const reflectLiveProgress = input.reflectLiveProgress !== false;
@@ -4997,6 +5022,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       onRunCreated: (run) => {
         if (!shouldAcceptUpdates()) return;
         currentRunId = run.id;
+        latestRunSnapshot = run;
         const adoptCreatedConversation = input.conversationSessionId === null && ownsLivePresentation();
         input.conversationSessionId = run.conversationSessionId ?? input.conversationSessionId;
         input.onRunCreated?.(run);
@@ -5010,7 +5036,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       onState: (state) => {
         if (!shouldAcceptUpdates()) return;
         const runId = currentRunId;
-        if (ownsVisibleConversation()) {
+        if (reflectLiveProgress && ownsVisibleConversation()) {
           const merged = reconcileMobileRunBoundMessages({
             conversationSessionId: input.conversationSessionId,
             current: messagesStateRef.current,
@@ -5039,6 +5065,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         if (!terminalUpdateContinuation.accept(run.id, shouldAcceptUpdates())) return;
         const expectedRunId = currentRunId;
         currentRunId = run.id;
+        latestRunSnapshot = run;
         input.onSnapshot?.(run);
         commitChatRunStatus(run.id, run.status);
         setChatEventsByRunId((current) => mergeChatRunEvents(current, run.id, run.events));
@@ -5104,11 +5131,21 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         }
         const terminalStatus = mobileRunStatusFromTerminalEvent(legacy);
         if (terminalStatus) {
+          if (latestRunSnapshot?.id === legacy.runId) latestRunSnapshot = { ...latestRunSnapshot, status: terminalStatus };
           commitChatRunStatus(legacy.runId, terminalStatus);
           closeLivePresentation();
         } else if (legacy.type === "status") {
-          const status = String(legacy.payload.status || "running");
-          if (isChatRunStatus(status)) {
+          // Canonical normalization defaults diagnostic/malformed statuses to
+          // running. Only the original gateway payload can prove takeover.
+          const status = event.payload.status;
+          if (typeof status === "string" && isChatRunStatus(status)) {
+            const takeover = !terminalObserved
+              ? mobileQueuedFollowUpSnapshotAfterStatus(latestRunSnapshot, legacy.runId, status)
+              : null;
+            if (takeover) {
+              latestRunSnapshot = takeover;
+              input.onSnapshot?.(takeover);
+            }
             commitChatRunStatus(legacy.runId, status);
           }
         }
@@ -5123,6 +5160,18 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     return status === "running" || status === "waiting_for_approval" ? "running" : "queued";
   }
 
+  function promoteQueuedFollowUpToTranscript(queued: MobileQueuedFollowUpRef, run: ChatRun) {
+    if (!mobileQueuedFollowUpShouldEnterTranscript(run)) return;
+    if (queued.conversationSessionId !== activeConversationSessionIdRef.current) return;
+    const merged = reconcileMobileRunBoundMessages({
+      conversationSessionId: queued.conversationSessionId,
+      current: messagesStateRef.current,
+      incoming: run.messages,
+    });
+    messagesStateRef.current = merged;
+    setMessages(merged);
+  }
+
   async function finishQueuedFollowUp(queued: MobileQueuedFollowUpRef) {
     try {
       const finalState = await queued.session.waitForBackgroundFollow();
@@ -5134,12 +5183,26 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         phase: finalState.phase,
       });
       if (outcome === "completed") {
+        // A recovered queue can reach terminal before a running snapshot. Its
+        // live listener deliberately does not project queued messages, so use
+        // the completed controller state before releasing the queue owner.
+        if (queued.conversationSessionId === activeConversationSessionIdRef.current) {
+          const merged = reconcileMobileRunBoundMessages({
+            conversationSessionId: queued.conversationSessionId,
+            current: messagesStateRef.current,
+            incoming: finalState.messages,
+          });
+          messagesStateRef.current = merged;
+          setMessages(merged);
+        }
         if (queued.runId) commitChatRunStatus(queued.runId, "completed");
         setFailedMessage((current) => current?.idempotencyKey === queued.idempotencyKey ? null : current);
         if (appError?.owner === queued.idempotencyKey) setAppError(null);
         removeQueuedFollowUpView(queued.ownershipToken);
         queuedFollowUpOwner.release(queued.ownershipToken);
-        await refresh();
+        // A foreground completion refresh may still contain this queued run.
+        // Do not join that stale read and lose the newly completed transcript.
+        await refresh(true);
         return;
       }
       if (outcome === "cancelled") {
@@ -5189,6 +5252,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         ) return;
         current.status = queuedFollowUpStatusFromRun(snapshotRun.status);
         updateQueuedFollowUp(current, { content: current.content, runId: snapshotRun.id, status: current.status });
+        promoteQueuedFollowUpToTranscript(current, snapshotRun);
       },
       reflectLiveProgress: false,
       runId: run.id,
@@ -5256,6 +5320,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           runId: run.id,
           status: queued.status,
         });
+        promoteQueuedFollowUpToTranscript(queued, run);
       },
       onSnapshot: (run) => {
         const queued = queuedFollowUpRef.current.get(ownershipToken);
@@ -5267,6 +5332,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           runId: run.id,
           status: queued.status,
         });
+        promoteQueuedFollowUpToTranscript(queued, run);
       },
       reflectLiveProgress: false,
       shouldAcceptUpdates: () => queuedFollowUpRef.current.has(ownershipToken),
@@ -5668,12 +5734,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     }
   }
 
-  function commitMessagesScrollIntent(event: NativeScrollEvent) {
+  function commitMessagesScrollIntent(event: NativeScrollEvent, intentOffsetY = event.contentOffset.y) {
     messagesScrollOffsetRef.current = event.contentOffset.y;
-    const distanceFromBottom = Math.max(
-      0,
-      event.contentSize.height - event.contentOffset.y - event.layoutMeasurement.height,
-    );
+    const distanceFromBottom = mobileScrollDistanceFromBottom({
+      contentHeight: event.contentSize.height,
+      offsetY: intentOffsetY,
+      viewportHeight: event.layoutMeasurement.height,
+    });
     const next = mobileScrollIntentAfterScroll(mobileScrollIntentRef.current, distanceFromBottom);
     mobileScrollIntentRef.current = next;
     setShowScrollDown(next.showScrollDown);
@@ -7420,15 +7487,28 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
               }}
               onScroll={(event) => {
                 messagesScrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+                if (messagesScrollDraggingRef.current || messagesScrollMomentumRef.current) commitMessagesScrollIntent(event.nativeEvent);
               }}
-              // Following the newest message is the customer's decision, and it
-              // is only readable where their gesture comes to rest. Reading it
-              // out of every scroll event counted the app's own scrolling as
-              // stepping away: a freshly opened chat parked itself in the
-              // middle of the conversation because the transcript was still
-              // growing while it scrolled.
-              onScrollEndDrag={(event) => commitMessagesScrollIntent(event.nativeEvent)}
-              onMomentumScrollEnd={(event) => commitMessagesScrollIntent(event.nativeEvent)}
+              // Programmatic scrolling must not count as stepping away, but the
+              // user's intent must be committed before a concurrent content-size
+              // change gets a chance to auto-follow back to the bottom.
+              onScrollBeginDrag={() => {
+                messagesScrollDraggingRef.current = true;
+              }}
+              onScrollEndDrag={(event) => {
+                const targetOffsetY = event.nativeEvent.targetContentOffset?.y ?? event.nativeEvent.contentOffset.y;
+                commitMessagesScrollIntent(event.nativeEvent, targetOffsetY);
+                messagesScrollMomentumRef.current = mobileScrollMomentumExpected(
+                  event.nativeEvent.contentOffset.y,
+                  event.nativeEvent.targetContentOffset?.y,
+                  event.nativeEvent.velocity?.y,
+                );
+                messagesScrollDraggingRef.current = false;
+              }}
+              onMomentumScrollEnd={(event) => {
+                if (messagesScrollMomentumRef.current) commitMessagesScrollIntent(event.nativeEvent);
+                messagesScrollMomentumRef.current = false;
+              }}
               scrollEventThrottle={16}
               onContentSizeChange={(_width, height) => {
                 messagesContentHeightRef.current = height;
@@ -7533,7 +7613,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                 accessibilityRole="button"
                 accessibilityLabel={staticUiCopy(appLocale)["Scroll to latest message"]}
               >
-                <ChevronDown size={20} color={palette.accentText} />
+                <ChevronDown size={20} color={palette.surface} />
               </Pressable>
             ) : null}
             <MobileDelegatedTasksIndicator locale={appLocale}
@@ -7893,11 +7973,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                 ...(rankedTaskAutomationsView?.automations ?? []).map(automationCardFromManaged),
               ]}
               timeZone={rankedTaskAutomationsView?.workspaceTimeZone ?? null}
-              loaded={automationsView && automationsView.source !== "unavailable"}
+              // Both readers contribute cards; the generic job list finishing
+              // does not make retained managed-job statuses current yet.
+              loaded={automationsView && automationsView.source !== "unavailable"
+                && !automationsBusy && !rankedTaskAutomationsBusy}
               unavailable={automationsView?.source === "unavailable"}
               error={automationsError}
               onDismissError={() => setAutomationsError(null)}
-              busy={automationsBusy}
+              busy={automationsBusy || rankedTaskAutomationsBusy}
               mutationBusy={rankedTaskAutomationsBusy}
               mutationError={rankedTaskAutomationsError}
               onDismissMutationError={() => setRankedTaskAutomationsError(null)}
@@ -12706,7 +12789,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: palette.accentStrong,
+    backgroundColor: palette.accent,
     borderColor: palette.accent,
     borderWidth: 1,
     alignItems: "center",

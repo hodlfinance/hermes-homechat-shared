@@ -14,6 +14,7 @@ import {
   type RankedTaskListRow,
   type RankedTaskRowActionId,
 } from "../core/ranked-task-list-view";
+import { rankedTaskLastUpdatedText } from "./mobile-ranked-task-last-updated";
 
 export interface RankedTaskListCopy {
   confirmComplete: string;
@@ -22,6 +23,8 @@ export interface RankedTaskListCopy {
   showCompleted: string;
   hideCompleted: string;
   title: string;
+  lastUpdated: string;
+  notYetUpdated: string;
   inventoryLabel: string;
   empty: string;
   pendingTitle: string;
@@ -61,6 +64,8 @@ const defaultCopy: RankedTaskListCopy = {
   showCompleted: "Show completed tasks",
   hideCompleted: "Hide completed tasks",
   title: "Tasks",
+  lastUpdated: "Last updated",
+  notYetUpdated: "Not updated yet",
   inventoryLabel: "Ranked task inventory",
   empty: "No tasks have been collected yet.",
   pendingTitle: "Not ranked yet",
@@ -338,6 +343,14 @@ export function RankedTaskList({
             </Pressable>
           ) : null}
         </View>
+        <Text style={styles.lastUpdatedText}>
+          {rankedTaskLastUpdatedText({
+            collectedAt: collection.collectedAt,
+            formatInstant,
+            label: text.lastUpdated,
+            missing: text.notYetUpdated,
+          })}
+        </Text>
         {onRefresh ? (
           <Pressable
             accessibilityRole="button"
@@ -439,6 +452,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 8,
+  },
+  lastUpdatedText: {
+    color: palette.muted,
+    flexShrink: 1,
+    fontSize: 13,
+    lineHeight: 18,
   },
   aboutButton: {
     alignItems: "center",

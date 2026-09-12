@@ -2,6 +2,7 @@ import { scheduledRhythm, type AppLocale, type HermesAutomationJob, type Schedul
 import {
   rankedTaskAutomationLabels,
   type RankedTaskAutomationRole,
+  type RankedTaskAutomationResultStatus,
   type RankedTaskAutomationView,
 } from "../core/ranked-task-automations";
 
@@ -54,6 +55,10 @@ export type AutomationCardModel = Readonly<{
   reinstallable: boolean;
   /** One sentence about why this automation is not doing its work. */
   notice: string | null;
+  /** Structured result truth for shipped scanner/ranker jobs; custom jobs have no such result contract. */
+  resultStatus: RankedTaskAutomationResultStatus | null;
+  /** The exact result was stored even though this run separately reported a native delivery/route failure. */
+  nativeFailureAfterStoredResult: boolean;
   versions: readonly AutomationCardVersion[];
   /** Set for a shipped automation; the role its mutations are addressed to. */
   role: RankedTaskAutomationRole | null;
@@ -78,6 +83,8 @@ export function automationCardFromJob(job: HermesAutomationJob): AutomationCardM
     deletable: true,
     reinstallable: false,
     notice: null,
+    resultStatus: null,
+    nativeFailureAfterStoredResult: false,
     versions: [],
     role: null,
     jobId: job.id,
@@ -99,6 +106,9 @@ export function automationCardFromManaged(automation: RankedTaskAutomationView):
     deletable: false,
     reinstallable: automation.stalled === "missing",
     notice: automation.stalled ? rankedTaskAutomationLabels.stalled[automation.stalled] : null,
+    resultStatus: automation.resultStatus,
+    nativeFailureAfterStoredResult: automation.resultStatus === "stored"
+      && automation.stalled === "failing",
     versions: automation.versions.map((version) => ({
       version: version.version,
       reason: version.reason,
@@ -107,6 +117,20 @@ export function automationCardFromManaged(automation: RankedTaskAutomationView):
     role: automation.metadata.role,
     jobId: automation.metadata.nativeJobId,
   };
+}
+
+/**
+ * A structured result and the runtime's later delivery state are independent
+ * receipts. When both exist, keep the failure visible without reusing the
+ * generic stall sentence that says no result was stored.
+ */
+export function automationCardNotice(
+  automation: Pick<AutomationCardModel, "notice" | "nativeFailureAfterStoredResult">,
+  storedResultFailure: string,
+): string | null {
+  return automation.nativeFailureAfterStoredResult && automation.notice
+    ? storedResultFailure
+    : automation.notice;
 }
 
 export type AutomationScheduleCopy = Readonly<{
