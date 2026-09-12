@@ -6771,9 +6771,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       ) : null}
       <View style={styles.externalOpeningBody} accessibilityLiveRegion="polite">
         {openingDestinationTitle || tab !== "chat" ? (
-          <View style={styles.openingActivityTrail}>
+          <View style={styles.openingDestinationState}>
             <Text style={styles.chatHeaderTitle}>{openingDestinationTitle || mobileScreenTitle(tab, settingsSection, t)}</Text>
-            <Text style={styles.muted}>
+            <Text style={[styles.muted, styles.openingDestinationMessage]}>
               {retry ? sessionFailureCopy?.body || message : message}
             </Text>
             <Pressable
@@ -11507,6 +11507,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     minHeight: 32,
+  },
+  openingDestinationState: {
+    alignItems: "stretch",
+    alignSelf: "stretch",
+    gap: 12,
+    width: "100%",
+  },
+  openingDestinationMessage: {
+    flexShrink: 1,
+    lineHeight: 20,
   },
   openingActivityText: {
     color: palette.muted,
