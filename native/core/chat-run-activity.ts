@@ -466,6 +466,45 @@ function toolStatus(label: string): HeyLiveRunActivity {
   return { label };
 }
 
+// `agent.display.build_status_phrase()` is the runtime's customer-facing
+// activity seam. Hey Hermes configures it in verb-only mode, then accepts only
+// the exact curated phrases below. That makes the current work more useful
+// than "Working" without ever rendering a command, path, query, plugin name,
+// URL, control tag, or other runtime payload.
+const approvedHermesActivityDescriptions: Readonly<Record<string, string>> = {
+  "is searching the web…": "Searching the web",
+  "is reading…": "Reading",
+  "is browsing…": "Browsing",
+  "is clicking…": "Clicking",
+  "is typing…": "Typing",
+  "is writing…": "Writing",
+  "is editing…": "Editing",
+  "is searching files…": "Searching files",
+  "is running…": "Running",
+  "is running code…": "Running code",
+  "is generating image…": "Generating image",
+  "is generating video…": "Generating video",
+  "is generating speech…": "Generating speech",
+  "is looking at the image…": "Looking at the image",
+  "is searching past sessions…": "Searching past sessions",
+  "is reading skill…": "Reading skill",
+  "is listing skills…": "Listing skills",
+  "is updating skill…": "Updating skill",
+  "is delegating…": "Delegating",
+  "is scheduling…": "Scheduling",
+  "is asking…": "Asking",
+  "is updating memory…": "Updating memory",
+  "is updating tasks…": "Updating tasks",
+};
+
+function approvedHermesActivityDescription(event: ChatRunEvent): string | null {
+  if (event.type !== "status") return null;
+  if (eventPayloadText(event, "source") !== "hermes_gateway") return null;
+  if (eventPayloadText(event, "platform") !== "heyhermes_web") return null;
+  if (!eventPayloadText(event, "chatId")) return null;
+  return approvedHermesActivityDescriptions[eventPayloadText(event, "content").toLowerCase()] ?? null;
+}
+
 function friendlyStatusLabel(event: ChatRunEvent): HeyLiveRunActivity | null {
   if (event.type === "message_completed" || event.type === "error" || event.type === "usage") return null;
   if (event.type === "artifact_update") return toolStatus("Updating a result");
@@ -492,6 +531,9 @@ function friendlyStatusLabel(event: ChatRunEvent): HeyLiveRunActivity | null {
   ) {
     return null;
   }
+
+  const approvedDescription = approvedHermesActivityDescription(event);
+  if (approvedDescription) return toolStatus(approvedDescription);
 
   // Runtime status payloads are not user copy. They can contain command lines,
   // environment names, URLs, or provider diagnostics, so only their category
