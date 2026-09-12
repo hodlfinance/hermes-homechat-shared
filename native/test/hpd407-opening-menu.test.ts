@@ -30,4 +30,9 @@ test("the connecting drawer keeps navigation live while runtime actions stay fai
   assert.match(opening, /openingDestinationTitle \|\| tab !== "chat"/);
   assert.match(opening, /mobileScreenTitle\(tab, settingsSection, t\)/);
   assert.match(opening, /sessionFailureCopy\?\.body \|\| message/);
+  assert.match(opening, /<View style=\{styles\.openingDestinationState\}>/);
+  assert.match(opening, /styles\.openingDestinationMessage/);
+  assert.match(source, /openingDestinationState:\s*\{[\s\S]*alignItems: "stretch"[\s\S]*alignSelf: "stretch"[\s\S]*width: "100%"/);
+  assert.match(source, /openingDestinationMessage:\s*\{[\s\S]*flexShrink: 1[\s\S]*lineHeight: 20/);
+  assert.match(source, /openingActivityTrail:\s*\{[\s\S]*flexDirection: "row"/);
 });
