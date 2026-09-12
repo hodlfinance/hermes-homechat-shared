@@ -1,8 +1,30 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { Animated, Easing, Image, View, type ColorValue, type ImageSourcePropType } from "react-native";
 import neutralDragon from "../assets/baby-dragon-neutral.png";
 import winkWingDragon from "../assets/baby-dragon-wink-wing.png";
 import oppositeWingDragon from "../assets/baby-dragon-opposite-wing.png";
+import firePuff from "../assets/baby-dragon-fire-puff.png";
+import fireSpark1 from "../assets/baby-dragon-fire-spark-1.png";
+import fireSpark2 from "../assets/baby-dragon-fire-spark-2.png";
+import fireSpark3 from "../assets/baby-dragon-fire-spark-3.png";
+import fireSpark4 from "../assets/baby-dragon-fire-spark-4.png";
+
+const LOOP_DURATION_MS = 2_800;
+const FIRE_START = 0.4643;
+const FIRE_END = 0.75;
+const FIRE_TIMELINE = [0, FIRE_START, 0.5, 0.5357, 0.5714, 0.6071, 0.6429, 0.6786, 0.7143, FIRE_END, 1];
+const FIRE_OPACITY = [0, 0, 0.383, 0.707, 0.924, 1, 0.924, 0.707, 0.383, 0, 0];
+const FIRE_SCALE = [0, 0, 0.27, 0.539, 0.756, 0.875, 0.861, 0.698, 0.4, 0, 0];
+
+const FIRE_PARTICLES = [
+  { id: "puff-left", source: firePuff, scale: 0.14, heightRatio: 0.78, startY: 0.625, xTravel: -0.12, yTravel: -0.14, rotation: "-9deg" },
+  { id: "puff-center", source: firePuff, scale: 0.18, heightRatio: 0.78, startY: 0.625, xTravel: 0.02, yTravel: -0.2, rotation: "3deg" },
+  { id: "puff-right", source: firePuff, scale: 0.12, heightRatio: 0.78, startY: 0.625, xTravel: 0.13, yTravel: -0.12, rotation: "12deg" },
+  { id: "spark-left", source: fireSpark1, scale: 0.055, heightRatio: 1, startY: 0.62, xTravel: -0.18, yTravel: -0.15, rotation: "0deg" },
+  { id: "spark-right", source: fireSpark2, scale: 0.065, heightRatio: 1, startY: 0.62, xTravel: 0.18, yTravel: -0.12, rotation: "0deg" },
+  { id: "spark-high-left", source: fireSpark3, scale: 0.055, heightRatio: 1, startY: 0.62, xTravel: -0.07, yTravel: -0.24, rotation: "0deg" },
+  { id: "spark-high-right", source: fireSpark4, scale: 0.065, heightRatio: 1, startY: 0.62, xTravel: 0.1, yTravel: -0.22, rotation: "0deg" },
+] as const;
 
 type DragonSliceProps = {
   source: ImageSourcePropType;
@@ -66,7 +88,56 @@ function DragonWingPose({
   );
 }
 
-export function MobileWorkingDragon({
+function FireParticle({
+  source,
+  size,
+  particleScale,
+  heightRatio,
+  startY,
+  xTravel,
+  yTravel,
+  rotation,
+  opacity,
+  scale,
+  travel,
+}: {
+  source: ImageSourcePropType;
+  size: number;
+  particleScale: number;
+  heightRatio: number;
+  startY: number;
+  xTravel: number;
+  yTravel: number;
+  rotation: `${number}deg`;
+  opacity: Animated.AnimatedInterpolation<number>;
+  scale: Animated.AnimatedInterpolation<number>;
+  travel: Animated.AnimatedInterpolation<number>;
+}) {
+  const width = size * particleScale;
+  const height = width * heightRatio;
+  const translateX = travel.interpolate({ inputRange: [0, 1], outputRange: [0, size * xTravel] });
+  const translateY = travel.interpolate({ inputRange: [0, 1], outputRange: [0, size * yTravel] });
+
+  return (
+    <Animated.Image
+      source={source}
+      resizeMode="stretch"
+      accessible={false}
+      accessibilityIgnoresInvertColors
+      style={{
+        position: "absolute",
+        left: size * 0.5 - width / 2,
+        top: size * startY - height / 2,
+        width,
+        height,
+        opacity,
+        transform: [{ translateX }, { translateY }, { rotate: rotation }, { scale }],
+      }}
+    />
+  );
+}
+
+export const MobileWorkingDragon = memo(function MobileWorkingDragon({
   accessibilityLabel = "Hermes is working",
   animated,
   size = 32,
@@ -85,7 +156,7 @@ export function MobileWorkingDragon({
     if (!animated) return;
 
     const loop = Animated.loop(Animated.timing(pose, {
-      duration: 1_700,
+      duration: LOOP_DURATION_MS,
       easing: Easing.linear,
       toValue: 1,
       useNativeDriver: true,
@@ -99,20 +170,28 @@ export function MobileWorkingDragon({
   }, [animated, pose]);
 
   const neutralWingOpacity = pose.interpolate({
-    inputRange: [0, 0.12, 0.22, 0.34, 0.46, 0.58, 0.7, 0.82, 1],
-    outputRange: [1, 1, 0, 0, 1, 0, 0, 1, 1],
+    inputRange: [0, 0.16, 0.18, 0.29, 0.31, 0.34, 0.36, 0.46, 0.48, 0.73, 0.75, 0.89, 0.91, 1],
+    outputRange: [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
   });
   const winkWingOpacity = pose.interpolate({
-    inputRange: [0, 0.12, 0.22, 0.34, 0.46, 1],
-    outputRange: [0, 0, 1, 1, 0, 0],
+    inputRange: [0, 0.16, 0.18, 0.29, 0.31, 0.81, 0.83, 0.89, 0.91, 1],
+    outputRange: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0],
   });
   const oppositeWingOpacity = pose.interpolate({
-    inputRange: [0, 0.46, 0.58, 0.7, 0.82, 1],
-    outputRange: [0, 0, 1, 1, 0, 0],
+    inputRange: [0, 0.34, 0.36, 0.46, 0.48, 0.73, 0.75, 0.81, 0.83, 1],
+    outputRange: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0],
   });
-  const faceOpacity = pose.interpolate({
-    inputRange: [0, 0.16, 0.22, 0.28, 0.58, 0.64, 0.7, 1],
-    outputRange: [0, 0, 1, 0, 0, 1, 0, 0],
+  const fireOpacity = pose.interpolate({
+    inputRange: FIRE_TIMELINE,
+    outputRange: FIRE_OPACITY,
+  });
+  const fireScale = pose.interpolate({
+    inputRange: FIRE_TIMELINE,
+    outputRange: FIRE_SCALE,
+  });
+  const fireTravel = pose.interpolate({
+    inputRange: [0, FIRE_START, FIRE_END, 1],
+    outputRange: [0, 0, 1, 1],
   });
 
   return (
@@ -137,9 +216,27 @@ export function MobileWorkingDragon({
         top={0.39}
         width={0.48}
         height={0.29}
-        opacity={faceOpacity}
+        opacity={winkWingOpacity}
         tintColor={tintColor}
       />
+
+      {/* HPD-663 selected variant: warm puffs start at the mouth, then rise upward and fade. */}
+      {animated && FIRE_PARTICLES.map((particle) => (
+        <FireParticle
+          key={particle.id}
+          source={particle.source}
+          size={size}
+          particleScale={particle.scale}
+          heightRatio={particle.heightRatio}
+          startY={particle.startY}
+          xTravel={particle.xTravel}
+          yTravel={particle.yTravel}
+          rotation={particle.rotation}
+          opacity={fireOpacity}
+          scale={fireScale}
+          travel={fireTravel}
+        />
+      ))}
     </View>
   );
-}
+});
