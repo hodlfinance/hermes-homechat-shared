@@ -32,17 +32,52 @@ test("the newest approved activity description beats the generic fallback", () =
   );
 });
 
+test("keeps an existing redacted customer-facing preview when the verb permits it", () => {
+  assert.deepEqual(
+    heyLiveRunActivity({
+      events: [statusEvent("1", { ...trusted, content: "is searching the web for museums in Zurich…" })],
+      runStatus: "running",
+    }),
+    { label: "Searching the web for museums in Zurich" },
+  );
+});
+
 test("private previews and foreign status sources never become UI copy", () => {
   const privateMarker = "PRIVATE_VALUE=redacted-marker https://private.example/run";
-  for (const payload of [
-    { ...trusted, content: `is running ${privateMarker}…` },
-    { ...trusted, source: "another_gateway", content: "is reading…" },
-  ]) {
-    const view = heyLiveRunActivity({ events: [statusEvent("1", payload)], runStatus: "running" });
-    assert.deepEqual(view, { label: "Working", labelKey: "working" });
-    assert.equal(JSON.stringify(view).includes("redacted-marker"), false);
-    assert.equal(JSON.stringify(view).includes("private.example"), false);
-  }
+  const command = heyLiveRunActivity({
+    events: [statusEvent("1", { ...trusted, content: `is running ${privateMarker}…` })],
+    runStatus: "running",
+  });
+  assert.deepEqual(command, { label: "Working", labelKey: "working" });
+  assert.equal(JSON.stringify(command).includes("redacted-marker"), false);
+  assert.equal(JSON.stringify(command).includes("private.example"), false);
+
+  const foreign = heyLiveRunActivity({
+    events: [statusEvent("1", { ...trusted, source: "another_gateway", content: "is reading…" })],
+    runStatus: "running",
+  });
+  assert.deepEqual(foreign, { label: "Working", labelKey: "working" });
+
+  const boundedCommand = heyLiveRunActivity({
+    events: [statusEvent("2", { ...trusted, content: "is running cat /etc/private…" })],
+    runStatus: "running",
+  });
+  assert.deepEqual(boundedCommand, { label: "Running" });
+  assert.equal(JSON.stringify(boundedCommand).includes("/etc/private"), false);
+
+  const unsafeAllowedPreview = heyLiveRunActivity({
+    events: [statusEvent("3", { ...trusted, content: "is searching the web for https://private.example…" })],
+    runStatus: "running",
+  });
+  assert.deepEqual(unsafeAllowedPreview, { label: "Searching the web" });
+  assert.equal(JSON.stringify(unsafeAllowedPreview).includes("private.example"), false);
+
+  const unknownTool = heyLiveRunActivity({
+    events: [statusEvent("4", { ...trusted, content: "is using custom_tool {raw:payload}…" })],
+    runStatus: "running",
+  });
+  assert.deepEqual(unknownTool, { label: "Working", labelKey: "working" });
+  assert.equal(JSON.stringify(unknownTool).includes("raw:payload"), false);
 });
 
 test("terminal states clear the transient activity line", () => {
