@@ -6682,6 +6682,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   }, [token, snapshot?.workspace.id, navigationRequest?.requestId]);
 
   const presentedChatTitle = host.presentation?.chatTitle || mobileScreenTitle(tab, settingsSection, t);
+  const presentedAccountLabel = host.presentation?.accountLabel?.trim()
+    || snapshot?.me.email
+    || snapshot?.me.name
+    || appCopy.productName;
   const showPresentedChatSubtitle = host.presentation?.hideChatSubtitle !== true;
   const sessionFailureCopy = host.presentation?.sessionFailure;
 
@@ -6714,7 +6718,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       {menuOpen ? (
         <MobileNavigationDrawer
           t={t}
-          email=""
+          accountLabel={presentedAccountLabel}
           plan=""
           tab={tab}
           isOwner={false}
@@ -7243,8 +7247,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           {activeSubthreadHeader.kind === "subthread" || tab !== "chat" || showPresentedChatSubtitle ? (
             <Text style={styles.chatHeaderSubtitle} numberOfLines={1}>
               {activeSubthreadHeader.kind === "subthread"
-                ? activeSubthreadHeader.taskName || activeChatSession?.title || snapshot.me.email
-                : tab === "chat" ? activeChatSession?.title || snapshot.me.email : snapshot.me.email}
+                ? activeSubthreadHeader.taskName || activeChatSession?.title || presentedAccountLabel
+                : tab === "chat" ? activeChatSession?.title || presentedAccountLabel : presentedAccountLabel}
             </Text>
           ) : null}
         </View>
@@ -7336,7 +7340,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       {menuOpen ? (
         <MobileNavigationDrawer
           t={t}
-          email={snapshot.me.email}
+          accountLabel={presentedAccountLabel}
           plan={snapshot.entitlement.usagePoolPlan ?? snapshot.entitlement.plan}
           tab={tab}
           isOwner={isOwner}
@@ -8158,7 +8162,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                 ) : null}
                 {visibleSettingsSection === "account" ? (
                   <View style={styles.systemSurfaceEdgeToEdge}>
-                    {Platform.OS === "ios" ? (
+                    {host.session.mode === "standalone" && Platform.OS === "ios" ? (
                       <View style={styles.systemSurfaceNotice}>
                         <IosPaywallPanel locale={appLocale}
                           compact
@@ -8176,7 +8180,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                         />
                       </View>
                     ) : null}
-                    {Platform.OS === "ios" && (nativeAuthConfig?.providers.google || (nativeAuthConfig?.providers.apple && appleSignInAvailable)) ? (
+                    {host.session.mode === "standalone" && Platform.OS === "ios" && (nativeAuthConfig?.providers.google || (nativeAuthConfig?.providers.apple && appleSignInAvailable)) ? (
                       <MobileSystemSection title={accountPage.linkedAccountsTitle} footer={accountPage.linkedAccountsDetail}>
                         <View style={[styles.systemSurfaceNotice, styles.nativeAuthGroup]}>
                           {nativeAuthConfig?.providers.google ? (
@@ -8316,7 +8320,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                       onRunHandover={() => void runAdminHandoverCheck()}
                       onSaveAdminKey={() => void saveAdminPublicKey()}
                     />
-                    {isOwner ? (
+                    {host.session.mode === "standalone" && isOwner ? (
                       <>
                         <MobileSystemSection
                           title={t.systemPages.account.invite}
@@ -8359,13 +8363,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                           })}
                         </MobileSystemSection>
                       </>
-                    ) : currentAccount ? (
+                    ) : host.session.mode === "standalone" && currentAccount ? (
                       <MobileSystemSection title={t.systemPages.account.memberTitle}>
                         <AccountRow account={currentAccount} copy={t.systemPages.account} locale={appLocale} />
                       </MobileSystemSection>
-                    ) : (
+                    ) : host.session.mode === "standalone" ? (
                       <View style={styles.systemSurfaceNotice}><Text style={styles.muted}>{t.systemPages.account.detailsLoading}</Text></View>
-                    )}
+                    ) : null}
                     {/* HPD-443: the support entrance belongs under the customer's
                         own account rows, not between the access list and them. */}
                     <MobileSystemSection>
@@ -8376,7 +8380,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                         trailing={<ChevronRight size={17} color={palette.muted} />}
                       />
                     </MobileSystemSection>
-                    {snapshot ? (
+                    {host.session.mode === "standalone" && snapshot ? (
                       <MobileSystemSection title={mobileDangerZoneText(appLocale)}>
                         <View style={styles.systemSurfaceNotice}>
                           <AccountDeletionSection accountId={snapshot.me.id} api={api} busy={busy} onDeleted={logout} copy={t.systemPages.account.deletion} locale={appLocale} />
@@ -8687,7 +8691,7 @@ function mobileScreenTitle(tab: Tab, settingsSection: SettingsSection | null, co
 
 function MobileNavigationDrawer({
   t,
-  email,
+  accountLabel,
   plan,
   tab,
   isOwner,
@@ -8723,7 +8727,7 @@ function MobileNavigationDrawer({
   onLogout,
 }: {
   t: ReturnType<typeof mobileText>;
-  email: string;
+  accountLabel: string;
   plan: string;
   tab: Tab;
   isOwner: boolean;
@@ -8758,7 +8762,7 @@ function MobileNavigationDrawer({
   onOpenDashboard: () => void;
   onLogout: () => void;
 }) {
-  const [accountMenuOpen, setAccountMenuOpen] = useState(host.session.mode === "external");
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const rawPlanLabel = String(plan).replace(/_/g, " ");
   const planLabel = isOwner
     ? t.nav.owner
@@ -8884,7 +8888,7 @@ function MobileNavigationDrawer({
                   <View style={styles.mobileDrawerAccountMenuDivider} />
                 </>
               )}
-              {mobileAccountMenuNavigation.filter((item) => host.session.mode === "standalone" || (item.id !== "account" && !["sign_out", "logout"].includes(item.id))).map((item) => {
+              {mobileAccountMenuNavigation.filter((item) => host.session.mode === "standalone" || !["sign_out", "logout"].includes(item.id)).map((item) => {
                 const active = item.id === "ai_access"
                   ? tab === "ai_access"
                   : item.id === "connections"
@@ -8915,21 +8919,21 @@ function MobileNavigationDrawer({
               })}
             </View>
           ) : null}
-          {host.session.mode === "standalone" ? <Pressable
+          <Pressable
             style={[styles.mobileDrawerAccountButton, accountMenuOpen && styles.mobileDrawerAccountButtonActive]}
             onPress={() => setAccountMenuOpen((current) => !current)}
             accessibilityRole="button"
             accessibilityLabel={accountMenuOpen ? t.nav.closeMenu : t.nav.openMenu}
           >
             <View style={styles.sidebarAccountAvatar}>
-              <Text style={styles.sidebarAccountAvatarText}>{email.slice(0, 1).toUpperCase()}</Text>
+              <Text style={styles.sidebarAccountAvatarText}>{accountLabel.slice(0, 1).toUpperCase()}</Text>
             </View>
             <View style={styles.flexOne}>
-              <Text style={styles.mobileDrawerAccountLabel} numberOfLines={1}>{email}</Text>
+              <Text style={styles.mobileDrawerAccountLabel} numberOfLines={1}>{accountLabel}</Text>
               <Text style={styles.statusHint} numberOfLines={1}>{planLabel}</Text>
             </View>
             {accountMenuOpen ? <ChevronDown size={18} color={palette.muted} /> : <ChevronRight size={18} color={palette.muted} />}
-          </Pressable> : null}
+          </Pressable>
         </View>
       </View>
     </View>

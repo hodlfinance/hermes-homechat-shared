@@ -31,7 +31,8 @@ test("HPD-647 binds the approved Light 2a and Dark 1c tokens", () => {
 });
 
 test("the visual overhaul preserves current information and actions", () => {
-  assert.match(surface, /activeChatSession\?\.title \|\| snapshot\.me\.email/);
+  assert.match(surface, /activeChatSession\?\.title \|\| presentedAccountLabel/);
+  assert.match(surface, /snapshot\?\.me\.email/);
   assert.match(surface, /messageTime \? \(/);
   assert.match(surface, /accessibilityLabel=\{`\$\{copy\.messageTime\} \$\{messageTime\}`\}/);
   assert.match(surface, /tab === "chat"/);
