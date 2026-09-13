@@ -625,7 +625,11 @@ export function heyLiveRunActivity(input: {
     return null;
   }
 
-  const candidates: Array<{ activity: HeyLiveRunActivity; eventIndex: number }> = [];
+  const candidates: Array<{
+    activity: HeyLiveRunActivity;
+    eventIndex: number;
+    isAssistantCommentary: boolean;
+  }> = [];
   for (const [eventIndex, event] of input.events.entries()) {
     const candidate = friendlyStatusLabel(event);
     // The queued event remains in the bounded run history after the run row
@@ -638,7 +642,16 @@ export function heyLiveRunActivity(input: {
     ) {
       continue;
     }
-    if (candidate) candidates.push({ activity: candidate, eventIndex });
+    if (candidate) {
+      candidates.push({
+        activity: candidate,
+        eventIndex,
+        isAssistantCommentary:
+          event.type === "status" &&
+          eventPayloadText(event, "status") === "assistant_commentary" &&
+          approvedHermesActivityDescription(event) !== null,
+      });
+    }
   }
 
   const assistantProjection = heyAssistantContentView(input.assistantText ?? "");
@@ -661,7 +674,17 @@ export function heyLiveRunActivity(input: {
     latestVisibleEventIndex >= 0 &&
     (currentCandidate?.eventIndex ?? -1) > latestVisibleEventIndex
   );
-  if (assistantProjection.visibleText && !currentSpecificWorkFollowsVisibleText) {
+  // A trusted commentary event is itself newer, customer-facing narration.
+  // The aggregate assistant text can retain an older visible prefix after its
+  // message-delta event has fallen outside the bounded event window, so that
+  // prefix must not demote the newer narration to the generic writing label.
+  // A genuinely newer message delta still wins because it becomes the latest
+  // candidate and isAssistantCommentary is then false.
+  if (
+    assistantProjection.visibleText &&
+    !currentSpecificWorkFollowsVisibleText &&
+    !currentCandidate?.isAssistantCommentary
+  ) {
     current = { label: "Writing a reply", labelKey: "writing" };
   } else if (assistantProjection.technicalActivities.length && !currentDescribesSpecificWork) {
     const latestTool = assistantProjection.technicalActivities.at(-1);
