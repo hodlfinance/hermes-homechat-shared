@@ -500,6 +500,7 @@ const approvedHermesActivityDescriptions = [
 ] as const;
 
 const unsafeHermesActivityPreview = /(?:https?:\/\/|file:\/\/|\b[A-Za-z_][A-Za-z0-9_]{1,}=|(?:^|\s)\/(?:\S)|(?:^|\s)[A-Za-z]:\\|&&|\|\||;|\$\(|`|[\r\n<>\[\]{}])/;
+const unsafeHermesActivityNarration = /(?:https?:\/\/|file:\/\/|(?:^|\s)\/(?:\S)|(?:^|\s)[A-Za-z]:\\|\b[A-Za-z_][A-Za-z0-9_]{1,}\s*=|&&|\|\||;|\$\(|`|[\r\n<>\[\]{}]|\b(?:system prompt|chain of thought|scratchpad|reasoning|tool_call|mcp__|request_id|run_id)\b|\b[0-9a-f]{24,}\b|\b[A-Za-z0-9_-]{40,}\b)/i;
 
 function approvedHermesActivityText(content: string): string | null {
   if (!content.endsWith("…") || content.length > 64) return null;
@@ -515,11 +516,20 @@ function approvedHermesActivityText(content: string): string | null {
   return `${label} ${preview}`;
 }
 
+function approvedHermesActivityNarration(content: string): string | null {
+  const normalized = content.trim().replace(/\s+/g, " ");
+  if (normalized.length < 4 || normalized.length > 160) return null;
+  return unsafeHermesActivityNarration.test(content) ? null : normalized;
+}
+
 function approvedHermesActivityDescription(event: ChatRunEvent): string | null {
   if (event.type !== "status") return null;
   if (eventPayloadText(event, "source") !== "hermes_gateway") return null;
   if (eventPayloadText(event, "platform") !== "heyhermes_web") return null;
   if (!eventPayloadText(event, "chatId")) return null;
+  if (eventPayloadText(event, "status") === "assistant_commentary") {
+    return approvedHermesActivityNarration(eventPayloadText(event, "content"));
+  }
   return approvedHermesActivityText(eventPayloadText(event, "content"));
 }
 

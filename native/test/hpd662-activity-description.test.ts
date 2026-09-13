@@ -42,6 +42,36 @@ test("keeps an existing redacted customer-facing preview when the verb permits i
   );
 });
 
+test("projects the newest safe Hermes narration without making it answer text", () => {
+  const commentary = { ...trusted, status: "assistant_commentary" };
+  assert.deepEqual(
+    heyLiveRunActivity({
+      events: [
+        statusEvent("1", { ...commentary, content: "I’ll inspect the latest figures first." }),
+        statusEvent("2", { ...commentary, content: "Now I’ll compare the strongest options." }),
+      ],
+      runStatus: "running",
+    }),
+    { label: "Now I’ll compare the strongest options." },
+  );
+});
+
+test("rejects private or control-shaped Hermes narration", () => {
+  for (const content of [
+    "I’ll inspect /srv/hermes/.env API_KEY=private-marker",
+    "<tool_call>{raw payload}</tool_call>",
+    "I’ll open https://private.example/run",
+  ]) {
+    const view = heyLiveRunActivity({
+      events: [statusEvent("1", { ...trusted, status: "assistant_commentary", content })],
+      runStatus: "running",
+    });
+    assert.deepEqual(view, { label: "Working", labelKey: "working" });
+    assert.equal(JSON.stringify(view).includes("private-marker"), false);
+    assert.equal(JSON.stringify(view).includes("private.example"), false);
+  }
+});
+
 test("private previews and foreign status sources never become UI copy", () => {
   const privateMarker = "PRIVATE_VALUE=redacted-marker https://private.example/run";
   const command = heyLiveRunActivity({
