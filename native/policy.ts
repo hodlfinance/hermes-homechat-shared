@@ -32,6 +32,8 @@ const routes: ReadonlyArray<readonly [string, RegExp]> = [
   ["DELETE", /^\/support\/grants\/[^/]+$/],
   ["GET", /^\/approvals$/],
   ["PATCH", /^\/approvals\/[^/]+\/decision$/],
+  ["GET", /^\/tools\/action-approvals$/],
+  ["POST", /^\/tools\/action-approvals\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i],
   ["POST", /^\/suggestions\/home-nudge$/],
   ["POST", /^\/suggestions\/[^/]+\/state$/],
   ["POST", /^\/chat\/suggestions\/[^/]+\/use$/],
