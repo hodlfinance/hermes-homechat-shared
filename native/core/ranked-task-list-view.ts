@@ -1,5 +1,6 @@
 import {
   mapNativeTaskStatus,
+  normalizeRankedTaskSourceFreshness,
   type RankedCandidateState,
   type NativeRankedTask,
   RankedTaskCollection,
@@ -71,14 +72,16 @@ export type PendingRankedTaskListRow = Readonly<{
   nativeStatus: RankedTaskStatus;
 }>;
 
-/** Presentation only: preserve ranking and dismissed semantics while folding Done. */
+/** Presentation only: hide dismissed entries while folding completed work. */
 export function rankedTaskCompletionSections(view: RankedTaskListView) {
   const isDone = (row: RankedTaskListRow) => row.nativeStatus === "done"
     || (row.nativeStatus === null && row.candidateState === "completed");
+  const isDismissed = (row: RankedTaskListRow) => row.nativeStatus === "dismissed"
+    || (row.nativeStatus === null && row.candidateState === "dismissed");
   return {
-    rows: view.rows.filter((row) => !isDone(row)),
-    completedRows: view.rows.filter(isDone),
-    pendingRows: view.pendingRows.filter((row) => row.nativeStatus !== "done"),
+    rows: view.rows.filter((row) => !isDone(row) && !isDismissed(row)),
+    completedRows: view.rows.filter((row) => isDone(row) && !isDismissed(row)),
+    pendingRows: view.pendingRows.filter((row) => row.nativeStatus !== "done" && row.nativeStatus !== "dismissed"),
     completedPendingRows: view.pendingRows.filter((row) => row.nativeStatus === "done"),
   };
 }
@@ -132,12 +135,11 @@ function taskTime(value: RankedTaskTime): RankedTaskTime {
 }
 
 function sourceFreshnessView(sources: readonly RankedTaskSourceFreshness[]) {
-  if (!Array.isArray(sources) || sources.length !== supportedSources.size) {
-    throw new Error("The ranked list requires exactly four source freshness entries.");
-  }
-
+  // A fresh local workspace can contain unscored cards before any source
+  // assessment. Missing observations mean unavailable, not a broken list.
+  const normalized = normalizeRankedTaskSourceFreshness(sources);
   const seen = new Set<RankedTaskSource>();
-  return Object.freeze(sources.map((entry) => {
+  return Object.freeze(normalized.map((entry) => {
     if (!entry || !supportedSources.has(entry.source) || seen.has(entry.source)) {
       throw new Error("Ranked-task source freshness must contain each supported source exactly once.");
     }

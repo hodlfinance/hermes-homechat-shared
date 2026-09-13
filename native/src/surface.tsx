@@ -200,8 +200,8 @@ import {
   type SecureSecretEntryRequest,
 } from "../core/secure-secret-entry-view";
 import { RankedTaskList } from "./RankedTaskList";
+import type { RankedTaskActionRow } from "./RankedTaskList";
 import { buildRankedTaskChatPrompt } from "../core/ranked-task-chat";
-import type { RankedTaskListRow } from "../core/ranked-task-list-view";
 import { AutomationCard, type AutomationCardCopy } from "./AutomationCard";
 import {
   automationCardFromJob,
@@ -3210,7 +3210,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
    * Erledigt. A card is completed in the Kanban, which owns what a card's status
    * says; a finding has no card, so its own row carries it.
    */
-  async function completeRankedTask(row: RankedTaskListRow) {
+  async function completeRankedTask(row: RankedTaskActionRow) {
+    if (!("nativeTaskId" in row)) {
+      await changeRankedTask(() => api.updateTask(row.id, { status: "done" }));
+      return;
+    }
     await changeRankedTask(() => (row.nativeTaskId
       ? api.updateTask(row.nativeTaskId, { status: "done" })
       : api.updateRankedTask(row.id, { completed: true })));
@@ -3221,12 +3225,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
    * card keeps its card and its own status, the finding keeps its row, and the
    * row stays visible at the bottom of the list saying so.
    */
-  async function deleteRankedTask(row: RankedTaskListRow) {
+  async function deleteRankedTask(row: RankedTaskActionRow) {
     await changeRankedTask(() => api.updateRankedTask(row.id, { dismissed: true }));
   }
 
   /** Chat. The composer is filled with this task by title and origin; nothing is sent. */
-  function chatAboutRankedTask(row: RankedTaskListRow) {
+  function chatAboutRankedTask(row: RankedTaskActionRow) {
     stopReadAloud();
     setMenuOpen(false);
     setInput(buildRankedTaskChatPrompt(row, appLocale));

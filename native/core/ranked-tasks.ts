@@ -503,10 +503,10 @@ export function buildRankedTaskList(input: {
       description: "",
       assignee: null,
       status: null,
-      candidateState: candidate.completed === true
-        ? "completed" as const
-        : candidate.dismissed
-          ? "dismissed" as const
+      candidateState: candidate.dismissed
+        ? "dismissed" as const
+        : candidate.completed === true
+          ? "completed" as const
           : "suggested" as const,
       source: candidate.source,
       sourceLabel: candidate.sourceLabel.trim(),

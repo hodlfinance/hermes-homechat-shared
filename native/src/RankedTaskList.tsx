@@ -12,6 +12,7 @@ import {
   rankedTaskListView,
   rankedTaskCompletionSections,
   type RankedTaskListRow,
+  type PendingRankedTaskListRow,
   type RankedTaskRowActionId,
 } from "../core/ranked-task-list-view";
 import { rankedTaskLastUpdatedText } from "./mobile-ranked-task-last-updated";
@@ -168,10 +169,12 @@ function statusStyle(row: RankedTaskListRow) {
   return styles.statusTerminal;
 }
 
+export type RankedTaskActionRow = RankedTaskListRow | PendingRankedTaskListRow;
+
 export type RankedTaskRowHandlers = Readonly<{
-  onComplete?: (row: RankedTaskListRow) => void;
-  onDismiss?: (row: RankedTaskListRow) => void;
-  onChat?: (row: RankedTaskListRow) => void;
+  onComplete?: (row: RankedTaskActionRow) => void;
+  onDismiss?: (row: RankedTaskActionRow) => void;
+  onChat?: (row: RankedTaskActionRow) => void;
 }>;
 
 /**
@@ -184,7 +187,7 @@ function RankedTaskRowActions({
   copy,
   handlers,
 }: {
-  row: RankedTaskListRow;
+  row: RankedTaskActionRow;
   copy: RankedTaskListCopy;
   handlers: RankedTaskRowHandlers;
 }) {
@@ -257,9 +260,11 @@ function RankedTaskRow({
 function PendingTaskRow({
   row,
   copy,
+  handlers,
 }: {
   row: ReturnType<typeof rankedTaskListView>["pendingRows"][number];
   copy: RankedTaskListCopy;
+  handlers: RankedTaskRowHandlers;
 }) {
   return (
     <View
@@ -270,6 +275,7 @@ function PendingTaskRow({
       <View style={styles.pendingIdentity}>
         <Text style={styles.taskTitle}>{row.title}</Text>
         <Text style={styles.pendingLabel}>{copy.pendingTitle}</Text>
+        <RankedTaskRowActions copy={copy} handlers={handlers} row={row} />
       </View>
       <Text style={[styles.status, row.nativeStatus === "blocked" ? styles.statusBlocked : styles.statusActive]}>
         {copy.nativeStatuses[row.nativeStatus]}
@@ -292,9 +298,9 @@ export function RankedTaskList({
   copy?: RankedTaskListCopyOverrides;
   formatInstant?: RankedTaskInstantFormatter;
   onRefresh?: () => void;
-  onComplete?: (row: RankedTaskListRow) => void;
-  onDismiss?: (row: RankedTaskListRow) => void;
-  onChat?: (row: RankedTaskListRow) => void;
+  onComplete?: (row: RankedTaskActionRow) => void;
+  onDismiss?: (row: RankedTaskActionRow) => void;
+  onChat?: (row: RankedTaskActionRow) => void;
   refreshing?: boolean;
 }) {
   const text = resolvedCopy(copy);
@@ -302,7 +308,7 @@ export function RankedTaskList({
   const view = { ...inventory, ...rankedTaskCompletionSections(inventory) };
   const [completedOpen, setCompletedOpen] = useState(false);
   const completedCount = view.completedRows.length + view.completedPendingRows.length;
-  const [confirmation, setConfirmation] = useState<{ row: RankedTaskListRow; action: "complete" | "dismiss" } | null>(null);
+  const [confirmation, setConfirmation] = useState<{ row: RankedTaskActionRow; action: "complete" | "dismiss" } | null>(null);
   const pendingAction = useRef<(() => void) | null>(null);
   function cancelConfirmation() {
     pendingAction.current = null;
@@ -314,7 +320,7 @@ export function RankedTaskList({
     setConfirmation(null);
     action?.();
   }
-  function requestConfirmation(row: RankedTaskListRow, action: "complete" | "dismiss", handler: (row: RankedTaskListRow) => void) {
+  function requestConfirmation(row: RankedTaskActionRow, action: "complete" | "dismiss", handler: (row: RankedTaskActionRow) => void) {
     pendingAction.current = () => handler(row);
     setConfirmation({ row, action });
   }
@@ -379,7 +385,7 @@ export function RankedTaskList({
         <View style={styles.pendingSection}>
           <Text style={styles.pendingTitle}>{text.pendingTitle}</Text>
           <View accessibilityLabel={text.pendingTitle} role="list" style={styles.list}>
-            {view.pendingRows.map((row) => <PendingTaskRow copy={text} key={row.id} row={row} />)}
+            {view.pendingRows.map((row) => <PendingTaskRow copy={text} handlers={handlers} key={row.id} row={row} />)}
           </View>
         </View>
       ) : null}
@@ -392,7 +398,7 @@ export function RankedTaskList({
           {completedOpen ? (
             <View accessibilityLabel={text.showCompleted} role="list" style={styles.list}>
               {view.completedRows.map((row) => <RankedTaskRow copy={text} formatInstant={formatInstant} handlers={handlers} key={row.id} row={row} />)}
-              {view.completedPendingRows.map((row) => <PendingTaskRow copy={text} key={row.id} row={row} />)}
+              {view.completedPendingRows.map((row) => <PendingTaskRow copy={text} handlers={handlers} key={row.id} row={row} />)}
             </View>
           ) : null}
         </View>
