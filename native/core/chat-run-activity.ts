@@ -466,6 +466,73 @@ function toolStatus(label: string): HeyLiveRunActivity {
   return { label };
 }
 
+// `agent.display.build_status_phrase()` is the runtime's customer-facing
+// activity seam. In full mode it first redacts tool arguments, reduces them to
+// one display-oriented preview, and caps the whole phrase at 49 characters.
+// We still fail closed here: only known verbs enter the UI, and only verbs
+// whose preview is itself customer language may keep that preview. Commands,
+// paths, URLs, element refs, typed text and unknown tool names collapse to the
+// fixed verb instead of becoming a second raw-payload surface.
+const approvedHermesActivityDescriptions = [
+  ["is searching the web", "Searching the web", true],
+  ["is reading skill", "Reading skill", false],
+  ["is reading", "Reading", false],
+  ["is browsing", "Browsing", false],
+  ["is clicking", "Clicking", false],
+  ["is typing", "Typing", false],
+  ["is writing", "Writing", false],
+  ["is editing", "Editing", false],
+  ["is searching files", "Searching files", false],
+  ["is running code", "Running code", false],
+  ["is running", "Running", false],
+  ["is generating image", "Generating image", true],
+  ["is generating video", "Generating video", true],
+  ["is generating speech", "Generating speech", true],
+  ["is looking at the image", "Looking at the image", true],
+  ["is searching past sessions", "Searching past sessions", true],
+  ["is listing skills", "Listing skills", false],
+  ["is updating skill", "Updating skill", false],
+  ["is delegating", "Delegating", true],
+  ["is scheduling", "Scheduling", false],
+  ["is asking", "Asking", true],
+  ["is updating memory", "Updating memory", false],
+  ["is updating tasks", "Updating tasks", true],
+] as const;
+
+const unsafeHermesActivityPreview = /(?:https?:\/\/|file:\/\/|\b[A-Za-z_][A-Za-z0-9_]{1,}=|(?:^|\s)\/(?:\S)|(?:^|\s)[A-Za-z]:\\|&&|\|\||;|\$\(|`|[\r\n<>\[\]{}])/;
+const unsafeHermesActivityNarration = /(?:https?:\/\/|file:\/\/|(?:^|\s)\/(?:\S)|(?:^|\s)[A-Za-z]:\\|\b[A-Za-z_][A-Za-z0-9_]{1,}\s*=|&&|\|\||;|\$\(|`|[\r\n<>\[\]{}]|\b(?:system prompt|chain of thought|scratchpad|reasoning|tool_call|mcp__|request_id|run_id)\b|\b[0-9a-f]{24,}\b|\b[A-Za-z0-9_-]{40,}\b)/i;
+
+function approvedHermesActivityText(content: string): string | null {
+  if (!content.endsWith("…") || content.length > 64) return null;
+  const phrase = content.slice(0, -1).trim();
+  const normalized = phrase.toLowerCase();
+  const approved = approvedHermesActivityDescriptions.find(([prefix]) =>
+    normalized === prefix || normalized.startsWith(`${prefix} `),
+  );
+  if (!approved) return null;
+  const [prefix, label, allowPreview] = approved;
+  const preview = phrase.slice(prefix.length).trim();
+  if (!allowPreview || !preview || unsafeHermesActivityPreview.test(preview)) return label;
+  return `${label} ${preview}`;
+}
+
+function approvedHermesActivityNarration(content: string): string | null {
+  const normalized = content.trim().replace(/\s+/g, " ");
+  if (normalized.length < 4 || normalized.length > 160) return null;
+  return unsafeHermesActivityNarration.test(content) ? null : normalized;
+}
+
+function approvedHermesActivityDescription(event: ChatRunEvent): string | null {
+  if (event.type !== "status") return null;
+  if (eventPayloadText(event, "source") !== "hermes_gateway") return null;
+  if (eventPayloadText(event, "platform") !== "heyhermes_web") return null;
+  if (!eventPayloadText(event, "chatId")) return null;
+  if (eventPayloadText(event, "status") === "assistant_commentary") {
+    return approvedHermesActivityNarration(eventPayloadText(event, "content"));
+  }
+  return approvedHermesActivityText(eventPayloadText(event, "content"));
+}
+
 function friendlyStatusLabel(event: ChatRunEvent): HeyLiveRunActivity | null {
   if (event.type === "message_completed" || event.type === "error" || event.type === "usage") return null;
   if (event.type === "artifact_update") return toolStatus("Updating a result");
@@ -492,6 +559,9 @@ function friendlyStatusLabel(event: ChatRunEvent): HeyLiveRunActivity | null {
   ) {
     return null;
   }
+
+  const approvedDescription = approvedHermesActivityDescription(event);
+  if (approvedDescription) return toolStatus(approvedDescription);
 
   // Runtime status payloads are not user copy. They can contain command lines,
   // environment names, URLs, or provider diagnostics, so only their category
@@ -555,7 +625,11 @@ export function heyLiveRunActivity(input: {
     return null;
   }
 
-  const candidates: Array<{ activity: HeyLiveRunActivity; eventIndex: number }> = [];
+  const candidates: Array<{
+    activity: HeyLiveRunActivity;
+    eventIndex: number;
+    isAssistantCommentary: boolean;
+  }> = [];
   for (const [eventIndex, event] of input.events.entries()) {
     const candidate = friendlyStatusLabel(event);
     // The queued event remains in the bounded run history after the run row
@@ -568,7 +642,16 @@ export function heyLiveRunActivity(input: {
     ) {
       continue;
     }
-    if (candidate) candidates.push({ activity: candidate, eventIndex });
+    if (candidate) {
+      candidates.push({
+        activity: candidate,
+        eventIndex,
+        isAssistantCommentary:
+          event.type === "status" &&
+          eventPayloadText(event, "status") === "assistant_commentary" &&
+          approvedHermesActivityDescription(event) !== null,
+      });
+    }
   }
 
   const assistantProjection = heyAssistantContentView(input.assistantText ?? "");
@@ -591,7 +674,17 @@ export function heyLiveRunActivity(input: {
     latestVisibleEventIndex >= 0 &&
     (currentCandidate?.eventIndex ?? -1) > latestVisibleEventIndex
   );
-  if (assistantProjection.visibleText && !currentSpecificWorkFollowsVisibleText) {
+  // A trusted commentary event is itself newer, customer-facing narration.
+  // The aggregate assistant text can retain an older visible prefix after its
+  // message-delta event has fallen outside the bounded event window, so that
+  // prefix must not demote the newer narration to the generic writing label.
+  // A genuinely newer message delta still wins because it becomes the latest
+  // candidate and isAssistantCommentary is then false.
+  if (
+    assistantProjection.visibleText &&
+    !currentSpecificWorkFollowsVisibleText &&
+    !currentCandidate?.isAssistantCommentary
+  ) {
     current = { label: "Writing a reply", labelKey: "writing" };
   } else if (assistantProjection.technicalActivities.length && !currentDescribesSpecificWork) {
     const latestTool = assistantProjection.technicalActivities.at(-1);
