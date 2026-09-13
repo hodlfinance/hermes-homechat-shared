@@ -1,5 +1,6 @@
 import {
   mapNativeTaskStatus,
+  normalizeRankedTaskSourceFreshness,
   type RankedCandidateState,
   type NativeRankedTask,
   RankedTaskCollection,
@@ -134,12 +135,11 @@ function taskTime(value: RankedTaskTime): RankedTaskTime {
 }
 
 function sourceFreshnessView(sources: readonly RankedTaskSourceFreshness[]) {
-  if (!Array.isArray(sources) || sources.length !== supportedSources.size) {
-    throw new Error("The ranked list requires exactly four source freshness entries.");
-  }
-
+  // A fresh local workspace can contain unscored cards before any source
+  // assessment. Missing observations mean unavailable, not a broken list.
+  const normalized = normalizeRankedTaskSourceFreshness(sources);
   const seen = new Set<RankedTaskSource>();
-  return Object.freeze(sources.map((entry) => {
+  return Object.freeze(normalized.map((entry) => {
     if (!entry || !supportedSources.has(entry.source) || seen.has(entry.source)) {
       throw new Error("Ranked-task source freshness must contain each supported source exactly once.");
     }

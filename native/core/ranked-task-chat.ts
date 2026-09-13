@@ -1,5 +1,5 @@
 import type { AppLocale } from "./types";
-import type { RankedTaskListRow } from "./ranked-task-list-view";
+import type { RankedTaskListRow, PendingRankedTaskListRow } from "./ranked-task-list-view";
 
 /**
  * What the Chat button hands over.
@@ -36,7 +36,7 @@ export type RankedTaskChatContext = Readonly<{
   kanbanId: string | null;
   state: string;
   rank: number | null;
-  score: number;
+  score: number | null;
   deadline?: string;
   deadlineEvidence?: string;
   target?: string;
@@ -78,7 +78,21 @@ function exactId(value: unknown, field: string) {
   return value;
 }
 
-export function rankedTaskChatContext(row: RankedTaskListRow): RankedTaskChatContext {
+export function rankedTaskChatContext(row: RankedTaskListRow | PendingRankedTaskListRow): RankedTaskChatContext {
+  // Unscored native cards are actionable references too; never invent scores,
+  // deadlines or a candidate identity just to enter the Chat flow.
+  if (!("score" in row)) {
+    return Object.freeze({
+      rankedItemId: exactId(row.id, "id"),
+      title: boundedText(row.title, "title", limits.title, true),
+      origin: "Hermes Kanban",
+      source: "kanban" as const,
+      kanbanId: exactId(row.id, "Kanban ID"),
+      state: row.nativeStatus,
+      rank: null,
+      score: null,
+    });
+  }
   const state = row.nativeStatus ?? row.candidateState;
   if (!state) throw new Error("A ranked row must say what state it is in.");
   const time = row.time;
@@ -102,7 +116,7 @@ export function rankedTaskChatContext(row: RankedTaskListRow): RankedTaskChatCon
   });
 }
 
-export function buildRankedTaskChatPrompt(row: RankedTaskListRow, locale: AppLocale = "en"): string {
+export function buildRankedTaskChatPrompt(row: RankedTaskListRow | PendingRankedTaskListRow, locale: AppLocale = "en"): string {
   const prefix = locale === "en" ? instruction : `${localizedInstructions[locale].replace(/\{schema\}/g, () => RANKED_TASK_CHAT_SCHEMA)} ${RANKED_TASK_CHAT_SCHEMA}=`;
   const prompt = `${prefix}${JSON.stringify(rankedTaskChatContext(row))}`;
   if (prompt.length > RANKED_TASK_CHAT_PROMPT_MAX_LENGTH) {
