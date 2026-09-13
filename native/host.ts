@@ -129,10 +129,12 @@ export type NativeR8Host = {
   theme?: Partial<MobilePalette>;
   presentation?: {
     accountLabel?: string;
+    appLocale?: AppLocale;
     centerChatTitle?: boolean;
     chatTitle?: string;
     hideChatSubtitle?: boolean;
     hideDrawerPreferences?: boolean;
+    keyboardVerticalOffset?: number;
     openingMode?: "brand" | "chat";
     openingStatus?: string;
     showAssistantIdentity?: boolean;

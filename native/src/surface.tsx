@@ -1487,13 +1487,17 @@ function NativeR8Surface(props: NativeR8SurfaceProps = {}) {
 function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8SurfaceProps = {}) {
   const systemColorScheme = useColorScheme();
   const reduceMotion = useReduceMotion();
+  const hostAppLocale = host.presentation?.appLocale;
+  const keyboardVerticalOffset = Number.isFinite(host.presentation?.keyboardVerticalOffset)
+    ? Math.max(0, host.presentation?.keyboardVerticalOffset ?? 0)
+    : 8;
   const [token, setToken] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null);
   const [productAccessRefreshing, setProductAccessRefreshing] = useState(false);
   const [tab, setTab] = useState<Tab>("chat");
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [appLocale, setAppLocale] = useState<AppLocale>("en");
+  const [appLocale, setAppLocale] = useState<AppLocale>(hostAppLocale ?? "en");
   const t = mobileText(appLocale);
   const accountPage = accountPageCopy(appLocale);
   const systemPageCopy = t.systemPages;
@@ -2449,7 +2453,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
 
         const wasInitialSnapshot = snapshotStateRef.current === null;
         const snapshotSessionId = mobileHomeChatSnapshotSessionId(nextSnapshot.recentMessages);
-        const nextLocale = normalizeMobileLocale(nextSnapshot.me.preferredLocale);
+        const nextLocale = hostAppLocale ?? normalizeMobileLocale(nextSnapshot.me.preferredLocale);
         criticalSnapshotPublished = true;
         snapshotStateRef.current = nextSnapshot;
         setSnapshot(nextSnapshot);
@@ -2498,7 +2502,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
             ) return;
             snapshotStateRef.current = enrichedSnapshot;
             setSnapshot(enrichedSnapshot);
-            setAppLocale(normalizeMobileLocale(enrichedSnapshot.me.preferredLocale));
+            setAppLocale(hostAppLocale ?? normalizeMobileLocale(enrichedSnapshot.me.preferredLocale));
             const enrichedChatGptAccountReady = chatGptAccountConnectionView(enrichedSnapshot).ready;
             if (enrichedChatGptAccountReady) {
               setChatGptConnection(null);
@@ -3957,7 +3961,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       const message = displayError(err, "Could not save language.");
       recordDiagnostic("error", "Language save failed", message);
       setAppError(userFacingError(message));
-      setAppLocale(normalizeMobileLocale(snapshot?.me.preferredLocale));
+      setAppLocale(hostAppLocale ?? normalizeMobileLocale(snapshot?.me.preferredLocale));
     }
   }
 
@@ -7392,7 +7396,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         <KeyboardAvoidingView
           style={styles.chatKeyboard}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={8}
+          keyboardVerticalOffset={keyboardVerticalOffset}
         >
           <View style={styles.chatScreen}>
             <View style={styles.chatNoticeStack}>
@@ -8846,26 +8850,30 @@ function MobileNavigationDrawer({
             <View style={styles.mobileDrawerAccountMenu}>
               {host.presentation?.hideDrawerPreferences ? null : (
                 <>
-                  <View style={styles.mobileDrawerLanguagePicker}>
-                    <Text style={styles.mobileDrawerLanguageLabel}>{t.settings.language}</Text>
-                    <View style={styles.mobileDrawerLanguageButtonRow}>
-                      {mobileLocaleOptions.map((option) => (
-                        <Pressable
-                          key={option.locale}
-                          style={[styles.mobileDrawerLanguageButton, option.locale === appLocale && styles.mobileDrawerLanguageButtonActive]}
-                          onPress={() => onLocaleChange(option.locale)}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: option.locale === appLocale }}
-                          accessibilityLabel={option.label}
-                        >
-                          <Text style={[styles.mobileDrawerLanguageButtonText, option.locale === appLocale && styles.mobileDrawerLanguageButtonTextActive]}>
-                            {option.shortLabel}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-                  <View style={styles.mobileDrawerAccountMenuDivider} />
+                  {host.presentation?.appLocale ? null : (
+                    <>
+                      <View style={styles.mobileDrawerLanguagePicker}>
+                        <Text style={styles.mobileDrawerLanguageLabel}>{t.settings.language}</Text>
+                        <View style={styles.mobileDrawerLanguageButtonRow}>
+                          {mobileLocaleOptions.map((option) => (
+                            <Pressable
+                              key={option.locale}
+                              style={[styles.mobileDrawerLanguageButton, option.locale === appLocale && styles.mobileDrawerLanguageButtonActive]}
+                              onPress={() => onLocaleChange(option.locale)}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: option.locale === appLocale }}
+                              accessibilityLabel={option.label}
+                            >
+                              <Text style={[styles.mobileDrawerLanguageButtonText, option.locale === appLocale && styles.mobileDrawerLanguageButtonTextActive]}>
+                                {option.shortLabel}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </View>
+                      <View style={styles.mobileDrawerAccountMenuDivider} />
+                    </>
+                  )}
                   <View style={styles.mobileDrawerLanguagePicker}>
                     <Text style={styles.mobileDrawerLanguageLabel}>{t.nav.appearance}</Text>
                     <View style={styles.mobileDrawerLanguageButtonRow}>
