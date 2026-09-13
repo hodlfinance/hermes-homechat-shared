@@ -56,6 +56,38 @@ test("projects the newest safe Hermes narration without making it answer text", 
   );
 });
 
+test("keeps bounded newer narration ahead of an older aggregate answer prefix", () => {
+  const commentary = statusEvent("1", {
+    ...trusted,
+    status: "assistant_commentary",
+    content: "Now I’ll compare the strongest options.",
+  });
+  assert.deepEqual(
+    heyLiveRunActivity({
+      assistantText: "I found the earlier figures.",
+      events: [commentary],
+      runStatus: "running",
+    }),
+    { label: "Now I’ll compare the strongest options." },
+  );
+  assert.deepEqual(
+    heyLiveRunActivity({
+      assistantText: "Here is the final comparison.",
+      events: [
+        commentary,
+        {
+          ...commentary,
+          id: "2",
+          type: "message_delta",
+          payload: { content: "Here is the final comparison." },
+        },
+      ],
+      runStatus: "running",
+    }),
+    { label: "Writing a reply", labelKey: "writing" },
+  );
+});
+
 test("rejects private or control-shaped Hermes narration", () => {
   for (const content of [
     "I’ll inspect /srv/hermes/.env API_KEY=private-marker",
