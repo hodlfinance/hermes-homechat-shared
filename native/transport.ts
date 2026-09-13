@@ -1,7 +1,86 @@
 import { createApiClient, createHermesApiClient } from "./core/index";
 import { createSupportRequestClient, createAnonymousSupportRequestClient } from "./core/support-request";
 import { createNativeR8CanonicalController, type NativeR8ChannelIdentity } from "./src/hermes-canonical";
-import type { NativeR8Transport } from "./host";
+import type {
+  NativeFinanceActionApproval,
+  NativeFinanceActionApprovalChannel,
+  NativeFinanceActionApprovalSurface,
+  NativeR8Transport,
+} from "./host";
+
+const APPROVAL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PAYLOAD_SHA256 = /^[0-9a-f]{64}$/;
+const APPROVAL_SURFACES = new Set<NativeFinanceActionApprovalSurface>(["hey_hermes", "finhermes"]);
+const APPROVAL_CHANNELS = new Set<NativeFinanceActionApprovalChannel>([
+  "hey_hermes_web", "hey_hermes_mobile", "finhermes_web", "finhermes_mobile",
+  "hodl_mobile", "capchat_app", "telegram", "hermes_cron",
+]);
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function pendingFinanceApproval(
+  value: unknown,
+  identity: NativeR8ChannelIdentity,
+  conversationSessionId: string,
+): NativeFinanceActionApproval {
+  const proposal = record(value);
+  const review = record(proposal?.review);
+  const fields = Array.isArray(review?.fields) ? review.fields.map(record) : [];
+  if (
+    !proposal || proposal.kind !== "finance_tool_action" ||
+    typeof proposal.approvalId !== "string" || !APPROVAL_ID.test(proposal.approvalId) ||
+    typeof proposal.payloadSha256 !== "string" || !PAYLOAD_SHA256.test(proposal.payloadSha256) ||
+    typeof proposal.canonicalConversationId !== "string" || proposal.canonicalConversationId !== conversationSessionId ||
+    typeof proposal.canonicalRunId !== "string" || !proposal.canonicalRunId ||
+    typeof proposal.originSurface !== "string" || !APPROVAL_SURFACES.has(proposal.originSurface as NativeFinanceActionApprovalSurface) ||
+    proposal.originSurface !== identity.surface ||
+    typeof proposal.confirmationSurface !== "string" || !APPROVAL_SURFACES.has(proposal.confirmationSurface as NativeFinanceActionApprovalSurface) ||
+    proposal.confirmationSurface !== identity.surface ||
+    typeof proposal.channel !== "string" || !APPROVAL_CHANNELS.has(proposal.channel as NativeFinanceActionApprovalChannel) ||
+    proposal.channel !== identity.channel ||
+    !review || typeof review.title !== "string" || typeof review.summary !== "string" ||
+    !Array.isArray(review.fields) || fields.some((field) =>
+      !field || typeof field.key !== "string" || typeof field.label !== "string" || typeof field.value !== "string") ||
+    typeof proposal.expiresAt !== "string" || !Number.isFinite(Date.parse(proposal.expiresAt))
+  ) {
+    throw new Error("The Finance approval response was invalid.");
+  }
+  return {
+    approvalId: proposal.approvalId,
+    payloadSha256: proposal.payloadSha256,
+    canonicalConversationId: proposal.canonicalConversationId,
+    canonicalRunId: proposal.canonicalRunId,
+    originSurface: proposal.originSurface as NativeFinanceActionApprovalSurface,
+    confirmationSurface: proposal.confirmationSurface as NativeFinanceActionApprovalSurface,
+    channel: proposal.channel as NativeFinanceActionApprovalChannel,
+    title: review.title,
+    summary: review.summary,
+    fields: fields.map((field) => ({
+      key: field!.key as string,
+      label: field!.label as string,
+      value: field!.value as string,
+    })),
+    expiresAt: proposal.expiresAt,
+  };
+}
+
+function approvalDecisionBody(approval: NativeFinanceActionApproval, decision: "confirm" | "cancel") {
+  return JSON.stringify({
+    decision,
+    expectedPayloadSha256: approval.payloadSha256,
+    context: {
+      canonicalRunId: approval.canonicalRunId,
+      canonicalConversationId: approval.canonicalConversationId,
+      originSurface: approval.originSurface,
+      confirmationSurface: approval.confirmationSurface,
+      channel: approval.channel,
+    },
+  });
+}
 
 /** Host supplied fetch is the only network capability of the shared native UI. */
 export function createNativeR8Transport(options: {
@@ -32,6 +111,27 @@ export function createNativeR8Transport(options: {
     });
     return mutation ? guidedSetup(token) : response.state;
   };
+  const listPendingFinanceActionApprovals: NativeR8Transport["listPendingFinanceActionApprovals"] = async ({ token, conversationSessionId }) => {
+    const response = record(await request(
+      token,
+      `/tools/action-approvals?conversationId=${encodeURIComponent(conversationSessionId)}&surface=${encodeURIComponent(options.identity.surface)}`,
+    ));
+    if (response?.status !== "ok" || !Array.isArray(response.approvals)) {
+      throw new Error("Pending Finance approvals could not be loaded.");
+    }
+    return response.approvals.map((approval) =>
+      pendingFinanceApproval(approval, options.identity, conversationSessionId));
+  };
+  const decideFinanceActionApproval = async (
+    token: string,
+    approval: NativeFinanceActionApproval,
+    decision: "confirm" | "cancel",
+  ) => {
+    await request(token, `/tools/action-approvals/${encodeURIComponent(approval.approvalId)}`, {
+      method: "POST",
+      body: approvalDecisionBody(approval, decision),
+    });
+  };
   return {
     createApiClient: (input) => createApiClient({ ...input, fetchImpl: nativeFetch }),
     createCanonicalClient: (input) => createNativeR8CanonicalController(
@@ -41,6 +141,11 @@ export function createNativeR8Transport(options: {
     fetchStream: nativeFetch,
     firstConversation: (token) => request(token, "/workspace/first-conversation"),
     guidedSetup,
+    listPendingFinanceActionApprovals,
+    confirmFinanceActionApproval: ({ token, approval }) =>
+      decideFinanceActionApproval(token, approval, "confirm"),
+    cancelFinanceActionApproval: ({ token, approval }) =>
+      decideFinanceActionApproval(token, approval, "cancel"),
     reportLatency: async (token, runId, summary) => {
       await request(token, `/hermes/runs/${encodeURIComponent(runId)}/latency`, { method: "POST", body: JSON.stringify({ summary }) });
     },

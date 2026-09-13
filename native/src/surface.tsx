@@ -8,6 +8,7 @@ import { capabilityCopy, capabilityStatusCopy } from "../core/capability-copy";
 import { MobilePrivacySheet } from "./MobilePrivacySheet";
 import { FinanceArtifactCard } from "./FinanceArtifactCard";
 import { uniqueMobileFinanceArtifactReferences } from "./mobile-finance-artifacts";
+import { MobileFinanceActionApprovalCard } from "./mobile-finance-action-approval";
 import { workspacePrivacyCopy } from "../ui/workspace-privacy-copy";
 import { openPageStarter, consumePageStarter, pageStarterTranscript, pageStarterPayload, pageStarterAfterNavigation, type PageStarterState } from "../ui/page-starter-state";
 import { pageStarterCopy } from "../ui/page-starter-copy";
@@ -1721,6 +1722,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [confirmationDecisionRuns, setConfirmationDecisionRuns] = useState<Record<string, boolean>>({});
+  const [financeActionApprovals, setFinanceActionApprovals] = useState<import("../host").NativeFinanceActionApproval[]>([]);
+  const [financeApprovalBusyId, setFinanceApprovalBusyId] = useState<string | null>(null);
+  const [financeApprovalErrorById, setFinanceApprovalErrorById] = useState<Record<string, string>>({});
   const [queuedFollowUps, setQueuedFollowUps] = useState<MobileQueuedFollowUpView[]>([]);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [voiceNoteState, setVoiceNoteState] = useState<SharedHomechatVoiceState>({
@@ -1822,6 +1826,26 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   signedInAccountIdRef.current = snapshot?.me.id ?? null;
   activeConversationSessionIdRef.current = activeConversationSessionId;
   snapshotStateRef.current = snapshot;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!token || !activeConversationSessionId) {
+      setFinanceActionApprovals([]);
+      return () => { cancelled = true; };
+    }
+    const refresh = () => host.transport.listPendingFinanceActionApprovals({
+      token,
+      conversationSessionId: activeConversationSessionId,
+    }).then((approvals) => {
+      if (!cancelled) setFinanceActionApprovals(approvals);
+    }).catch(() => undefined);
+    void refresh();
+    const timers = [1000, 2500, 5000].map((delay) => setTimeout(() => void refresh(), delay));
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+    };
+  }, [activeChatRunId, activeConversationSessionId, host.transport, token]);
 
   function latencyNow() {
     return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
@@ -5744,6 +5768,24 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     }
   }
 
+  async function decideFinanceActionApproval(approval: import("../host").NativeFinanceActionApproval, decision: "confirm" | "cancel") {
+    if (financeApprovalBusyId || !token) return;
+    setFinanceApprovalBusyId(approval.approvalId);
+    setFinanceApprovalErrorById((current) => ({ ...current, [approval.approvalId]: "" }));
+    try {
+      if (decision === "confirm") await host.transport.confirmFinanceActionApproval({ token, approval });
+      else await host.transport.cancelFinanceActionApproval({ token, approval });
+      setFinanceActionApprovals((current) => current.filter((item) => item.approvalId !== approval.approvalId));
+    } catch {
+      setFinanceApprovalErrorById((current) => ({
+        ...current,
+        [approval.approvalId]: "The change could not be applied. Review it and try again.",
+      }));
+    } finally {
+      setFinanceApprovalBusyId(null);
+    }
+  }
+
   function commitMessagesScrollIntent(event: NativeScrollEvent, intentOffsetY = event.contentOffset.y) {
     messagesScrollOffsetRef.current = event.contentOffset.y;
     const distanceFromBottom = mobileScrollDistanceFromBottom({
@@ -7619,6 +7661,16 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                   onDismiss={dismissFailedSend}
                 />
               ) : null}
+              {financeActionApprovals.map((approval) => (
+                <MobileFinanceActionApprovalCard
+                  key={approval.approvalId}
+                  approval={approval}
+                  busy={financeApprovalBusyId === approval.approvalId}
+                  error={financeApprovalErrorById[approval.approvalId] || null}
+                  onConfirm={() => void decideFinanceActionApproval(approval, "confirm")}
+                  onCancel={() => void decideFinanceActionApproval(approval, "cancel")}
+                />
+              ))}
             </ScrollView>
             {showScrollDown ? (
               <Pressable
