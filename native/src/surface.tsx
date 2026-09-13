@@ -6,6 +6,8 @@ import { staticUiCopy, staticUiMessage } from "./static-ui-copy";
 import { supportAccessCopy, supportAccessOpenCount } from "../core/support-request";
 import { capabilityCopy, capabilityStatusCopy } from "../core/capability-copy";
 import { MobilePrivacySheet } from "./MobilePrivacySheet";
+import { FinanceArtifactCard } from "./FinanceArtifactCard";
+import { uniqueMobileFinanceArtifactReferences } from "./mobile-finance-artifacts";
 import { workspacePrivacyCopy } from "../ui/workspace-privacy-copy";
 import { openPageStarter, consumePageStarter, pageStarterTranscript, pageStarterPayload, pageStarterAfterNavigation, type PageStarterState } from "../ui/page-starter-state";
 import { pageStarterCopy } from "../ui/page-starter-copy";
@@ -9174,6 +9176,9 @@ function MessageBubble({
   const uploadReferences = isUser
     ? (message.artifactReferences ?? []).filter((reference) => reference.source === "upload")
     : [];
+  const financeReferences = isUser
+    ? []
+    : uniqueMobileFinanceArtifactReferences(message.artifactReferences);
 
   return (
     <View
@@ -9200,6 +9205,14 @@ function MessageBubble({
       {isUser
         ? <Text style={textStyle} selectable>{message.content}</Text>
         : <View onLayout={onVisibleTextLayout}><LinkedMessageText text={visibleAssistantText} /></View>}
+      {financeReferences.map((reference) => (
+        <FinanceArtifactCard
+          key={`${reference.id}:${reference.version}`}
+          reference={reference}
+          locale={locale}
+          onOpenUrl={(url) => void Linking.openURL(url)}
+        />
+      ))}
       {!isUser && confirmation ? (
         <View style={styles.confirmationActions} accessibilityLabel={staticUiCopy(locale)["Confirmation choices"]}>
           {confirmation.actions.map((action) => (
