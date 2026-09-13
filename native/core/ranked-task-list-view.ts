@@ -71,14 +71,16 @@ export type PendingRankedTaskListRow = Readonly<{
   nativeStatus: RankedTaskStatus;
 }>;
 
-/** Presentation only: preserve ranking and dismissed semantics while folding Done. */
+/** Presentation only: hide dismissed entries while folding completed work. */
 export function rankedTaskCompletionSections(view: RankedTaskListView) {
   const isDone = (row: RankedTaskListRow) => row.nativeStatus === "done"
     || (row.nativeStatus === null && row.candidateState === "completed");
+  const isDismissed = (row: RankedTaskListRow) => row.nativeStatus === "dismissed"
+    || (row.nativeStatus === null && row.candidateState === "dismissed");
   return {
-    rows: view.rows.filter((row) => !isDone(row)),
-    completedRows: view.rows.filter(isDone),
-    pendingRows: view.pendingRows.filter((row) => row.nativeStatus !== "done"),
+    rows: view.rows.filter((row) => !isDone(row) && !isDismissed(row)),
+    completedRows: view.rows.filter((row) => isDone(row) && !isDismissed(row)),
+    pendingRows: view.pendingRows.filter((row) => row.nativeStatus !== "done" && row.nativeStatus !== "dismissed"),
     completedPendingRows: view.pendingRows.filter((row) => row.nativeStatus === "done"),
   };
 }
