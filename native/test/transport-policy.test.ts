@@ -5,7 +5,7 @@ import { workspaceStatusTruthRequest } from '../core/status-truth';
 import { permitsHodlNativeR8Request, isPreinstalledR8Suggestion } from '../policy';
 
 test('native R8 preserves user work and rejects account/admin/default-task authority, including encoded escapes', () => {
-  for (const [method, path] of [['POST', '/hermes/runs'], ['POST', '/hermes/runs/run_a/stop'], ['GET', '/hermes/runs/run_a/events'], ['GET', '/hermes/jobs'], ['DELETE', '/hermes/jobs/user_job'], ['POST', '/voice/transcriptions'], ['POST', '/voice/speech'], ['GET', '/workspace/model-options'], ['POST', '/workspace/chat-route-preference'], ['GET', '/plugins'], ['GET', '/workspace/hermes-dashboard-route'], ['GET', '/workspace/preview/8080/index.html'], ['POST', '/secure-secrets/requests/request_a/complete']] as const) {
+  for (const [method, path] of [['POST', '/hermes/runs'], ['POST', '/hermes/runs/run_a/stop'], ['GET', '/hermes/runs/run_a/events'], ['GET', '/hermes/jobs'], ['DELETE', '/hermes/jobs/user_job'], ['POST', '/voice/transcriptions'], ['POST', '/voice/speech'], ['GET', '/workspace/model-options'], ['POST', '/workspace/chat-route-preference'], ['GET', '/plugins'], ['GET', '/workspace/hermes-dashboard-route'], ['GET', '/workspace/preview/8080/index.html'], ['POST', '/secure-secrets/requests/request_a/complete'], ['GET', '/tools/action-approvals'], ['POST', '/tools/action-approvals/23800000-0000-4000-8000-000000000001']] as const) {
     assert.equal(permitsHodlNativeR8Request(method, path), true, `${method} ${path}`);
   }
   for (const path of ['/auth/login', '/auth/logout', '/admin/accounts', '/ranked-tasks/automations', '/tasks/ranked', '/workspace/../admin/accounts', '/workspace/preview/8080/%2e%2e/admin', '/workspace/preview/8080/%252e%252e/admin', '/workspace/preview/8080/a%2fb', '//example.com/snapshot']) {
@@ -17,6 +17,65 @@ test('native R8 preserves user work and rejects account/admin/default-task autho
   assert.equal(isPreinstalledR8Suggestion({ id: 'user-job', name: 'Ranker', prompt: 'Scan my email' }), false);
   assert.equal(isPreinstalledR8Suggestion({ id: 'connect_email', target: { connectionId: 'email' } }), false);
   assert.equal(isPreinstalledR8Suggestion({ id: 'set_reminder_simple' }), false);
+});
+
+test('native Finance approval decisions return the exact reviewed payload and context', async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const proposal = {
+    approvalId: '23800000-0000-4000-8000-000000000001',
+    actionId: '23800000-0000-4000-8000-000000000001',
+    kind: 'finance_tool_action',
+    family: 'hodl',
+    tool: 'hodl_add_watchlist_item',
+    payloadSha256: 'a'.repeat(64),
+    approvalVersion: 1,
+    canonicalRunId: 'run_a',
+    canonicalConversationId: 'conversation_a',
+    originSurface: 'finhermes',
+    confirmationSurface: 'finhermes',
+    channel: 'hodl_mobile',
+    review: {
+      version: 1,
+      family: 'hodl',
+      tool: 'hodl_add_watchlist_item',
+      title: 'Add DOGE/USD?',
+      summary: 'Hermes wants to update your watchlist.',
+      fields: [{ key: 'market', label: 'Market', value: 'DOGE/USD' }],
+    },
+    expiresAt: '2026-09-14T00:15:00.000Z',
+  };
+  const transport = createNativeR8Transport({
+    baseUrl: 'https://finhermes.test/api',
+    identity: { surface: 'finhermes', channel: 'hodl_mobile', allowedSurfaces: ['finhermes'] },
+    fetch: async (url, init) => {
+      calls.push({ url: String(url), init });
+      const body = String(url).includes('/tools/action-approvals?')
+        ? { status: 'ok', approvals: [proposal], recoveries: [] }
+        : { status: 'ok' };
+      return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+    },
+  });
+
+  const [approval] = await transport.listPendingFinanceActionApprovals({
+    token: 'test-session',
+    conversationSessionId: 'conversation_a',
+  });
+  await transport.confirmFinanceActionApproval({ token: 'test-session', approval });
+  await transport.cancelFinanceActionApproval({ token: 'test-session', approval });
+
+  assert.match(calls[0]!.url, /\/tools\/action-approvals\?conversationId=conversation_a&surface=finhermes$/);
+  assert.deepEqual(JSON.parse(String(calls[1]!.init?.body)), {
+    decision: 'confirm',
+    expectedPayloadSha256: 'a'.repeat(64),
+    context: {
+      canonicalRunId: 'run_a',
+      canonicalConversationId: 'conversation_a',
+      originSurface: 'finhermes',
+      confirmationSurface: 'finhermes',
+      channel: 'hodl_mobile',
+    },
+  });
+  assert.equal(JSON.parse(String(calls[2]!.init?.body)).decision, 'cancel');
 });
 
 test('the installed native client routes bootstrap, settings and canonical mutations through the host transport', async () => {

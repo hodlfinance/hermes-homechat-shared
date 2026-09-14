@@ -107,6 +107,31 @@ export type NativeR8GuidedSetupMutation = { kind: "skip" } | {
   choice: Exclude<GuidedSetupConnectionChoice, "undecided">;
 } | { kind: "gmail_recommendation"; action: "snooze" | "dismiss" };
 
+export type NativeFinanceActionApprovalField = { key: string; label: string; value: string };
+export type NativeFinanceActionApprovalSurface = "hey_hermes" | "finhermes";
+export type NativeFinanceActionApprovalChannel =
+  | "hey_hermes_web"
+  | "hey_hermes_mobile"
+  | "finhermes_web"
+  | "finhermes_mobile"
+  | "hodl_mobile"
+  | "capchat_app"
+  | "telegram"
+  | "hermes_cron";
+export type NativeFinanceActionApproval = {
+  approvalId: string;
+  payloadSha256: string;
+  canonicalConversationId: string;
+  canonicalRunId: string;
+  originSurface: NativeFinanceActionApprovalSurface;
+  confirmationSurface: NativeFinanceActionApprovalSurface;
+  channel: NativeFinanceActionApprovalChannel;
+  title: string;
+  summary: string;
+  fields: NativeFinanceActionApprovalField[];
+  expiresAt: string;
+};
+
 /** All operations retain the canonical R8 response types; hosts bind authority. */
 export type NativeR8Transport = {
   createApiClient(options: ApiClientOptions): ReturnType<typeof createApiClient>;
@@ -115,6 +140,9 @@ export type NativeR8Transport = {
   createAnonymousSupportClient: typeof createAnonymousSupportRequestClient;
   firstConversation(token: string): Promise<FirstConversationSnapshot>;
   guidedSetup(token: string, mutation?: NativeR8GuidedSetupMutation): Promise<GuidedSetupState | null>;
+  listPendingFinanceActionApprovals(input: { token: string; conversationSessionId: string }): Promise<NativeFinanceActionApproval[]>;
+  confirmFinanceActionApproval(input: { token: string; approval: NativeFinanceActionApproval }): Promise<void>;
+  cancelFinanceActionApproval(input: { token: string; approval: NativeFinanceActionApproval }): Promise<void>;
   reportLatency(token: string, runId: string, summary: ChatLatencySummary): Promise<void>;
   fetchStream: typeof fetch;
 };
@@ -122,14 +150,28 @@ export type NativeR8Host = {
   apiBaseUrl: string;
   storageNamespace: string;
   identity: {
-    icon: ImageSourcePropType;
+    icon?: ImageSourcePropType;
     gmailRedirectUri?: string;
     copy: { productName: string; tagline: string; trialCta: string; provisioningTitle: string; chatPlaceholder: string };
   };
   theme?: Partial<MobilePalette>;
   presentation?: {
+    accountLabel?: string;
+    appLocale?: AppLocale;
+    centerChatTitle?: boolean;
+    chatTitle?: string;
+    hideChatSubtitle?: boolean;
+    hideDrawerPreferences?: boolean;
+    keyboardVerticalOffset?: number;
     openingMode?: "brand" | "chat";
     openingStatus?: string;
+    showAssistantIdentity?: boolean;
+    sessionFailure?: {
+      title: string;
+      body: string;
+      retryLabel: string;
+      dismissLabel: string;
+    };
   };
   session: NativeR8SessionHost;
   policy: { preinstalledRanker: boolean; preinstalledEmailScanner: boolean };
