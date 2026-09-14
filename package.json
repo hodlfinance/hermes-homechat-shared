@@ -88,6 +88,7 @@
     "./native/mobile-page-menu-row": "./native/src/mobile-page-menu-row.tsx",
     "./native/mobile-status-shimmer": "./native/src/mobile-status-shimmer.tsx",
     "./native/mobile-home-chat-startup": "./native/src/mobile-home-chat-startup.ts",
+    "./native/mobile-email-magic-link": "./native/src/mobile-email-magic-link.ts",
     "./native/MobilePrivacySheet": "./native/src/MobilePrivacySheet.tsx",
     "./native/policy": "./native/policy.ts",
     "./native/transport": "./native/transport.ts"
