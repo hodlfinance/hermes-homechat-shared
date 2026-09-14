@@ -731,6 +731,7 @@ export interface AuthSession {
 
 export type HeyNativeAuthProvider = "apple" | "google";
 export type HeyNativeAuthSurface = "ios" | "web";
+export type HeyNativeAuthMode = "link" | "login" | "reauthenticate";
 
 export interface HeyNativeAuthConfig {
   productRealm: "heyhermes.v1";
@@ -1245,7 +1246,7 @@ export type WorkspaceServerIdentity = WorkspaceServerIdentityBase & (
   | {
       confirmed: true;
       hostingKind: "firecracker_microvm";
-      provider: "firecracker";
+      provider: null;
       serverId: null;
       workspaceMachineId: string;
     }

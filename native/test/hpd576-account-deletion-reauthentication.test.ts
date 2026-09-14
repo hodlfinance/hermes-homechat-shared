@@ -35,12 +35,30 @@ test("the native client preserves the stale social sign-in code and offers actio
   assert.match(accountDeletionNativeReauthenticationCopy("de").googleAction, /Google/);
 });
 
+test("the native client reads back only the account's actual deletion reauthentication methods", async () => {
+  const client = createApiClient({
+    baseUrl: "https://example.invalid",
+    fetchImpl: async (url) => {
+      assert.match(String(url), /\/account\/deletion\/reauthentication-methods$/);
+      return new Response(JSON.stringify({ hasPassword: false, linkedProviders: ["google"] }), { status: 200 });
+    },
+  });
+  assert.deepEqual(await client.heyAccountDeletionReauthenticationMethods(), {
+    hasPassword: false,
+    linkedProviders: ["google"],
+  });
+});
+
 test("the deletion section reveals provider sign-in actions only for that stable code", () => {
   const section = readFileSync(new URL("../src/AccountDeletionSection.tsx", import.meta.url), "utf8");
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   assert.match(section, /needsAccountDeletionNativeReauthentication\(error\)/);
-  assert.match(section, /showReauthenticationActions \? reauthenticationActions : null/);
-  assert.match(surface, /reauthenticationActions=\{/);
-  assert.match(surface, /signInWithGoogle\("link"\)/);
-  assert.match(surface, /signInWithApple\("link"\)/);
+  assert.match(section, /heyAccountDeletionReauthenticationMethods\(\)/);
+  assert.match(section, /reauthenticationMethods\?\.linkedProviders \?\? \[\]/);
+  assert.match(surface, /reauthenticationActions=\{\(linkedProviders\) =>/);
+  assert.match(surface, /linkedProviders\.includes\("google"\)/);
+  assert.match(surface, /reauthenticateAccountDeletionWithGoogle\(\)/);
+  assert.match(surface, /linkedProviders\.includes\("apple"\)/);
+  assert.match(surface, /signInWithApple\("reauthenticate"\)/);
+  assert.doesNotMatch(surface, /reauthenticationActions=\{[\s\S]*?signInWithGoogle\("link"\)/);
 });

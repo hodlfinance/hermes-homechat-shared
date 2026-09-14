@@ -113,6 +113,7 @@ import type {
   WorkspaceCapabilityPreflightResponse,
   HermesRuntimeInventory,
   HeyNativeAuthConfig,
+  HeyNativeAuthMode,
   HeyNativeAuthProvider,
   HeyNativeAuthSession,
   HeyNativeAuthSurface,
@@ -347,16 +348,21 @@ export interface HeyAccountDeletionReceipt {
 export interface HeyNativeAuthSessionRequest {
   challengeId: string;
   idToken: string;
-  mode?: "link" | "login";
+  mode?: HeyNativeAuthMode;
   nonce: string;
   provider: HeyNativeAuthProvider;
   surface: HeyNativeAuthSurface;
 }
 
 export interface HeyNativeAuthChallengeRequest {
-  mode?: "link" | "login";
+  mode?: HeyNativeAuthMode;
   provider: HeyNativeAuthProvider;
   surface: HeyNativeAuthSurface;
+}
+
+export interface HeyAccountDeletionReauthenticationMethods {
+  hasPassword: boolean;
+  linkedProviders: HeyNativeAuthProvider[];
 }
 
 export interface CreateAccountRequest {
@@ -571,6 +577,8 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
         `/account/deletion/requests/${encodeURIComponent(id)}`,
         { method: "DELETE", body: JSON.stringify(body) },
       ),
+    heyAccountDeletionReauthenticationMethods: () =>
+      request<HeyAccountDeletionReauthenticationMethods>("/account/deletion/reauthentication-methods"),
     reauthenticateHeyAccountDeletion: (body: HeyAccountDeletionAuthorityRequest & { credential?: string }) =>
       request<{ expiresAt: string; reauthenticationToken: string }>("/account/deletion/reauthenticate", {
         method: "POST",

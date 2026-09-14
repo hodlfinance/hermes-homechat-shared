@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Trash2 } from "lucide-react-native";
 import {
@@ -6,6 +6,8 @@ import {
   heyAccountDeletionConfirmationPhrase,
   heyAccountDeletionProductRealm,
   type AppLocale,
+  type HeyAccountDeletionReauthenticationMethods,
+  type HeyNativeAuthProvider,
 } from "../core/index";
 import { palette } from "./mobile-palette";
 import {
@@ -58,13 +60,28 @@ export function AccountDeletionSection({
   onDeleted: (message: string) => Promise<void> | void;
   copy: AccountDeletionSectionCopy;
   locale: AppLocale;
-  reauthenticationActions?: ReactNode;
+  reauthenticationActions?: (providers: HeyNativeAuthProvider[]) => ReactNode;
 }) {
   const [credential, setCredential] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showReauthenticationActions, setShowReauthenticationActions] = useState(false);
+  const [reauthenticationMethods, setReauthenticationMethods] = useState<HeyAccountDeletionReauthenticationMethods | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.heyAccountDeletionReauthenticationMethods()
+      .then((methods) => {
+        if (!cancelled) setReauthenticationMethods(methods);
+      })
+      .catch(() => {
+        if (!cancelled) setReauthenticationMethods(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, api]);
 
   const phraseMatches = accountDeletionPhraseMatches(confirmation);
   const disabled = busy || deleting || !phraseMatches;
@@ -168,7 +185,9 @@ export function AccountDeletionSection({
         <Text style={styles.dangerButtonText}>{deleting ? copy.deleting : copy.title}</Text>
       </Pressable>
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-      {showReauthenticationActions ? reauthenticationActions : null}
+      {showReauthenticationActions
+        ? reauthenticationActions?.(reauthenticationMethods?.linkedProviders ?? [])
+        : null}
     </View>
   );
 }
