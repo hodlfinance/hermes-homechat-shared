@@ -750,6 +750,11 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
       request<ApprovalCard>("/approvals", { method: "POST", body: JSON.stringify(body) }),
     decideApproval: (id: string, body: ApprovalDecisionRequest) =>
       request<ApprovalCard>(`/approvals/${id}/decision`, { method: "PATCH", body: JSON.stringify(body) }),
+    resolveChatClarify: (runId: string, body: { clarifyId: string; response: string }) =>
+      request<{ ok: true; resolved: true; runId: string; clarifyId: string }>(`/chat-runs/${runId}/clarify`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
     agentMailbox: () => request<AgentMailbox>("/agent-mailbox"),
     agentMailboxMessages: () => request<AgentMailboxMessage[]>("/agent-mailbox/messages"),
     syncAgentMailboxMessages: (body: { maxMessages?: number; sinceDays?: number } = {}) =>

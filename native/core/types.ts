@@ -2061,6 +2061,14 @@ export interface ApprovalDecisionRequest {
   typedConfirmation?: string;
 }
 
+export interface ChatClarifyRequest {
+  id: string;
+  question: string;
+  choices: string[];
+  allowOther: boolean;
+  expiresAt: string;
+}
+
 export interface ApprovalListQuery {
   status?: ApprovalStatusFilter;
   kind?: ApprovalKind;

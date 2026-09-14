@@ -93,6 +93,7 @@ import type {
   ClaudeConnectionStatus,
   ChatMessage,
   ChatLatencySummary,
+  ChatClarifyRequest,
   ChatRun,
   ChatRunEvent,
   ChatRunStatus,
@@ -5933,14 +5934,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     ]);
   }
 
-  async function submitMobileConfirmation(card: ApprovalCard, decision: "approved" | "denied") {
+  async function submitMobileConfirmation(card: ApprovalCard, decision: "approved" | "denied", typedConfirmation?: string) {
     const runId = card.runId;
     if (!runId || card.conversationSessionId !== activeConversationSessionIdRef.current) return;
     if (chatRunStatusesById[runId] !== "waiting_for_approval") return;
     if (!confirmationDecisionGate.claim(runId)) return;
     setConfirmationDecisionRuns((current) => ({ ...current, [runId]: true }));
     try {
-      await api.decideApproval(card.id, { decision });
+      await api.decideApproval(card.id, { decision, ...(typedConfirmation ? { typedConfirmation } : {}) });
       setChatApprovalCards((current) => current.filter((item) => item.id !== card.id));
       commitChatRunStatus(runId, "running");
       confirmationDecisionGate.release(runId);
@@ -5959,6 +5960,34 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       const message = displayError(err, "That approval decision could not be delivered to Hermes.");
       recordDiagnostic("error", "Hermes approval failed", message);
       setChatSessionNotice(userFacingError(message));
+      const refreshSessionId = activeConversationSessionIdRef.current || card.conversationSessionId;
+      if (refreshSessionId) {
+        await loadMobileChatSession(refreshSessionId, { force: true, preserveDraft: true }).catch(() => false);
+      }
+    }
+  }
+
+  async function submitMobileClarify(runId: string, clarify: ChatClarifyRequest, response: string) {
+    if (chatRunStatusesById[runId] !== "waiting_for_approval" || !response.trim()) return;
+    if (!confirmationDecisionGate.claim(runId)) return;
+    setConfirmationDecisionRuns((current) => ({ ...current, [runId]: true }));
+    try {
+      await api.resolveChatClarify(runId, { clarifyId: clarify.id, response: response.trim() });
+      commitChatRunStatus(runId, "running");
+    } catch (err) {
+      const message = displayError(err, "That answer could not be delivered to Hermes.");
+      recordDiagnostic("error", "Hermes clarification failed", message);
+      setChatSessionNotice(userFacingError(message));
+      if (activeConversationSessionIdRef.current) {
+        await loadMobileChatSession(activeConversationSessionIdRef.current, { force: true, preserveDraft: true }).catch(() => false);
+      }
+    } finally {
+      confirmationDecisionGate.release(runId);
+      setConfirmationDecisionRuns((current) => {
+        const next = { ...current };
+        delete next[runId];
+        return next;
+      });
     }
   }
 
@@ -7441,6 +7470,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const firstVisibleAssistantMessageId = host.presentation?.showAssistantIdentity
     ? visibleMobileMessages.find((message) => message.role === "assistant")?.id ?? null
     : null;
+  const visibleChatClarifyRequests = Object.entries(chatEventsByRunId).flatMap(([runId, events]) => {
+    if (chatRunStatusesById[runId] !== "waiting_for_approval") return [];
+    const clarify = [...events].reverse().map(chatClarifyRequestFromEvent).find(Boolean);
+    return clarify ? [{ runId, clarify }] : [];
+  });
   const chatGptPanel = mobileChatGptConnectionCardView({
     dismissedKey: dismissedChatGptPanelKey,
     pendingSessionId: chatGptConnection?.sessionId ?? null,
@@ -7877,7 +7911,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                   key={card.id}
                   card={card}
                   pending={Boolean(card.runId && confirmationDecisionRuns[card.runId])}
-                  onDecision={(decision) => void submitMobileConfirmation(card, decision)}
+                  onDecision={(decision, typedConfirmation) => void submitMobileConfirmation(card, decision, typedConfirmation)}
+                />
+              ))}
+              {visibleChatClarifyRequests.map(({ runId, clarify }) => (
+                <MobileChatClarifyCard
+                  key={`${runId}:${clarify.id}`}
+                  clarify={clarify}
+                  pending={Boolean(confirmationDecisionRuns[runId])}
+                  onAnswer={(response) => void submitMobileClarify(runId, clarify, response)}
                 />
               ))}
               {pendingAssistantText || activeChatRunActivityView ? (
@@ -9531,6 +9573,23 @@ function MessageBubble({
   );
 }
 
+function chatClarifyRequestFromEvent(event: ChatRunEvent): ChatClarifyRequest | null {
+  const raw = event.payload?.clarifyRequest;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const source = raw as Record<string, unknown>;
+  const id = typeof source.id === "string" ? source.id : "";
+  const question = typeof source.question === "string" ? source.question : "";
+  const expiresAt = typeof source.expiresAt === "string" ? source.expiresAt : "";
+  if (!id || !question || !expiresAt) return null;
+  return {
+    id,
+    question,
+    choices: Array.isArray(source.choices) ? source.choices.filter((choice): choice is string => typeof choice === "string") : [],
+    allowOther: source.allowOther === true,
+    expiresAt,
+  };
+}
+
 function MobileChatApprovalCard({
   card,
   pending,
@@ -9538,18 +9597,43 @@ function MobileChatApprovalCard({
 }: {
   card: ApprovalCard;
   pending: boolean;
-  onDecision: (decision: "approved" | "denied") => void;
+  onDecision: (decision: "approved" | "denied", typedConfirmation?: string) => void;
 }) {
+  const [typedConfirmation, setTypedConfirmation] = useState("");
+  const expired = !Number.isFinite(Date.parse(card.expiresAt)) || Date.parse(card.expiresAt) <= Date.now();
+  const confirmationMatches = !card.requiresTypedConfirmation || typedConfirmation.trim() === card.requiresTypedConfirmation;
+  const approveDisabled = pending || expired || !confirmationMatches;
   return (
     <View style={[styles.message, styles.assistantMessage]} accessibilityRole="summary">
       <Text style={styles.rowTitle}>{card.title}</Text>
       {card.summary ? <Text style={styles.muted}>{card.summary}</Text> : null}
       {card.preview.markdown ? <LinkedMessageText text={card.preview.markdown} /> : null}
+      {card.preview.fields?.map((field) => (
+        <Text key={`${field.label}:${field.value}`} style={styles.muted}>{field.label}: {field.value}</Text>
+      ))}
+      <Text style={styles.muted}>Target: {card.target.label}</Text>
+      <Text style={styles.muted}>Action: {card.action.label}</Text>
+      {card.permissions.length ? <Text style={styles.muted}>Permission: {card.permissions.join(" · ")}</Text> : null}
+      {card.dataLeavingWorkspace.length ? <Text style={styles.muted}>Data leaving workspace: {card.dataLeavingWorkspace.join(" · ")}</Text> : null}
+      {card.secretsUsed.length ? <Text style={styles.muted}>Credentials: {card.secretsUsed.map((secret) => `${secret.kind}: ${secret.hint}`).join(" · ")}</Text> : null}
+      <Text style={styles.muted}>{expired ? "This approval has expired." : `Expires: ${new Date(card.expiresAt).toLocaleString()}`}</Text>
+      {card.requiresTypedConfirmation ? (
+        <TextInput
+          value={typedConfirmation}
+          onChangeText={setTypedConfirmation}
+          placeholder={`Type ${card.requiresTypedConfirmation} to approve`}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          editable={!pending && !expired}
+          style={styles.input}
+          accessibilityLabel={`Type ${card.requiresTypedConfirmation} to approve`}
+        />
+      ) : null}
       <View style={styles.confirmationActions} accessibilityLabel="Confirmation choices">
         <Pressable
-          style={[styles.confirmationPrimaryButton, pending && styles.disabledButton]}
-          onPress={() => onDecision("approved")}
-          disabled={pending}
+          style={[styles.confirmationPrimaryButton, approveDisabled && styles.disabledButton]}
+          onPress={() => onDecision("approved", typedConfirmation)}
+          disabled={approveDisabled}
           accessibilityRole="button"
           accessibilityLabel={card.approveLabel}
         >
@@ -9566,6 +9650,62 @@ function MobileChatApprovalCard({
           <Text style={styles.confirmationSecondaryText}>{card.denyLabel}</Text>
         </Pressable>
       </View>
+    </View>
+  );
+}
+
+function MobileChatClarifyCard({
+  clarify,
+  pending,
+  onAnswer,
+}: {
+  clarify: ChatClarifyRequest;
+  pending: boolean;
+  onAnswer: (response: string) => void;
+}) {
+  const [other, setOther] = useState("");
+  const expired = !Number.isFinite(Date.parse(clarify.expiresAt)) || Date.parse(clarify.expiresAt) <= Date.now();
+  return (
+    <View style={[styles.message, styles.assistantMessage]} accessibilityRole="summary">
+      <Text style={styles.rowTitle}>Hermes needs one detail</Text>
+      <Text style={styles.muted}>{clarify.question}</Text>
+      <View style={styles.confirmationActions} accessibilityLabel="Clarification choices">
+        {clarify.choices.map((choice) => (
+          <Pressable
+            key={choice}
+            style={[styles.confirmationSecondaryButton, (pending || expired) && styles.disabledButton]}
+            onPress={() => onAnswer(choice)}
+            disabled={pending || expired}
+            accessibilityRole="button"
+            accessibilityLabel={choice}
+          >
+            <Text style={styles.confirmationSecondaryText}>{choice}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {clarify.allowOther || !clarify.choices.length ? (
+        <>
+          <TextInput
+            value={other}
+            onChangeText={setOther}
+            placeholder="Other answer"
+            editable={!pending && !expired}
+            style={styles.input}
+            accessibilityLabel="Other answer"
+          />
+          <Pressable
+            style={[styles.confirmationPrimaryButton, (pending || expired || !other.trim()) && styles.disabledButton]}
+            onPress={() => onAnswer(other)}
+            disabled={pending || expired || !other.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Send answer"
+          >
+            {pending ? <ActivityIndicator size="small" color={palette.surface} /> : null}
+            <Text style={styles.confirmationPrimaryText}>Send answer</Text>
+          </Pressable>
+        </>
+      ) : null}
+      {expired ? <Text style={styles.muted}>This question has expired.</Text> : null}
     </View>
   );
 }
