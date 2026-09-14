@@ -174,6 +174,7 @@ import {
   heyAccountMenuNavigation,
 } from "../ui/navigation-structure";
 import { AccountDeletionSection } from "./AccountDeletionSection";
+import { accountDeletionNativeReauthenticationCopy } from "./account-deletion";
 import { PluginCatalogScreen } from "./PluginCatalogScreen";
 import {
   SecureConnectionCredentialForm,
@@ -8315,7 +8316,39 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                     {snapshot ? (
                       <MobileSystemSection title={mobileDangerZoneText(appLocale)}>
                         <View style={styles.systemSurfaceNotice}>
-                          <AccountDeletionSection accountId={snapshot.me.id} api={api} busy={busy} onDeleted={logout} copy={t.systemPages.account.deletion} locale={appLocale} />
+                          <AccountDeletionSection
+                            accountId={snapshot.me.id}
+                            api={api}
+                            busy={busy}
+                            onDeleted={logout}
+                            copy={t.systemPages.account.deletion}
+                            locale={appLocale}
+                            reauthenticationActions={(
+                              <View style={styles.nativeAuthGroup}>
+                                {nativeAuthConfig?.providers.google ? (
+                                  <Pressable
+                                    style={[styles.secondaryButtonWide, (!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "link" || Boolean(nativeAuthBusy)) && styles.disabledButton]}
+                                    onPress={() => void signInWithGoogle("link")}
+                                    disabled={!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "link" || Boolean(nativeAuthBusy)}
+                                    accessibilityRole="button"
+                                  >
+                                    {nativeAuthBusy === "google" ? <ActivityIndicator color={palette.teal} /> : <Text style={styles.secondaryButtonText}>{accountDeletionNativeReauthenticationCopy(appLocale).googleAction}</Text>}
+                                  </Pressable>
+                                ) : null}
+                                {nativeAuthConfig?.providers.apple && appleSignInAvailable ? (
+                                  nativeAuthBusy === "apple" ? <ActivityIndicator color={palette.teal} /> : (
+                                    <AppleAuthentication.AppleAuthenticationButton
+                                      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                                      cornerRadius={8}
+                                      onPress={() => void signInWithApple("link")}
+                                      style={styles.appleAuthButton}
+                                    />
+                                  )
+                                ) : null}
+                              </View>
+                            )}
+                          />
                         </View>
                       </MobileSystemSection>
                     ) : null}
