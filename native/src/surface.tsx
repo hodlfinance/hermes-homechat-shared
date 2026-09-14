@@ -325,6 +325,7 @@ import {
 } from "./mobile-chat-activity";
 import { mobileLiveRunActivityView } from "./mobile-live-run-status";
 import { createMobileRankedTaskObserver, mobileRankedTaskNoticeAfterRead } from "./mobile-ranked-task-observer";
+import { mobileRankedTaskRead } from "./mobile-ranked-task-read";
 import { delegatedTasksView, mobileDelegatedTaskIsTerminal } from "../core/delegated-tasks-view";
 import {
   subthreadAfterConversationChange,
@@ -2023,13 +2024,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     if (!background) setRankedTaskState({ phase: "loading" });
     setTaskNotice((previous) => mobileRankedTaskNoticeAfterRead(previous, "started", background));
     try {
-      const collection = await api.rankedTasks();
+      const nextRead = mobileRankedTaskRead(await api.rankedTasks());
+      if (nextRead.phase === "error") throw new Error("Ranked-task response failed validation.");
       if (
         rankedTaskRequestRef.current !== requestId ||
         accountSessionGenerationRef.current !== sessionGeneration ||
         accountSessionTokenRef.current !== requestToken
       ) return;
-      setRankedTaskState({ phase: "ready", collection });
+      setRankedTaskState({ phase: "ready", collection: nextRead.collection });
       setTaskNotice((previous) => mobileRankedTaskNoticeAfterRead(previous, "succeeded", background));
     } catch {
       if (
@@ -2537,7 +2539,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         const modelSelectionGenerationAtAuxiliaryStart = modelSelectionRequestRef.current;
         const auxiliaryPhase = Promise.all([
           (host.policy.preinstalledRanker ? api.rankedTasks() : Promise.resolve(null))
-            .then((collection) => ({ phase: "ready", collection }) as const)
+            .then(mobileRankedTaskRead)
             .catch(() => ({ phase: "error" }) as const),
           api.modelOptions().catch(() => null),
           api.claudeConnectionStatus().catch(() => null),
