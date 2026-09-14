@@ -5,6 +5,7 @@ import {
   type ChatRun,
   type SharedHomechatRunTransport,
 } from "../core/index";
+import { HermesApiClientError } from "../core/hermes-api-client";
 
 type MobileHomechatResponse = Pick<Response, "body" | "ok" | "status" | "text">;
 
@@ -71,7 +72,12 @@ export function createMobileHomechatEventStream(
       observation.streamOpenObserved = true;
       emitTiming({ streamOpenMs: Math.max(0, now() - observation.startedAt) });
     }
-    if (!response.ok) throw new Error((await response.text()) || `Homechat stream failed with ${response.status}.`);
+    if (!response.ok) {
+      throw new HermesApiClientError(
+        (await response.text()) || `Homechat stream failed with ${response.status}.`,
+        { status: response.status },
+      );
+    }
     const reader = response.body?.getReader?.();
     if (!reader) {
       observations.delete(runId);

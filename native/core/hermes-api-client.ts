@@ -39,6 +39,37 @@ export type HermesMutationOptions = HermesRequestOptions & {
   idempotencyKey: string;
 };
 
+export type HermesApiClientErrorOptions = {
+  cause?: unknown;
+  retryable?: boolean;
+  status?: number;
+};
+
+function isRetryableHermesHttpStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || (status >= 500 && status <= 599);
+}
+
+export class HermesApiClientError extends Error {
+  readonly retryable: boolean;
+  readonly status?: number;
+
+  constructor(message: string, options: HermesApiClientErrorOptions = {}) {
+    super(message);
+    this.name = "HermesApiClientError";
+    this.retryable = options.retryable ?? (
+      options.status === undefined ? false : isRetryableHermesHttpStatus(options.status)
+    );
+    this.status = options.status;
+    if (options.cause !== undefined) {
+      Object.defineProperty(this, "cause", { configurable: true, value: options.cause });
+    }
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 export function createHermesApiClient({ baseUrl, token = "", fetchImpl = fetch }: HermesApiClientOptions) {
   const root = baseUrl.replace(/\/$/, "");
 
@@ -48,41 +79,58 @@ export function createHermesApiClient({ baseUrl, token = "", fetchImpl = fetch }
   });
 
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const response = await fetchImpl(`${root}${path}`, {
-      ...init,
-      headers: headers({
-        ...(init.body ? { "Content-Type": "application/json" } : {}),
-        ...(init.headers ?? {}),
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetchImpl(`${root}${path}`, {
+        ...init,
+        headers: headers({
+          ...(init.body ? { "Content-Type": "application/json" } : {}),
+          ...(init.headers ?? {}),
+        }),
+      });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw new HermesApiClientError(
+        error instanceof Error && error.message ? error.message : "Hermes API request failed.",
+        { cause: error, retryable: true },
+      );
+    }
     if (!response.ok) {
       const text = await response.text().catch(() => "");
+      let message = text || `Hermes API returned ${response.status}.`;
       try {
         const parsed = JSON.parse(text) as { error?: unknown; message?: unknown };
-        throw new Error(
-          typeof parsed.error === "string"
-            ? parsed.error
-            : typeof parsed.message === "string"
-              ? parsed.message
-              : `Hermes API returned ${response.status}.`,
-        );
+        message = typeof parsed.error === "string"
+          ? parsed.error
+          : typeof parsed.message === "string"
+            ? parsed.message
+            : message;
       } catch (error) {
-        if (error instanceof SyntaxError) throw new Error(text || `Hermes API returned ${response.status}.`);
-        throw error;
+        if (!(error instanceof SyntaxError)) throw error;
       }
+      throw new HermesApiClientError(message, { status: response.status });
     }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
   }
 
-  const runEventsResponse = (runId: string, options: HermesRunEventsOptions = {}) =>
-    fetchImpl(`${root}/hermes/runs/${encodeURIComponent(runId)}/events`, {
-      signal: options.signal,
-      headers: headers({
-        Accept: "text/event-stream",
-        ...(options.lastEventId ? { "Last-Event-ID": options.lastEventId } : {}),
-      }),
-    });
+  const runEventsResponse = async (runId: string, options: HermesRunEventsOptions = {}) => {
+    try {
+      return await fetchImpl(`${root}/hermes/runs/${encodeURIComponent(runId)}/events`, {
+        signal: options.signal,
+        headers: headers({
+          Accept: "text/event-stream",
+          ...(options.lastEventId ? { "Last-Event-ID": options.lastEventId } : {}),
+        }),
+      });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw new HermesApiClientError(
+        error instanceof Error && error.message ? error.message : "Hermes events request failed.",
+        { cause: error, retryable: true },
+      );
+    }
+  };
 
   return {
     listConversations: (
@@ -147,7 +195,9 @@ export function createHermesApiClient({ baseUrl, token = "", fetchImpl = fetch }
     runEventsResponse,
     async runEvents(runId: string, options: HermesRunEventsOptions = {}) {
       const response = await runEventsResponse(runId, options);
-      if (!response.ok) throw new Error(`Hermes events API returned ${response.status}.`);
+      if (!response.ok) {
+        throw new HermesApiClientError(`Hermes events API returned ${response.status}.`, { status: response.status });
+      }
       return parseHermesEventStream(await response.text());
     },
     stopRun: (runId: string, options: HermesRequestOptions = {}) =>

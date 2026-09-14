@@ -563,6 +563,7 @@ export type SharedHomechatRunControllerErrorCode =
   | "aborted"
   | "cancelled"
   | "failed"
+  | "observation_failed"
   | "stream_disconnected"
   | "timeout";
 
@@ -576,6 +577,55 @@ export class SharedHomechatRunControllerError<Run = unknown> extends Error {
     this.code = code;
     this.run = run;
   }
+}
+
+export type SharedHomechatTransportErrorOptions = {
+  cause?: unknown;
+  retryable?: boolean;
+  status?: number;
+};
+
+function isRetryableHomechatHttpStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || (status >= 500 && status <= 599);
+}
+
+/**
+ * Typed transport failure for run observation. Products should use this at
+ * their HTTP boundary instead of making the run controller guess whether an
+ * arbitrary Error is safe to retry.
+ */
+export class SharedHomechatTransportError extends Error {
+  readonly retryable: boolean;
+  readonly status?: number;
+
+  constructor(message: string, options: SharedHomechatTransportErrorOptions = {}) {
+    super(message);
+    this.name = "SharedHomechatTransportError";
+    this.retryable = options.retryable ?? (
+      options.status === undefined ? false : isRetryableHomechatHttpStatus(options.status)
+    );
+    this.status = options.status;
+    if (options.cause !== undefined) {
+      Object.defineProperty(this, "cause", { configurable: true, value: options.cause });
+    }
+  }
+}
+
+export class SharedHomechatObservationError<Run = unknown> extends SharedHomechatRunControllerError<Run> {
+  readonly cause?: unknown;
+
+  constructor(message: string, run?: Run, cause?: unknown) {
+    super("observation_failed", message, run);
+    this.name = "SharedHomechatObservationError";
+    this.cause = cause;
+  }
+}
+
+export function isRetryableHomechatObservationError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { retryable?: unknown; status?: unknown };
+  if (typeof candidate.retryable === "boolean") return candidate.retryable;
+  return typeof candidate.status === "number" && isRetryableHomechatHttpStatus(candidate.status);
 }
 
 export type SharedHomechatActionPhase =
@@ -1873,16 +1923,75 @@ export function createHomechatRunController<
     return run;
   }
 
+  async function observe(
+    runId: string,
+    options: SharedHomechatRunWaitOptions<Run> = {},
+  ): Promise<Run> {
+    const startedAt = options.startedAt ?? now();
+    const timeoutMs = options.timeoutMs ?? defaults.timeoutMs;
+    const intervalMs = options.intervalMs ?? defaults.intervalMs ?? 1_600;
+
+    while (timeoutMs === undefined || now() - startedAt <= timeoutMs) {
+      assertHomechatNotAborted(options.signal, options.copy);
+      let run: Run;
+      try {
+        run = await transport.getRun(runId, { signal: options.signal });
+      } catch (error) {
+        assertHomechatNotAborted(options.signal, options.copy);
+        if (!isRetryableHomechatObservationError(error)) {
+          throw homechatObservationFailure(error);
+        }
+        await homechatControllerDelay(intervalMs, options.signal, sleep, options.copy);
+        continue;
+      }
+      try {
+        await options.onSnapshot?.(run);
+      } catch (error) {
+        throw homechatObservationFailure(error, run);
+      }
+      return run;
+    }
+
+    throw new SharedHomechatRunControllerError(
+      "timeout",
+      options.copy?.timeout ?? "The run is taking longer than expected.",
+    );
+  }
+
   async function wait(runId: string, options: SharedHomechatRunWaitOptions<Run> = {}): Promise<Run> {
     const startedAt = options.startedAt ?? now();
-    const timeoutMs = options.timeoutMs ?? defaults.timeoutMs ?? 245_000;
+    // A client-side observation deadline is not evidence that the server-side
+    // run failed. Long runs and runs whose event stream disconnected therefore
+    // keep polling until the server reports a terminal state or the caller
+    // aborts. Products that deliberately own a finite wait may still opt into
+    // one through `timeoutMs`.
+    const timeoutMs = options.timeoutMs ?? defaults.timeoutMs;
     const intervalMs = options.intervalMs ?? defaults.intervalMs ?? 1_600;
     options.onPhase?.("waiting");
+    let lastSnapshot: Run | undefined;
 
-    while (now() - startedAt <= timeoutMs) {
+    while (timeoutMs === undefined || now() - startedAt <= timeoutMs) {
       assertHomechatNotAborted(options.signal, options.copy);
-      const run = await transport.getRun(runId, { signal: options.signal });
-      await options.onSnapshot?.(run);
+      let run: Run;
+      try {
+        run = await transport.getRun(runId, { signal: options.signal });
+      } catch (error) {
+        // Only explicitly classified temporary transport failures are safe to
+        // retry. A permanent HTTP response or programming error ends this
+        // local observation without changing the canonical server run.
+        assertHomechatNotAborted(options.signal, options.copy);
+        if (!isRetryableHomechatObservationError(error)) {
+          throw homechatObservationFailure(error, lastSnapshot);
+        }
+        await homechatControllerDelay(intervalMs, options.signal, sleep, options.copy);
+        continue;
+      }
+      lastSnapshot = run;
+      try {
+        await options.onSnapshot?.(run);
+      } catch (error) {
+        throw homechatObservationFailure(error, run);
+      }
       const status = normalizeHomechatRunStatus(run.status) ?? "running";
       if (status === "completed") return run;
       if (status === "failed") {
@@ -1894,7 +2003,11 @@ export function createHomechatRunController<
       await homechatControllerDelay(intervalMs, options.signal, sleep, options.copy);
     }
 
-    throw new SharedHomechatRunControllerError("timeout", options.copy?.timeout ?? "The run is taking longer than expected.");
+    throw new SharedHomechatRunControllerError(
+      "timeout",
+      options.copy?.timeout ?? "The run is taking longer than expected.",
+      lastSnapshot,
+    );
   }
 
   async function stop(
@@ -1974,6 +2087,7 @@ export function createHomechatRunController<
     create,
     continue: create,
     get,
+    observe,
     poll: wait,
     reconnect,
     send: create,
@@ -2032,7 +2146,12 @@ export function createHomechatClientController<
 
   function captureError(error: unknown) {
     const terminal = state.phase === "completed" || state.phase === "stopped" || state.phase === "error";
-    if (!terminal && !isSharedHomechatRunControllerError(error, "aborted")) {
+    // A caller-owned observation timeout is not a server failure. Leave the
+    // last canonical run status and visible work intact so a later observer can
+    // reconnect to the same run.
+    const observationEnded = isSharedHomechatRunControllerError(error, "timeout") ||
+      isSharedHomechatRunControllerError(error, "observation_failed");
+    if (!terminal && !observationEnded && !isSharedHomechatRunControllerError(error, "aborted")) {
       dispatch({ type: "run.error", error: error instanceof Error ? error.message : "The run could not finish." });
     }
   }
@@ -2117,8 +2236,18 @@ export function createHomechatClientController<
       if (sendOptions.follow === false) {
         backgroundFollow = follow(run, sendOptions).catch((error) => {
           captureError(error);
+          if (
+            isSharedHomechatRunControllerError(error, "observation_failed") ||
+            isSharedHomechatRunControllerError(error, "timeout")
+          ) {
+            throw error;
+          }
           return state;
         });
+        // Detached following must never create an unhandled rejection, but the
+        // owned observer still needs the original rejected promise so it can
+        // distinguish a local observation end from a canonical run failure.
+        void backgroundFollow.catch(() => undefined);
         return state;
       }
       return await follow(run, sendOptions);
@@ -2136,7 +2265,10 @@ export function createHomechatClientController<
     try {
       if (state.runId === runId && homechatClientTerminalStatus(state)) return state;
       dispatch({ type: "run.reconnecting", runId });
-      const run = await runs.get(runId, { signal: followOptions.signal, onSnapshot: takeSnapshot });
+      const run = await runs.observe(runId, {
+        signal: followOptions.signal,
+        onSnapshot: takeSnapshot,
+      });
       const status = normalizeHomechatRunStatus(run.status);
       if (status === "completed" || status === "failed" || status === "cancelled") return state;
       return follow(run, followOptions);
@@ -2557,6 +2689,13 @@ function assertHomechatNotAborted(signal?: AbortSignal, copy?: SharedHomechatRun
   if (signal?.aborted) {
     throw new SharedHomechatRunControllerError("aborted", copy?.aborted ?? "The operation was cancelled.");
   }
+}
+
+function homechatObservationFailure<Run>(error: unknown, run?: Run): SharedHomechatObservationError<Run> {
+  const message = error instanceof Error && error.message
+    ? `Run observation stopped: ${error.message}`
+    : "Run observation stopped because the transport returned a permanent error.";
+  return new SharedHomechatObservationError(message, run, error);
 }
 
 async function homechatControllerDelay(
