@@ -62,10 +62,16 @@ The package never constructs a URL. Products implement `SharedHomechatRunTranspo
 `parseHomechatEventStream` accepts LF or CRLF frames, honors standard `id:`, `event:`, and multiline `data:` fields, attaches the frame id to normalized events, and returns the latest `cursor` for the next `Last-Event-ID` request. `message.completed` is a terminal event and the reducer persists its assistant message before clearing the streaming draft.
 
 Run following has no implicit client deadline: after an SSE disconnect, an
-active server run continues through temporary polling failures until the server
-reports a terminal state or the caller aborts. A product may set `timeoutMs`
+active server run continues through polling failures explicitly typed as
+retryable network or temporary HTTP failures until the server reports a
+terminal state or the caller aborts. Permanent HTTP failures and invalid or
+programming errors end only the local observation with `observation_failed`;
+they never mark the canonical server run failed. Products should expose
+transport failures through `SharedHomechatTransportError` (the native Hermes
+client does this with `HermesApiClientError`). A product may set `timeoutMs`
 when it deliberately owns a finite observation window; reaching that opt-in
-deadline ends only that observation and does not mark the server run failed.
+deadline likewise ends only that observation and does not mark the server run
+failed.
 
 ```ts
 import { createHomechatClientController } from "@hodlfinance/hermes-homechat-shared/core";
