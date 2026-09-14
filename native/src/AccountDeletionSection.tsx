@@ -52,6 +52,7 @@ export function AccountDeletionSection({
   onDeleted,
   copy,
   locale,
+  onNativeReauthenticationChange,
   reauthenticationActions,
 }: {
   accountId: string;
@@ -60,6 +61,7 @@ export function AccountDeletionSection({
   onDeleted: (message: string) => Promise<void> | void;
   copy: AccountDeletionSectionCopy;
   locale: AppLocale;
+  onNativeReauthenticationChange?: (required: boolean) => void;
   reauthenticationActions?: (providers: HeyNativeAuthProvider[]) => ReactNode;
 }) {
   const [credential, setCredential] = useState("");
@@ -83,6 +85,8 @@ export function AccountDeletionSection({
     };
   }, [accountId, api]);
 
+  useEffect(() => () => onNativeReauthenticationChange?.(false), [onNativeReauthenticationChange]);
+
   const phraseMatches = accountDeletionPhraseMatches(confirmation);
   const disabled = busy || deleting || !phraseMatches;
 
@@ -92,6 +96,7 @@ export function AccountDeletionSection({
     setDeleting(true);
     setNotice(null);
     setShowReauthenticationActions(false);
+    onNativeReauthenticationChange?.(false);
     try {
       const intent = await api.prepareHeyAccountDeletion(authority);
       intentId = intent.id;
@@ -117,6 +122,7 @@ export function AccountDeletionSection({
       const nativeReauthenticationRequired = needsAccountDeletionNativeReauthentication(error);
       const raw = error instanceof Error ? error.message : "";
       setShowReauthenticationActions(nativeReauthenticationRequired);
+      onNativeReauthenticationChange?.(nativeReauthenticationRequired);
       setNotice(nativeReauthenticationRequired
         ? accountDeletionNativeReauthenticationCopy(locale).message
         : raw.includes("reauthentication")

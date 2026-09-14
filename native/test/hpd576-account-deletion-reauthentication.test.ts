@@ -12,6 +12,7 @@ import {
   deletionErrorMessage,
   needsAccountDeletionNativeReauthentication,
 } from "../src/account-deletion";
+import { mobileNativeAuthChallengeRefreshDelayMs } from "../src/mobile-native-auth-challenge";
 
 test("the native client preserves the stale social sign-in code and offers actionable copy", async () => {
   const client = createApiClient({
@@ -60,5 +61,20 @@ test("the deletion section reveals provider sign-in actions only for that stable
   assert.match(surface, /reauthenticateAccountDeletionWithGoogle\(\)/);
   assert.match(surface, /linkedProviders\.includes\("apple"\)/);
   assert.match(surface, /signInWithApple\("reauthenticate"\)/);
+  assert.match(surface, /!accountDeletionNativeReauthenticationRequired/);
+  assert.match(surface, /mobileNativeAuthChallengeRefreshDelayMs\(/);
   assert.doesNotMatch(surface, /reauthenticationActions=\{[\s\S]*?signInWithGoogle\("link"\)/);
+});
+
+test("an on-demand Google deletion challenge refreshes before or immediately after expiry", () => {
+  const now = Date.parse("2026-09-14T10:00:00.000Z");
+  assert.equal(
+    mobileNativeAuthChallengeRefreshDelayMs("2026-09-14T10:10:00.000Z", now, 5 * 60_000),
+    5 * 60_000,
+  );
+  assert.equal(
+    mobileNativeAuthChallengeRefreshDelayMs("2026-09-14T10:00:10.000Z", now, 5 * 60_000),
+    1_000,
+  );
+  assert.equal(mobileNativeAuthChallengeRefreshDelayMs("invalid", now, 5 * 60_000), 5 * 60_000);
 });
