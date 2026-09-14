@@ -734,9 +734,26 @@ export interface EmailMagicLinkStartResponse {
   message: string;
 }
 
+export interface EmailMagicLinkAbuseChallenge {
+  challenge: string;
+  difficulty: number;
+  expiresAt: string;
+  id: string;
+}
+
+export interface EmailMagicLinkAbuseProof {
+  challenge: string;
+  challengeId: string;
+  nonce: number;
+}
+
 export interface EmailMagicLinkSessionRequest {
   surface: "ios" | "web";
   token: string;
+}
+
+export interface EmailMagicLinkSessionResponse extends AuthSession {
+  purpose: "account_deletion_reauthenticate" | "login";
 }
 
 export type HeyNativeAuthProvider = "apple" | "google";

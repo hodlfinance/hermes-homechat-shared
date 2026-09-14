@@ -10,7 +10,7 @@ import { workspacePrivacyCopy } from "../ui/workspace-privacy-copy";
 import { openPageStarter, consumePageStarter, pageStarterTranscript, pageStarterPayload, pageStarterAfterNavigation, type PageStarterState } from "../ui/page-starter-state";
 import { pageStarterCopy } from "../ui/page-starter-copy";
 import { MobilePageMenuRow } from "./mobile-page-menu-row";
-import { emailMagicLinkTokenFromUrl } from "./mobile-email-magic-link";
+import { emailMagicLinkTokenFromUrl, solveEmailMagicLinkAbuseChallenge } from "./mobile-email-magic-link";
 import { pageMenuRemovalCopy } from "../ui/page-menu-copy";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -1509,6 +1509,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [emailSignupEmail, setEmailSignupEmail] = useState("");
   const [emailMagicLinkPhase, setEmailMagicLinkPhase] = useState<"idle" | "sending" | "sent" | "completing">("idle");
   const emailMagicLinkConsumedRef = useRef<string | null>(null);
+  const [accountDeletionEmailReauthenticationCompleted, setAccountDeletionEmailReauthenticationCompleted] = useState(false);
   const [nativeAuthConfig, setNativeAuthConfig] = useState<HeyNativeAuthConfig | null>(null);
   const [nativeAuthBusy, setNativeAuthBusy] = useState<"apple" | "google" | null>(null);
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
@@ -4754,7 +4755,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     setEmailMagicLinkPhase("sending");
     setAppError(null);
     try {
-      await createApiClient({ baseUrl: API_BASE, token: "email-signup" }).startEmailMagicLink({
+      const publicAuth = createApiClient({ baseUrl: API_BASE, token: "email-signup" });
+      const challenge = await publicAuth.emailMagicLinkAbuseChallenge({ surface: "ios" });
+      const abuseProof = await solveEmailMagicLinkAbuseChallenge(challenge);
+      await publicAuth.startEmailMagicLink({
+        abuseProof,
         email: signupEmail,
         surface: "ios",
         website: "",
@@ -4785,6 +4790,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       setModelOptions(null);
       commitWorkspaceStatusTruth(null);
       setEmailMagicLinkPhase("idle");
+      if (session.purpose === "account_deletion_reauthenticate") {
+        setAccountDeletionEmailReauthenticationCompleted(true);
+        selectMobileScreen("account");
+      }
     } catch (caught) {
       emailMagicLinkConsumedRef.current = null;
       setEmailMagicLinkPhase("idle");
@@ -8546,6 +8555,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                             onDeleted={logout}
                             copy={t.systemPages.account.deletion}
                             locale={appLocale}
+                            emailReauthenticationCompleted={accountDeletionEmailReauthenticationCompleted}
                             onNativeReauthenticationChange={setAccountDeletionNativeReauthenticationRequired}
                             reauthenticationActions={(linkedProviders) => (
                               <View style={styles.nativeAuthGroup}>

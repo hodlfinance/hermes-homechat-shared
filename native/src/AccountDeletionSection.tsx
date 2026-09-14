@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { Trash2 } from "lucide-react-native";
+import { Mail, Trash2 } from "lucide-react-native";
 import {
   createApiClient,
   heyAccountDeletionConfirmationPhrase,
@@ -52,6 +52,7 @@ export function AccountDeletionSection({
   onDeleted,
   copy,
   locale,
+  emailReauthenticationCompleted,
   onNativeReauthenticationChange,
   reauthenticationActions,
 }: {
@@ -61,6 +62,7 @@ export function AccountDeletionSection({
   onDeleted: (message: string) => Promise<void> | void;
   copy: AccountDeletionSectionCopy;
   locale: AppLocale;
+  emailReauthenticationCompleted?: boolean;
   onNativeReauthenticationChange?: (required: boolean) => void;
   reauthenticationActions?: (providers: HeyNativeAuthProvider[]) => ReactNode;
 }) {
@@ -68,6 +70,7 @@ export function AccountDeletionSection({
   const [confirmation, setConfirmation] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [requestingEmailReauthentication, setRequestingEmailReauthentication] = useState(false);
   const [showReauthenticationActions, setShowReauthenticationActions] = useState(false);
   const [reauthenticationMethods, setReauthenticationMethods] = useState<HeyAccountDeletionReauthenticationMethods | null>(null);
 
@@ -87,8 +90,25 @@ export function AccountDeletionSection({
 
   useEffect(() => () => onNativeReauthenticationChange?.(false), [onNativeReauthenticationChange]);
 
+  useEffect(() => {
+    if (emailReauthenticationCompleted) setNotice(accountDeletionNativeReauthenticationCopy(locale).emailComplete);
+  }, [emailReauthenticationCompleted, locale]);
+
   const phraseMatches = accountDeletionPhraseMatches(confirmation);
   const disabled = busy || deleting || !phraseMatches;
+
+  async function requestEmailReauthentication() {
+    setRequestingEmailReauthentication(true);
+    setNotice(null);
+    try {
+      await api.startHeyAccountDeletionEmailReauthentication({ surface: "ios" });
+      setNotice(accountDeletionNativeReauthenticationCopy(locale).emailSent);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : copy.genericError);
+    } finally {
+      setRequestingEmailReauthentication(false);
+    }
+  }
 
   async function runDeletion() {
     const authority = { accountId, productRealm: heyAccountDeletionProductRealm } as const;
@@ -164,6 +184,19 @@ export function AccountDeletionSection({
         accessibilityLabel={copy.credentialLabel}
       />
       <Text style={styles.hint}>{copy.recentSignInHint}</Text>
+      {reauthenticationMethods?.hasEmailMagicLink ? (
+        <Pressable
+          style={[styles.reauthenticationButton, (busy || deleting || requestingEmailReauthentication) && styles.disabledButton]}
+          onPress={() => void requestEmailReauthentication()}
+          disabled={busy || deleting || requestingEmailReauthentication}
+          accessibilityRole="button"
+        >
+          {requestingEmailReauthentication
+            ? <ActivityIndicator color={palette.teal} />
+            : <Mail size={17} color={palette.teal} />}
+          <Text style={styles.reauthenticationButtonText}>{accountDeletionNativeReauthenticationCopy(locale).emailAction}</Text>
+        </Pressable>
+      ) : null}
       <TextInput
         value={confirmation}
         onChangeText={setConfirmation}
@@ -223,6 +256,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     marginTop: -4,
+  },
+  reauthenticationButton: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: palette.teal,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  reauthenticationButtonText: {
+    color: palette.teal,
+    fontSize: 15,
+    fontWeight: "600",
   },
   input: {
     minHeight: 44,

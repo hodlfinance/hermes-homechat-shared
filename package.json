@@ -99,6 +99,9 @@
     "LICENSE",
     "native"
   ],
+  "dependencies": {
+    "@noble/hashes": "^1.8.0"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "ci": "npm run typecheck && npm test && npm run build && npm run test:packed-consumer && npm run test:native",

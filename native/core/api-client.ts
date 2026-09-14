@@ -117,7 +117,10 @@ import type {
   HeyNativeAuthProvider,
   HeyNativeAuthSession,
   HeyNativeAuthSurface,
+  EmailMagicLinkAbuseChallenge,
+  EmailMagicLinkAbuseProof,
   EmailMagicLinkSessionRequest,
+  EmailMagicLinkSessionResponse,
   EmailMagicLinkStartResponse,
   HermesDashboardRoute,
   HermesRuntimeParityReport,
@@ -363,6 +366,7 @@ export interface HeyNativeAuthChallengeRequest {
 }
 
 export interface HeyAccountDeletionReauthenticationMethods {
+  hasEmailMagicLink: boolean;
   hasPassword: boolean;
   linkedProviders: HeyNativeAuthProvider[];
 }
@@ -555,13 +559,18 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     fetchImpl,
     login: (body: LoginRequest) =>
       request<AuthSession>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
-    startEmailMagicLink: (body: { email: string; surface: "ios" | "web"; website?: string }) =>
+    emailMagicLinkAbuseChallenge: (body: { surface: "ios" | "web" }) =>
+      request<EmailMagicLinkAbuseChallenge>("/auth/email-magic-link/challenge", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    startEmailMagicLink: (body: { abuseProof: EmailMagicLinkAbuseProof; email: string; surface: "ios" | "web"; website?: string }) =>
       request<EmailMagicLinkStartResponse>("/auth/email-magic-link/start", {
         method: "POST",
         body: JSON.stringify(body),
       }),
     completeEmailMagicLink: (body: EmailMagicLinkSessionRequest) =>
-      request<AuthSession>("/auth/email-magic-link/session", {
+      request<EmailMagicLinkSessionResponse>("/auth/email-magic-link/session", {
         method: "POST",
         body: JSON.stringify(body),
       }),
@@ -591,6 +600,11 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
       ),
     heyAccountDeletionReauthenticationMethods: () =>
       request<HeyAccountDeletionReauthenticationMethods>("/account/deletion/reauthentication-methods"),
+    startHeyAccountDeletionEmailReauthentication: (body: { surface: "ios" | "web" }) =>
+      request<EmailMagicLinkStartResponse>("/account/deletion/email-reauthentication/start", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
     reauthenticateHeyAccountDeletion: (body: HeyAccountDeletionAuthorityRequest & { credential?: string }) =>
       request<{ expiresAt: string; reauthenticationToken: string }>("/account/deletion/reauthenticate", {
         method: "POST",

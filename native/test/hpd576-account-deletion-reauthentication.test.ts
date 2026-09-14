@@ -41,10 +41,11 @@ test("the native client reads back only the account's actual deletion reauthenti
     baseUrl: "https://example.invalid",
     fetchImpl: async (url) => {
       assert.match(String(url), /\/account\/deletion\/reauthentication-methods$/);
-      return new Response(JSON.stringify({ hasPassword: false, linkedProviders: ["google"] }), { status: 200 });
+      return new Response(JSON.stringify({ hasEmailMagicLink: true, hasPassword: false, linkedProviders: ["google"] }), { status: 200 });
     },
   });
   assert.deepEqual(await client.heyAccountDeletionReauthenticationMethods(), {
+    hasEmailMagicLink: true,
     hasPassword: false,
     linkedProviders: ["google"],
   });
@@ -55,6 +56,8 @@ test("the deletion section reveals provider sign-in actions only for that stable
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   assert.match(section, /needsAccountDeletionNativeReauthentication\(error\)/);
   assert.match(section, /heyAccountDeletionReauthenticationMethods\(\)/);
+  assert.match(section, /startHeyAccountDeletionEmailReauthentication/);
+  assert.match(section, /reauthenticationMethods\?\.hasEmailMagicLink/);
   assert.match(section, /reauthenticationMethods\?\.linkedProviders \?\? \[\]/);
   assert.match(surface, /reauthenticationActions=\{\(linkedProviders\) =>/);
   assert.match(surface, /linkedProviders\.includes\("google"\)/);
