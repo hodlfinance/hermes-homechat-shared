@@ -1509,7 +1509,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [emailSignupEmail, setEmailSignupEmail] = useState("");
   const [emailMagicLinkPhase, setEmailMagicLinkPhase] = useState<"idle" | "sending" | "sent" | "completing">("idle");
   const emailMagicLinkConsumedRef = useRef<string | null>(null);
-  const [accountDeletionEmailReauthenticationCompleted, setAccountDeletionEmailReauthenticationCompleted] = useState(false);
+  const [accountDeletionEmailReauthenticationAccountId, setAccountDeletionEmailReauthenticationAccountId] = useState<string | null>(null);
   const [nativeAuthConfig, setNativeAuthConfig] = useState<HeyNativeAuthConfig | null>(null);
   const [nativeAuthBusy, setNativeAuthBusy] = useState<"apple" | "google" | null>(null);
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
@@ -2314,6 +2314,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     readAloudStorageGenerationRef.current += 1;
     homeChatRefreshSingleFlight.clear();
     activateAccountSession(null);
+    setAccountDeletionEmailReauthenticationAccountId(null);
     mobilePurchasesController.suspend();
     setMobilePurchasePlans([]);
     setMobilePurchaseAccountReady(false);
@@ -4628,6 +4629,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     refreshGenerationRef.current += 1;
     homeChatRefreshSingleFlight.clear();
     activateAccountSession(session.token);
+    setAccountDeletionEmailReauthenticationAccountId(null);
     setToken(session.token);
     snapshotStateRef.current = null;
     setSnapshot(null);
@@ -4740,6 +4742,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       refreshGenerationRef.current += 1;
       homeChatRefreshSingleFlight.clear();
       activateAccountSession(session.token);
+      setAccountDeletionEmailReauthenticationAccountId(null);
       setToken(session.token);
       snapshotStateRef.current = null;
       setSnapshot(null);
@@ -4791,8 +4794,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       commitWorkspaceStatusTruth(null);
       setEmailMagicLinkPhase("idle");
       if (session.purpose === "account_deletion_reauthenticate") {
-        setAccountDeletionEmailReauthenticationCompleted(true);
+        setAccountDeletionEmailReauthenticationAccountId(session.account.id);
         selectMobileScreen("account");
+      } else {
+        setAccountDeletionEmailReauthenticationAccountId(null);
       }
     } catch (caught) {
       emailMagicLinkConsumedRef.current = null;
@@ -8555,7 +8560,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                             onDeleted={logout}
                             copy={t.systemPages.account.deletion}
                             locale={appLocale}
-                            emailReauthenticationCompleted={accountDeletionEmailReauthenticationCompleted}
+                            emailReauthenticationCompleted={accountDeletionEmailReauthenticationAccountId === snapshot.me.id}
                             onNativeReauthenticationChange={setAccountDeletionNativeReauthenticationRequired}
                             reauthenticationActions={(linkedProviders) => (
                               <View style={styles.nativeAuthGroup}>

@@ -100,6 +100,8 @@ test("the create-account surface keeps Google and Apple and adds neutral email s
   assert.match(source, /If this email can be used with Hey Hermes, a sign-in link is on its way/);
   assert.match(source, /Linking\.getInitialURL\(\)/);
   assert.match(source, /Linking\.addEventListener\("url"/);
+  assert.match(source, /setAccountDeletionEmailReauthenticationAccountId\(session\.account\.id\)/);
+  assert.match(source, /emailReauthenticationCompleted=\{accountDeletionEmailReauthenticationAccountId === snapshot\.me\.id\}/);
   assert.match(source, /signInWithGoogle\(\)/);
   assert.match(source, /AppleAuthenticationButtonType\.SIGN_UP/);
 });
