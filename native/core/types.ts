@@ -729,8 +729,36 @@ export interface AuthSession {
   };
 }
 
+export interface EmailMagicLinkStartResponse {
+  accepted: true;
+  message: string;
+}
+
+export interface EmailMagicLinkAbuseChallenge {
+  challenge: string;
+  difficulty: number;
+  expiresAt: string;
+  id: string;
+}
+
+export interface EmailMagicLinkAbuseProof {
+  challenge: string;
+  challengeId: string;
+  nonce: number;
+}
+
+export interface EmailMagicLinkSessionRequest {
+  surface: "ios" | "web";
+  token: string;
+}
+
+export interface EmailMagicLinkSessionResponse extends AuthSession {
+  purpose: "account_deletion_reauthenticate" | "login";
+}
+
 export type HeyNativeAuthProvider = "apple" | "google";
 export type HeyNativeAuthSurface = "ios" | "web";
+export type HeyNativeAuthMode = "link" | "login" | "reauthenticate";
 
 export interface HeyNativeAuthConfig {
   productRealm: "heyhermes.v1";
@@ -1222,16 +1250,41 @@ export function workspaceServerHostname(workspaceId: string): string {
   return `hey-hermes-${workspaceId.replace(/_/g, "-").toLowerCase()}`;
 }
 
-export interface WorkspaceServerIdentity {
-  provider?: string | null;
-  serverId?: string | null;
+interface WorkspaceServerIdentityBase {
   hostname: string;
   workspaceId: string;
   publicIpv4: string | null;
   serverType: string | null;
   location: string | null;
   inServiceSince: string | null;
+  allocatedVcpu: number | null;
+  allocatedMemoryMb: number | null;
+  allocatedPrivateStorageGb: number | null;
 }
+
+export type WorkspaceServerIdentity = WorkspaceServerIdentityBase & (
+  | {
+      confirmed: true;
+      hostingKind: "dedicated_vps";
+      provider: string;
+      serverId: string;
+      workspaceMachineId: null;
+    }
+  | {
+      confirmed: true;
+      hostingKind: "firecracker_microvm";
+      provider: null;
+      serverId: null;
+      workspaceMachineId: string;
+    }
+  | {
+      confirmed: false;
+      hostingKind: "unconfirmed";
+      provider: null;
+      serverId: null;
+      workspaceMachineId: null;
+    }
+);
 
 export type BrowserResultCardStatus = "started" | "viewed" | "blocked_for_approval" | "completed" | "failed";
 
@@ -2006,6 +2059,14 @@ export interface CreateApprovalCardRequest {
 export interface ApprovalDecisionRequest {
   decision: "approved" | "denied";
   typedConfirmation?: string;
+}
+
+export interface ChatClarifyRequest {
+  id: string;
+  question: string;
+  choices: string[];
+  allowOther: boolean;
+  expiresAt: string;
 }
 
 export interface ApprovalListQuery {

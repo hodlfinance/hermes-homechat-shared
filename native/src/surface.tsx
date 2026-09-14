@@ -13,6 +13,7 @@ import { workspacePrivacyCopy } from "../ui/workspace-privacy-copy";
 import { openPageStarter, consumePageStarter, pageStarterTranscript, pageStarterPayload, pageStarterAfterNavigation, type PageStarterState } from "../ui/page-starter-state";
 import { pageStarterCopy } from "../ui/page-starter-copy";
 import { MobilePageMenuRow } from "./mobile-page-menu-row";
+import { emailMagicLinkTokenFromUrl, solveEmailMagicLinkAbuseChallenge } from "./mobile-email-magic-link";
 import { pageMenuRemovalCopy } from "../ui/page-menu-copy";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -82,6 +83,7 @@ import {
 import { accountPageCopy, chatRouteAutomationFollowState, heyChatRouteChoices, heyOfferedChatRoutes, personalAccessPresentation } from "../core/index";
 import type {
   AlphaAccount,
+  ApprovalCard,
   AppLocale,
   AppSnapshot,
   AssistantMessageSegmentKind,
@@ -91,6 +93,7 @@ import type {
   ClaudeConnectionStatus,
   ChatMessage,
   ChatLatencySummary,
+  ChatClarifyRequest,
   ChatRun,
   ChatRunEvent,
   ChatRunStatus,
@@ -108,6 +111,7 @@ import type {
   HermesAutomationsView,
   HermesDelegatedTask,
   HeyNativeAuthConfig,
+  HeyNativeAuthMode,
   IntegrationKind,
   MobilePushStatus,
   ModelOptionsView,
@@ -177,6 +181,8 @@ import {
   heyAccountMenuNavigation,
 } from "../ui/navigation-structure";
 import { AccountDeletionSection } from "./AccountDeletionSection";
+import { accountDeletionNativeReauthenticationCopy } from "./account-deletion";
+import { mobileNativeAuthChallengeRefreshDelayMs } from "./mobile-native-auth-challenge";
 import { PluginCatalogScreen } from "./PluginCatalogScreen";
 import {
   SecureConnectionCredentialForm,
@@ -288,11 +294,12 @@ import {
   validateMobileAttachmentSelection,
   type MobileAttachment,
 } from "./mobile-attachments";
+import { createMobileConfirmationDecisionGate } from "./mobile-native-confirmation";
 import {
-  createMobileConfirmationDecisionGate,
-  mobileNativeConfirmationView,
-  type MobileConfirmationAction,
-} from "./mobile-native-confirmation";
+  mobileChatUserDecisionStatusFromEvent,
+  mobileVisibleChatApprovalCards,
+  mobileVisibleChatClarifyRequest,
+} from "./mobile-chat-user-decision";
 import { mobileAssistantLinkSegments } from "./mobile-message-links";
 import { mobileMarkdownBlocks, type MobileMarkdownInlineSegment } from "./mobile-markdown";
 import {
@@ -327,6 +334,7 @@ import {
 } from "./mobile-chat-activity";
 import { mobileLiveRunActivityView } from "./mobile-live-run-status";
 import { createMobileRankedTaskObserver, mobileRankedTaskNoticeAfterRead } from "./mobile-ranked-task-observer";
+import { mobileRankedTaskRead } from "./mobile-ranked-task-read";
 import { delegatedTasksView, mobileDelegatedTaskIsTerminal } from "../core/delegated-tasks-view";
 import {
   subthreadAfterConversationChange,
@@ -1511,12 +1519,19 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [loginPassword, setLoginPassword] = useState("");
   const [signedOutSupportOpen, setSignedOutSupportOpen] = useState(false);
   const [authEntryMode, setAuthEntryMode] = useState<"sign_in" | "create_account">("sign_in");
+  const [emailSignupEmail, setEmailSignupEmail] = useState("");
+  const [emailMagicLinkPhase, setEmailMagicLinkPhase] = useState<"idle" | "sending" | "sent" | "completing">("idle");
+  const emailMagicLinkConsumedRef = useRef<string | null>(null);
+  const [accountDeletionEmailReauthenticationAccountId, setAccountDeletionEmailReauthenticationAccountId] = useState<string | null>(null);
   const [nativeAuthConfig, setNativeAuthConfig] = useState<HeyNativeAuthConfig | null>(null);
   const [nativeAuthBusy, setNativeAuthBusy] = useState<"apple" | "google" | null>(null);
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
   const [googleChallenge, setGoogleChallenge] = useState<{ id: string; mode: "link" | "login"; nonce: string } | null>(null);
   const [googleChallengeVersion, setGoogleChallengeVersion] = useState(0);
   const nativeAuthModeRef = useRef<"link" | "login">("login");
+  const [accountDeletionNativeReauthenticationRequired, setAccountDeletionNativeReauthenticationRequired] = useState(false);
+  const [googleDeletionChallenge, setGoogleDeletionChallenge] = useState<{ expiresAt: string; id: string; nonce: string } | null>(null);
+  const [googleDeletionChallengeVersion, setGoogleDeletionChallengeVersion] = useState(0);
   const [input, setInput] = useState(initialDraft);
   const inputRef = useRef(input);
   inputRef.current = input;
@@ -1651,6 +1666,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
    */
   const explainedRunFailuresRef = useRef<Set<string>>(new Set());
   const [chatRunStatusesById, setChatRunStatusesById] = useState<Record<string, ChatRunStatus>>({});
+  const [chatApprovalCards, setChatApprovalCards] = useState<ApprovalCard[]>([]);
   const [delegatedTasks, setDelegatedTasks] = useState<HermesDelegatedTask[]>([]);
   const [subthreadOrigin, setSubthreadOrigin] = useState<SubthreadOrigin | null>(null);
   const [messagesNextBefore, setMessagesNextBefore] = useState<string | null>(null);
@@ -2046,13 +2062,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     if (!background) setRankedTaskState({ phase: "loading" });
     setTaskNotice((previous) => mobileRankedTaskNoticeAfterRead(previous, "started", background));
     try {
-      const collection = await api.rankedTasks();
+      const nextRead = mobileRankedTaskRead(await api.rankedTasks());
+      if (nextRead.phase === "error") throw new Error("Ranked-task response failed validation.");
       if (
         rankedTaskRequestRef.current !== requestId ||
         accountSessionGenerationRef.current !== sessionGeneration ||
         accountSessionTokenRef.current !== requestToken
       ) return;
-      setRankedTaskState({ phase: "ready", collection });
+      setRankedTaskState({ phase: "ready", collection: nextRead.collection });
       setTaskNotice((previous) => mobileRankedTaskNoticeAfterRead(previous, "succeeded", background));
     } catch {
       if (
@@ -2115,6 +2132,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [googleAuthRequest, googleAuthResponse, promptGoogleAuth] = Google.useIdTokenAuthRequest({
     clientId: googleAuthHookClientId,
     extraParams: googleChallenge ? { nonce: googleChallenge.nonce } : undefined,
+    iosClientId: googleAuthHookClientId,
+    selectAccount: true,
+  });
+  const [googleDeletionAuthRequest, googleDeletionAuthResponse, promptGoogleDeletionAuth] = Google.useIdTokenAuthRequest({
+    clientId: googleAuthHookClientId,
+    extraParams: googleDeletionChallenge ? { nonce: googleDeletionChallenge.nonce } : undefined,
     iosClientId: googleAuthHookClientId,
     selectAccount: true,
   });
@@ -2328,6 +2351,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     readAloudStorageGenerationRef.current += 1;
     homeChatRefreshSingleFlight.clear();
     activateAccountSession(null);
+    setAccountDeletionEmailReauthenticationAccountId(null);
     mobilePurchasesController.suspend();
     setMobilePurchasePlans([]);
     setMobilePurchaseAccountReady(false);
@@ -2362,6 +2386,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     setChatEventsByRunId({});
     explainedRunFailuresRef.current.clear();
     setChatRunStatusesById({});
+    setChatApprovalCards([]);
     setDelegatedTasks([]);
     setMessagesNextBefore(null);
     setLoadingOlderMessages(false);
@@ -2553,16 +2578,18 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         const modelSelectionGenerationAtAuxiliaryStart = modelSelectionRequestRef.current;
         const auxiliaryPhase = Promise.all([
           (host.policy.preinstalledRanker ? api.rankedTasks() : Promise.resolve(null))
-            .then((collection) => ({ phase: "ready", collection }) as const)
+            .then(mobileRankedTaskRead)
             .catch(() => ({ phase: "error" }) as const),
           api.modelOptions().catch(() => null),
           api.claudeConnectionStatus().catch(() => null),
         ]);
-        const [activeRuns, sessionsPage] = await Promise.all([
+        const [activeRuns, sessionsPage, pendingApprovals] = await Promise.all([
           hermesApi.activeRuns().catch((): ChatRun[] => []),
           chatConversationController.refreshConversations(createHomechatPagedState<ConversationSession>(), { limit: 12 }),
+          api.approvals({ status: "pending", limit: 100 }).catch((): ApprovalCard[] => []),
         ]);
         if (!refreshIsCurrent()) return;
+        setChatApprovalCards(pendingApprovals.filter((card) => Boolean(card.runId && card.conversationSessionId)));
 
         const activeRunRecovery = mobileHomeChatActiveRunRecovery<ChatRun>(
           activeRuns,
@@ -4192,6 +4219,21 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   }, [setAppError]);
 
   useEffect(() => {
+    let active = true;
+    const accept = (url: string | null) => {
+      if (!active || !url) return;
+      const magicToken = emailMagicLinkTokenFromUrl(url);
+      if (magicToken) void completeEmailMagicLink(magicToken);
+    };
+    void Linking.getInitialURL().then(accept).catch(() => undefined);
+    const subscription = Linking.addEventListener("url", ({ url }) => accept(url));
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     if (host.session.mode === "standalone") Appearance.setColorScheme(appearancePreference === "system" ? null : appearancePreference);
   }, [appearancePreference]);
 
@@ -4530,6 +4572,48 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     };
   }, [googleChallengeVersion, nativeAuthConfig?.providers.google?.clientId, token]);
 
+  useEffect(() => {
+    if (
+      Platform.OS !== "ios" ||
+      !accountDeletionNativeReauthenticationRequired ||
+      !token ||
+      !nativeAuthConfig?.providers.google
+    ) {
+      setGoogleDeletionChallenge(null);
+      return;
+    }
+    let cancelled = false;
+    createApiClient({ baseUrl: API_BASE, token })
+      .nativeAuthChallenge({ mode: "reauthenticate", provider: "google", surface: "ios" })
+      .then((challenge) => {
+        if (!cancelled) setGoogleDeletionChallenge(challenge);
+      })
+      .catch(() => {
+        if (!cancelled) setGoogleDeletionChallenge(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    accountDeletionNativeReauthenticationRequired,
+    googleDeletionChallengeVersion,
+    nativeAuthConfig?.providers.google?.clientId,
+    token,
+  ]);
+
+  useEffect(() => {
+    if (!accountDeletionNativeReauthenticationRequired || !googleDeletionChallenge || nativeAuthBusy) return;
+    const timer = setTimeout(
+      () => setGoogleDeletionChallengeVersion((current) => current + 1),
+      mobileNativeAuthChallengeRefreshDelayMs(
+        googleDeletionChallenge.expiresAt,
+        Date.now(),
+        nativeAuthChallengeRefreshMs,
+      ),
+    );
+    return () => clearTimeout(timer);
+  }, [accountDeletionNativeReauthenticationRequired, googleDeletionChallenge, nativeAuthBusy]);
+
   // The Google challenge has to be minted before the user taps, because the auth
   // request needs its nonce up front. Server-side challenges expire, so refresh
   // this one while the sign-in surface stays open instead of letting an idle
@@ -4544,11 +4628,32 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     return () => clearInterval(timer);
   }, [nativeAuthConfig?.providers.google?.clientId, nativeAuthBusy]);
 
+  useEffect(() => {
+    if (!googleDeletionAuthResponse) return;
+    if (googleDeletionAuthResponse.type !== "success") {
+      setNativeAuthBusy(null);
+      setGoogleDeletionChallengeVersion((current) => current + 1);
+      return;
+    }
+    const idToken = googleDeletionAuthResponse.params.id_token;
+    if (!idToken || !googleDeletionChallenge) {
+      setNativeAuthBusy(null);
+      setAppError("Google did not return a valid Hey Hermes identity.");
+      return;
+    }
+    void completeNativeSignIn("google", idToken, googleDeletionChallenge, "reauthenticate")
+      .catch((caught) => setAppError(userFacingError(displayError(caught, "Google sign-in failed."))))
+      .finally(() => {
+        setNativeAuthBusy(null);
+        setGoogleDeletionChallengeVersion((current) => current + 1);
+      });
+  }, [googleDeletionAuthResponse]);
+
   async function completeNativeSignIn(
     provider: "apple" | "google",
     idToken: string,
     challenge: { id: string; nonce: string },
-    mode: "link" | "login" = "login",
+    mode: HeyNativeAuthMode = "login",
   ) {
     const session = await createApiClient({ baseUrl: API_BASE, token: token || "login" }).nativeAuthSession({
       challengeId: challenge.id,
@@ -4562,12 +4667,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     refreshGenerationRef.current += 1;
     homeChatRefreshSingleFlight.clear();
     activateAccountSession(session.token);
+    setAccountDeletionEmailReauthenticationAccountId(null);
     setToken(session.token);
     snapshotStateRef.current = null;
     setSnapshot(null);
     setModelOptions(null);
     commitWorkspaceStatusTruth(null);
     setAppError(null);
+    if (mode === "reauthenticate") setAccountDeletionNativeReauthenticationRequired(false);
   }
 
   useEffect(() => {
@@ -4609,7 +4716,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     }
   }
 
-  async function signInWithApple(mode: "link" | "login" = "login") {
+  async function signInWithApple(mode: HeyNativeAuthMode = "login") {
     if (!nativeAuthConfig?.providers.apple || !appleSignInAvailable || nativeAuthBusy) return;
     setNativeAuthBusy("apple");
     setAppError(null);
@@ -4640,6 +4747,19 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     }
   }
 
+  async function reauthenticateAccountDeletionWithGoogle() {
+    if (!googleDeletionAuthRequest || !googleDeletionChallenge || nativeAuthBusy) return;
+    setNativeAuthBusy("google");
+    setAppError(null);
+    try {
+      await promptGoogleDeletionAuth();
+    } catch (caught) {
+      setNativeAuthBusy(null);
+      setAppError(userFacingError(displayError(caught, "Google sign-in failed.")));
+      setGoogleDeletionChallengeVersion((current) => current + 1);
+    }
+  }
+
   async function login() {
     const loginEmail = email.trim();
     const code = accessCode.trim();
@@ -4660,6 +4780,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       refreshGenerationRef.current += 1;
       homeChatRefreshSingleFlight.clear();
       activateAccountSession(session.token);
+      setAccountDeletionEmailReauthenticationAccountId(null);
       setToken(session.token);
       snapshotStateRef.current = null;
       setSnapshot(null);
@@ -4667,6 +4788,60 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       commitWorkspaceStatusTruth(null);
       setAppError(null);
     });
+  }
+
+  async function requestEmailMagicLink() {
+    const signupEmail = emailSignupEmail.trim();
+    if (!signupEmail || emailMagicLinkPhase === "sending") return;
+    setEmailMagicLinkPhase("sending");
+    setAppError(null);
+    try {
+      const publicAuth = createApiClient({ baseUrl: API_BASE, token: "email-signup" });
+      const challenge = await publicAuth.emailMagicLinkAbuseChallenge({ surface: "ios" });
+      const abuseProof = await solveEmailMagicLinkAbuseChallenge(challenge);
+      await publicAuth.startEmailMagicLink({
+        abuseProof,
+        email: signupEmail,
+        surface: "ios",
+        website: "",
+      });
+      setEmailMagicLinkPhase("sent");
+    } catch (caught) {
+      setEmailMagicLinkPhase("idle");
+      setAppError(userFacingError(displayError(caught, "The sign-in link could not be requested.")));
+    }
+  }
+
+  async function completeEmailMagicLink(tokenValue: string) {
+    const magicToken = tokenValue.trim();
+    if (!magicToken || emailMagicLinkConsumedRef.current === magicToken) return;
+    emailMagicLinkConsumedRef.current = magicToken;
+    setEmailMagicLinkPhase("completing");
+    setAppError(null);
+    try {
+      const session = await createApiClient({ baseUrl: API_BASE, token: "email-signup" })
+        .completeEmailMagicLink({ surface: "ios", token: magicToken });
+      await persistToken(session.token);
+      refreshGenerationRef.current += 1;
+      homeChatRefreshSingleFlight.clear();
+      activateAccountSession(session.token);
+      setToken(session.token);
+      snapshotStateRef.current = null;
+      setSnapshot(null);
+      setModelOptions(null);
+      commitWorkspaceStatusTruth(null);
+      setEmailMagicLinkPhase("idle");
+      if (session.purpose === "account_deletion_reauthenticate") {
+        setAccountDeletionEmailReauthenticationAccountId(session.account.id);
+        selectMobileScreen("account");
+      } else {
+        setAccountDeletionEmailReauthenticationAccountId(null);
+      }
+    } catch (caught) {
+      emailMagicLinkConsumedRef.current = null;
+      setEmailMagicLinkPhase("idle");
+      setAppError(userFacingError(displayError(caught, "This sign-in link is invalid or has expired.")));
+    }
   }
 
   async function connectChatGpt() {
@@ -4736,12 +4911,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     setChatSessionsBusy(true);
     setChatSessionNotice(null);
     try {
-      const [page, activeRun] = await Promise.all([
+      const [page, activeRun, pendingApprovals] = await Promise.all([
         chatConversationController.refreshMessages(createHomechatPagedState<ChatMessage>(), {
           conversationId: sessionId,
           limit: 50,
         }),
         hermesApi.activeRun({ conversationId: sessionId }).catch(() => null),
+        api.approvals({ status: "pending", limit: 100 }).catch((): ApprovalCard[] => []),
       ]);
       if (conversationSelectionVersionRef.current !== selectionVersion) return false;
       if (page.phase === "error") throw new Error(page.error || "Could not open that chat.");
@@ -4764,6 +4940,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       setChatEventsByRunId({});
       explainedRunFailuresRef.current.clear();
       setChatRunStatusesById(activeRun ? { [activeRun.id]: activeRun.status } : {});
+      setChatApprovalCards(pendingApprovals.filter((card) => card.conversationSessionId === sessionId && Boolean(card.runId)));
       setChatSessionsOpen(false);
       setMenuOpen(false);
       setTab("chat");
@@ -4935,6 +5112,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       setChatEventsByRunId({});
       explainedRunFailuresRef.current.clear();
       setChatRunStatusesById({});
+      setChatApprovalCards([]);
       setInput("");
       setPendingAttachments([]);
       setAttachmentNotice(null);
@@ -4979,6 +5157,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   }
 
   function commitChatRunStatus(runId: string, status: ChatRunStatus) {
+    if (status === "completed" || status === "cancelled" || status === "failed") {
+      setChatApprovalCards((current) => current.filter((card) => card.runId !== runId));
+    }
     const queued = [...queuedFollowUpRef.current.values()].find((item) => item.runId === runId);
     const terminalStatus = mobileQueuedFollowUpTerminalStatus(queued?.runId, runId, status);
     if (queued && terminalStatus) {
@@ -5141,6 +5322,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       },
       onEvent: (event) => {
         if (!terminalUpdateContinuation.accept(event.runId, shouldAcceptUpdates())) return;
+        if (event.payload.requiresUserReply === true && typeof event.payload.approvalId === "string") {
+          const approvalConversationId = input.conversationSessionId;
+          void api.approvals({ status: "pending", limit: 100 }).then((cards) => {
+            if (!shouldAcceptUpdates() || activeConversationSessionIdRef.current !== approvalConversationId) return;
+            setChatApprovalCards(cards.filter((card) =>
+              card.conversationSessionId === approvalConversationId && Boolean(card.runId),
+            ));
+          }).catch(() => undefined);
+        }
         if (ownsVisibleConversation()) {
           const genericSecureEntry = secureSecretEntryAfterEvent(
             secureSecretEntryRequestRef.current,
@@ -5164,10 +5354,16 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           explainedRunFailuresRef.current.add(legacy.runId);
         }
         const terminalStatus = mobileRunStatusFromTerminalEvent(legacy);
+        const userDecisionStatus = mobileChatUserDecisionStatusFromEvent(legacy);
         if (terminalStatus) {
           if (latestRunSnapshot?.id === legacy.runId) latestRunSnapshot = { ...latestRunSnapshot, status: terminalStatus };
           commitChatRunStatus(legacy.runId, terminalStatus);
           closeLivePresentation();
+        } else if (userDecisionStatus) {
+          if (latestRunSnapshot?.id === legacy.runId) {
+            latestRunSnapshot = { ...latestRunSnapshot, status: userDecisionStatus };
+          }
+          commitChatRunStatus(legacy.runId, userDecisionStatus);
         } else if (legacy.type === "status") {
           // Canonical normalization defaults diagnostic/malformed statuses to
           // running. Only the original gateway payload can prove takeover.
@@ -5749,16 +5945,54 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     ]);
   }
 
-  async function submitMobileConfirmation(
-    runId: string,
-    conversationSessionId: string | null,
-    action: MobileConfirmationAction,
-  ) {
+  async function submitMobileConfirmation(card: ApprovalCard, decision: "approved" | "denied", typedConfirmation?: string) {
+    const runId = card.runId;
+    if (!runId || card.conversationSessionId !== activeConversationSessionIdRef.current) return;
     if (chatRunStatusesById[runId] !== "waiting_for_approval") return;
     if (!confirmationDecisionGate.claim(runId)) return;
     setConfirmationDecisionRuns((current) => ({ ...current, [runId]: true }));
-    const result = await runSend(action, "text", undefined, undefined, conversationSessionId);
-    if (result === "failed" || result === "ignored") {
+    try {
+      await api.decideApproval(card.id, { decision, ...(typedConfirmation ? { typedConfirmation } : {}) });
+      setChatApprovalCards((current) => current.filter((item) => item.id !== card.id));
+      commitChatRunStatus(runId, "running");
+      confirmationDecisionGate.release(runId);
+      setConfirmationDecisionRuns((current) => {
+        const next = { ...current };
+        delete next[runId];
+        return next;
+      });
+    } catch (err) {
+      confirmationDecisionGate.release(runId);
+      setConfirmationDecisionRuns((current) => {
+        const next = { ...current };
+        delete next[runId];
+        return next;
+      });
+      const message = displayError(err, "That approval decision could not be delivered to Hermes.");
+      recordDiagnostic("error", "Hermes approval failed", message);
+      setChatSessionNotice(userFacingError(message));
+      const refreshSessionId = activeConversationSessionIdRef.current || card.conversationSessionId;
+      if (refreshSessionId) {
+        await loadMobileChatSession(refreshSessionId, { force: true, preserveDraft: true }).catch(() => false);
+      }
+    }
+  }
+
+  async function submitMobileClarify(runId: string, clarify: ChatClarifyRequest, response: string) {
+    if (chatRunStatusesById[runId] !== "waiting_for_approval" || !response.trim()) return;
+    if (!confirmationDecisionGate.claim(runId)) return;
+    setConfirmationDecisionRuns((current) => ({ ...current, [runId]: true }));
+    try {
+      await api.resolveChatClarify(runId, { clarifyId: clarify.id, response: response.trim() });
+      commitChatRunStatus(runId, "running");
+    } catch (err) {
+      const message = displayError(err, "That answer could not be delivered to Hermes.");
+      recordDiagnostic("error", "Hermes clarification failed", message);
+      setChatSessionNotice(userFacingError(message));
+      if (activeConversationSessionIdRef.current) {
+        await loadMobileChatSession(activeConversationSessionIdRef.current, { force: true, preserveDraft: true }).catch(() => false);
+      }
+    } finally {
       confirmationDecisionGate.release(runId);
       setConfirmationDecisionRuns((current) => {
         const next = { ...current };
@@ -6995,7 +7229,48 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                   </Pressable>
                 </View>
               ) : (
-                <Text style={styles.authModeIntro}>{staticUiCopy(appLocale)["Create your account securely with Google or Apple."]}</Text>
+                <View style={styles.authForm}>
+                  <Text style={styles.authModeIntro}>
+                    {appLocale === "de"
+                      ? "Erstelle deinen Account mit E-Mail, Google oder Apple."
+                      : "Create your account with email, Google, or Apple."}
+                  </Text>
+                  <TextInput
+                    value={emailSignupEmail}
+                    onChangeText={(value) => { setEmailSignupEmail(value); if (emailMagicLinkPhase === "sent") setEmailMagicLinkPhase("idle"); }}
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    keyboardType="email-address"
+                    placeholder={staticUiCopy(appLocale)["Email"]}
+                    style={styles.input}
+                    editable={emailMagicLinkPhase !== "sending" && emailMagicLinkPhase !== "completing"}
+                  />
+                  <Pressable
+                    style={[styles.primaryButtonWide, (!emailSignupEmail.trim() || emailMagicLinkPhase === "sending" || emailMagicLinkPhase === "completing") && styles.disabledButton]}
+                    onPress={() => void requestEmailMagicLink()}
+                    disabled={!emailSignupEmail.trim() || emailMagicLinkPhase === "sending" || emailMagicLinkPhase === "completing"}
+                    accessibilityRole="button"
+                  >
+                    {emailMagicLinkPhase === "sending" || emailMagicLinkPhase === "completing"
+                      ? <ActivityIndicator color={palette.accentText} />
+                      : <Mail size={18} color={palette.accentText} />}
+                    <Text style={styles.primaryButtonText}>
+                      {emailMagicLinkPhase === "sending"
+                        ? (appLocale === "de" ? "Link wird gesendet …" : "Sending link…")
+                        : emailMagicLinkPhase === "completing"
+                          ? (appLocale === "de" ? "Anmeldung wird abgeschlossen …" : "Finishing sign-in…")
+                          : (appLocale === "de" ? "Link per E-Mail senden" : "Email me a sign-in link")}
+                    </Text>
+                  </Pressable>
+                  {emailMagicLinkPhase === "sent" ? (
+                    <Text style={styles.authModeIntro} accessibilityRole="alert">
+                      {appLocale === "de"
+                        ? "Wenn diese E-Mail für Hey Hermes verwendet werden kann, ist ein Anmeldelink unterwegs."
+                        : "If this email can be used with Hey Hermes, a sign-in link is on its way."}
+                    </Text>
+                  ) : null}
+                </View>
               )}
 
               {Platform.OS === "ios" && (nativeAuthConfig?.providers.google || (nativeAuthConfig?.providers.apple && appleSignInAvailable)) ? (
@@ -7031,8 +7306,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                     )
                   ) : null}
                 </View>
-              ) : authEntryMode === "create_account" && nativeAuthConfig ? (
-                <Text style={styles.authModeIntro}>{staticUiCopy(appLocale)["Account creation is not available in this build."]}</Text>
               ) : null}
               {error ? <Notice locale={appLocale} tone="error" text={error} onDismiss={dismissAppError} /> : null}
               <Text style={styles.privacyNote}>{staticUiCopy(appLocale)["Connection details are encrypted. Chat content is private to this workspace and processed by Hey Hermes."]}</Text>
@@ -7200,9 +7473,18 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     messages: pageStarterTranscript(homechatTranscriptMessages(messages, { includeEmpty: true }), pageStarter,
       { workspaceId: snapshot.workspace.id, conversationId: activeConversationSessionId ?? "" }, pageStarterCopy(appLocale).question),
   });
+  const visibleChatApprovalCards = mobileVisibleChatApprovalCards({
+    cards: chatApprovalCards,
+    conversationSessionId: activeConversationSessionId,
+    runStatuses: chatRunStatusesById,
+  });
   const firstVisibleAssistantMessageId = host.presentation?.showAssistantIdentity
     ? visibleMobileMessages.find((message) => message.role === "assistant")?.id ?? null
     : null;
+  const visibleChatClarifyRequests = Object.entries(chatEventsByRunId).flatMap(([runId, events]) => {
+    const clarify = mobileVisibleChatClarifyRequest(chatRunStatusesById[runId], events);
+    return clarify ? [{ runId, clarify }] : [];
+  });
   const chatGptPanel = mobileChatGptConnectionCardView({
     dismissedKey: dismissedChatGptPanelKey,
     pendingSessionId: chatGptConnection?.sessionId ?? null,
@@ -7624,14 +7906,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                 <MessageBubble
                   key={message.id}
                   message={message}
-                  activityEvents={message.role === "assistant" ? chatEventsByRunId[message.runId] ?? [] : []}
-                  runStatus={message.role === "assistant" ? chatRunStatusesById[message.runId] ?? null : null}
-                  confirmationPending={Boolean(confirmationDecisionRuns[message.runId])}
-                  onConfirm={(action) => void submitMobileConfirmation(
-                    message.runId,
-                    message.conversationSessionId ?? activeConversationSessionId,
-                    action,
-                  )}
                   locale={appLocale}
                   copy={t.chat}
                   showAssistantIdentity={message.id === firstVisibleAssistantMessageId}
@@ -7640,6 +7914,22 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                       ? recordFirstVisibleMobileToken
                       : undefined
                   }
+                />
+              ))}
+              {visibleChatApprovalCards.map((card) => (
+                <MobileChatApprovalCard
+                  key={card.id}
+                  card={card}
+                  pending={Boolean(card.runId && confirmationDecisionRuns[card.runId])}
+                  onDecision={(decision, typedConfirmation) => void submitMobileConfirmation(card, decision, typedConfirmation)}
+                />
+              ))}
+              {visibleChatClarifyRequests.map(({ runId, clarify }) => (
+                <MobileChatClarifyCard
+                  key={`${runId}:${clarify.id}`}
+                  clarify={clarify}
+                  pending={Boolean(confirmationDecisionRuns[runId])}
+                  onAnswer={(response) => void submitMobileClarify(runId, clarify, response)}
                 />
               ))}
               {pendingAssistantText || activeChatRunActivityView ? (
@@ -8445,7 +8735,41 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                     {host.session.mode === "standalone" && snapshot ? (
                       <MobileSystemSection title={mobileDangerZoneText(appLocale)}>
                         <View style={styles.systemSurfaceNotice}>
-                          <AccountDeletionSection accountId={snapshot.me.id} api={api} busy={busy} onDeleted={logout} copy={t.systemPages.account.deletion} locale={appLocale} />
+                          <AccountDeletionSection
+                            accountId={snapshot.me.id}
+                            api={api}
+                            busy={busy}
+                            onDeleted={logout}
+                            copy={t.systemPages.account.deletion}
+                            locale={appLocale}
+                            emailReauthenticationCompleted={accountDeletionEmailReauthenticationAccountId === snapshot.me.id}
+                            onNativeReauthenticationChange={setAccountDeletionNativeReauthenticationRequired}
+                            reauthenticationActions={(linkedProviders) => (
+                              <View style={styles.nativeAuthGroup}>
+                                {linkedProviders.includes("google") && nativeAuthConfig?.providers.google ? (
+                                  <Pressable
+                                    style={[styles.secondaryButtonWide, (!googleDeletionAuthRequest || !googleDeletionChallenge || Boolean(nativeAuthBusy)) && styles.disabledButton]}
+                                    onPress={() => void reauthenticateAccountDeletionWithGoogle()}
+                                    disabled={!googleDeletionAuthRequest || !googleDeletionChallenge || Boolean(nativeAuthBusy)}
+                                    accessibilityRole="button"
+                                  >
+                                    {nativeAuthBusy === "google" ? <ActivityIndicator color={palette.teal} /> : <Text style={styles.secondaryButtonText}>{accountDeletionNativeReauthenticationCopy(appLocale).googleAction}</Text>}
+                                  </Pressable>
+                                ) : null}
+                                {linkedProviders.includes("apple") && nativeAuthConfig?.providers.apple && appleSignInAvailable ? (
+                                  nativeAuthBusy === "apple" ? <ActivityIndicator color={palette.teal} /> : (
+                                    <AppleAuthentication.AppleAuthenticationButton
+                                      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                                      cornerRadius={8}
+                                      onPress={() => void signInWithApple("reauthenticate")}
+                                      style={styles.appleAuthButton}
+                                    />
+                                  )
+                                ) : null}
+                              </View>
+                            )}
+                          />
                         </View>
                       </MobileSystemSection>
                     ) : null}
@@ -9192,20 +9516,12 @@ function ChatEmptyState({
 
 function MessageBubble({
   message,
-  activityEvents,
-  runStatus,
-  confirmationPending,
-  onConfirm,
   locale,
   copy,
   showAssistantIdentity,
   onVisibleTextLayout,
 }: {
   message: ChatMessage;
-  activityEvents: ChatRunEvent[];
-  runStatus: ChatRunStatus | null;
-  confirmationPending: boolean;
-  onConfirm: (action: MobileConfirmationAction) => void;
   locale: AppLocale;
   copy: ReturnType<typeof mobileText>["chat"];
   showAssistantIdentity: boolean;
@@ -9218,13 +9534,6 @@ function MessageBubble({
   const assistantText = assistantView?.visibleText || (assistantView?.technicalActivities.length
     ? "Hermes finished without a visible reply."
     : message.content);
-  const confirmation = isUser ? null : mobileNativeConfirmationView({
-    runId: message.runId,
-    runStatus,
-    text: assistantText,
-    events: activityEvents,
-  });
-  const visibleAssistantText = confirmation?.explanation || assistantText;
   const uploadReferences = isUser
     ? (message.artifactReferences ?? []).filter((reference) => reference.source === "upload")
     : [];
@@ -9256,7 +9565,7 @@ function MessageBubble({
       ) : null}
       {isUser
         ? <Text style={textStyle} selectable>{message.content}</Text>
-        : <View onLayout={onVisibleTextLayout}><LinkedMessageText text={visibleAssistantText} /></View>}
+        : <View onLayout={onVisibleTextLayout}><LinkedMessageText text={assistantText} /></View>}
       {financeReferences.map((reference) => (
         <FinanceArtifactCard
           key={`${reference.id}:${reference.version}`}
@@ -9265,32 +9574,131 @@ function MessageBubble({
           onOpenUrl={(url) => void Linking.openURL(url)}
         />
       ))}
-      {!isUser && confirmation ? (
-        <View style={styles.confirmationActions} accessibilityLabel={staticUiCopy(locale)["Confirmation choices"]}>
-          {confirmation.actions.map((action) => (
-            <Pressable
-              key={action}
-              style={[
-                action === "Approve Once" ? styles.confirmationPrimaryButton : styles.confirmationSecondaryButton,
-                confirmationPending && styles.disabledButton,
-              ]}
-              onPress={() => onConfirm(action)}
-              disabled={confirmationPending}
-              accessibilityRole="button"
-              accessibilityLabel={action}
-            >
-              <Text style={action === "Approve Once" ? styles.confirmationPrimaryText : styles.confirmationSecondaryText}>
-                {action}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
       {messageTime ? (
         <Text style={[styles.messageTime, isUser && styles.userMessageTime]} accessibilityLabel={`${copy.messageTime} ${messageTime}`}>
           {messageTime}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+function MobileChatApprovalCard({
+  card,
+  pending,
+  onDecision,
+}: {
+  card: ApprovalCard;
+  pending: boolean;
+  onDecision: (decision: "approved" | "denied", typedConfirmation?: string) => void;
+}) {
+  const [typedConfirmation, setTypedConfirmation] = useState("");
+  const expired = !Number.isFinite(Date.parse(card.expiresAt)) || Date.parse(card.expiresAt) <= Date.now();
+  const confirmationMatches = !card.requiresTypedConfirmation || typedConfirmation.trim() === card.requiresTypedConfirmation;
+  const approveDisabled = pending || expired || !confirmationMatches;
+  return (
+    <View style={[styles.message, styles.assistantMessage]} accessibilityRole="summary">
+      <Text style={styles.rowTitle}>{card.title}</Text>
+      {card.summary ? <Text style={styles.muted}>{card.summary}</Text> : null}
+      {card.preview.markdown ? <LinkedMessageText text={card.preview.markdown} /> : null}
+      {card.preview.fields?.map((field) => (
+        <Text key={`${field.label}:${field.value}`} style={styles.muted}>{field.label}: {field.value}</Text>
+      ))}
+      <Text style={styles.muted}>Target: {card.target.label}</Text>
+      <Text style={styles.muted}>Action: {card.action.label}</Text>
+      {card.permissions.length ? <Text style={styles.muted}>Permission: {card.permissions.join(" · ")}</Text> : null}
+      {card.dataLeavingWorkspace.length ? <Text style={styles.muted}>Data leaving workspace: {card.dataLeavingWorkspace.join(" · ")}</Text> : null}
+      {card.secretsUsed.length ? <Text style={styles.muted}>Credentials: {card.secretsUsed.map((secret) => `${secret.kind}: ${secret.hint}`).join(" · ")}</Text> : null}
+      <Text style={styles.muted}>{expired ? "This approval has expired." : `Expires: ${new Date(card.expiresAt).toLocaleString()}`}</Text>
+      {card.requiresTypedConfirmation ? (
+        <TextInput
+          value={typedConfirmation}
+          onChangeText={setTypedConfirmation}
+          placeholder={`Type ${card.requiresTypedConfirmation} to approve`}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          editable={!pending && !expired}
+          style={styles.input}
+          accessibilityLabel={`Type ${card.requiresTypedConfirmation} to approve`}
+        />
+      ) : null}
+      <View style={styles.confirmationActions} accessibilityLabel="Confirmation choices">
+        <Pressable
+          style={[styles.confirmationPrimaryButton, approveDisabled && styles.disabledButton]}
+          onPress={() => onDecision("approved", typedConfirmation)}
+          disabled={approveDisabled}
+          accessibilityRole="button"
+          accessibilityLabel={card.approveLabel}
+        >
+          {pending ? <ActivityIndicator size="small" color={palette.surface} /> : null}
+          <Text style={styles.confirmationPrimaryText}>{card.approveLabel}</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.confirmationSecondaryButton, pending && styles.disabledButton]}
+          onPress={() => onDecision("denied")}
+          disabled={pending}
+          accessibilityRole="button"
+          accessibilityLabel={card.denyLabel}
+        >
+          <Text style={styles.confirmationSecondaryText}>{card.denyLabel}</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function MobileChatClarifyCard({
+  clarify,
+  pending,
+  onAnswer,
+}: {
+  clarify: ChatClarifyRequest;
+  pending: boolean;
+  onAnswer: (response: string) => void;
+}) {
+  const [other, setOther] = useState("");
+  const expired = !Number.isFinite(Date.parse(clarify.expiresAt)) || Date.parse(clarify.expiresAt) <= Date.now();
+  return (
+    <View style={[styles.message, styles.assistantMessage]} accessibilityRole="summary">
+      <Text style={styles.rowTitle}>Hermes needs one detail</Text>
+      <Text style={styles.muted}>{clarify.question}</Text>
+      <View style={styles.confirmationActions} accessibilityLabel="Clarification choices">
+        {clarify.choices.map((choice) => (
+          <Pressable
+            key={choice}
+            style={[styles.confirmationSecondaryButton, (pending || expired) && styles.disabledButton]}
+            onPress={() => onAnswer(choice)}
+            disabled={pending || expired}
+            accessibilityRole="button"
+            accessibilityLabel={choice}
+          >
+            <Text style={styles.confirmationSecondaryText}>{choice}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {clarify.allowOther || !clarify.choices.length ? (
+        <>
+          <TextInput
+            value={other}
+            onChangeText={setOther}
+            placeholder="Other answer"
+            editable={!pending && !expired}
+            style={styles.input}
+            accessibilityLabel="Other answer"
+          />
+          <Pressable
+            style={[styles.confirmationPrimaryButton, (pending || expired || !other.trim()) && styles.disabledButton]}
+            onPress={() => onAnswer(other)}
+            disabled={pending || expired || !other.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Send answer"
+          >
+            {pending ? <ActivityIndicator size="small" color={palette.surface} /> : null}
+            <Text style={styles.confirmationPrimaryText}>Send answer</Text>
+          </Pressable>
+        </>
+      ) : null}
+      {expired ? <Text style={styles.muted}>This question has expired.</Text> : null}
     </View>
   );
 }

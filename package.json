@@ -88,6 +88,7 @@
     "./native/mobile-page-menu-row": "./native/src/mobile-page-menu-row.tsx",
     "./native/mobile-status-shimmer": "./native/src/mobile-status-shimmer.tsx",
     "./native/mobile-home-chat-startup": "./native/src/mobile-home-chat-startup.ts",
+    "./native/mobile-email-magic-link": "./native/src/mobile-email-magic-link.ts",
     "./native/MobilePrivacySheet": "./native/src/MobilePrivacySheet.tsx",
     "./native/policy": "./native/policy.ts",
     "./native/transport": "./native/transport.ts"
@@ -98,6 +99,9 @@
     "LICENSE",
     "native"
   ],
+  "dependencies": {
+    "@noble/hashes": "^1.8.0"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "ci": "npm run typecheck && npm test && npm run build && npm run test:packed-consumer && npm run test:native",
