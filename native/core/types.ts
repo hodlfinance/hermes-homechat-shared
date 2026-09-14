@@ -729,6 +729,16 @@ export interface AuthSession {
   };
 }
 
+export interface EmailMagicLinkStartResponse {
+  accepted: true;
+  message: string;
+}
+
+export interface EmailMagicLinkSessionRequest {
+  surface: "ios" | "web";
+  token: string;
+}
+
 export type HeyNativeAuthProvider = "apple" | "google";
 export type HeyNativeAuthSurface = "ios" | "web";
 export type HeyNativeAuthMode = "link" | "login" | "reauthenticate";

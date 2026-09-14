@@ -117,6 +117,8 @@ import type {
   HeyNativeAuthProvider,
   HeyNativeAuthSession,
   HeyNativeAuthSurface,
+  EmailMagicLinkSessionRequest,
+  EmailMagicLinkStartResponse,
   HermesDashboardRoute,
   HermesRuntimeParityReport,
   WorkspaceCapabilitySummary,
@@ -553,6 +555,16 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     fetchImpl,
     login: (body: LoginRequest) =>
       request<AuthSession>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
+    startEmailMagicLink: (body: { email: string; surface: "ios" | "web"; website?: string }) =>
+      request<EmailMagicLinkStartResponse>("/auth/email-magic-link/start", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    completeEmailMagicLink: (body: EmailMagicLinkSessionRequest) =>
+      request<AuthSession>("/auth/email-magic-link/session", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
     nativeAuthConfig: (surface: HeyNativeAuthSurface) =>
       request<HeyNativeAuthConfig>(`/auth/native/config?surface=${encodeURIComponent(surface)}`),
     nativeAuthChallenge: (body: HeyNativeAuthChallengeRequest) =>

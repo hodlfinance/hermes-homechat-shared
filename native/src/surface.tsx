@@ -10,6 +10,7 @@ import { workspacePrivacyCopy } from "../ui/workspace-privacy-copy";
 import { openPageStarter, consumePageStarter, pageStarterTranscript, pageStarterPayload, pageStarterAfterNavigation, type PageStarterState } from "../ui/page-starter-state";
 import { pageStarterCopy } from "../ui/page-starter-copy";
 import { MobilePageMenuRow } from "./mobile-page-menu-row";
+import { emailMagicLinkTokenFromUrl } from "./mobile-email-magic-link";
 import { pageMenuRemovalCopy } from "../ui/page-menu-copy";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -1507,6 +1508,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [loginPassword, setLoginPassword] = useState("");
   const [signedOutSupportOpen, setSignedOutSupportOpen] = useState(false);
   const [authEntryMode, setAuthEntryMode] = useState<"sign_in" | "create_account">("sign_in");
+  const [emailSignupEmail, setEmailSignupEmail] = useState("");
+  const [emailMagicLinkPhase, setEmailMagicLinkPhase] = useState<"idle" | "sending" | "sent" | "completing">("idle");
+  const emailMagicLinkConsumedRef = useRef<string | null>(null);
   const [nativeAuthConfig, setNativeAuthConfig] = useState<HeyNativeAuthConfig | null>(null);
   const [nativeAuthBusy, setNativeAuthBusy] = useState<"apple" | "google" | null>(null);
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
@@ -4172,6 +4176,21 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   }, [setAppError]);
 
   useEffect(() => {
+    let active = true;
+    const accept = (url: string | null) => {
+      if (!active || !url) return;
+      const magicToken = emailMagicLinkTokenFromUrl(url);
+      if (magicToken) void completeEmailMagicLink(magicToken);
+    };
+    void Linking.getInitialURL().then(accept).catch(() => undefined);
+    const subscription = Linking.addEventListener("url", ({ url }) => accept(url));
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     if (host.session.mode === "standalone") Appearance.setColorScheme(appearancePreference === "system" ? null : appearancePreference);
   }, [appearancePreference]);
 
@@ -4724,6 +4743,50 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       commitWorkspaceStatusTruth(null);
       setAppError(null);
     });
+  }
+
+  async function requestEmailMagicLink() {
+    const signupEmail = emailSignupEmail.trim();
+    if (!signupEmail || emailMagicLinkPhase === "sending") return;
+    setEmailMagicLinkPhase("sending");
+    setAppError(null);
+    try {
+      await createApiClient({ baseUrl: API_BASE, token: "email-signup" }).startEmailMagicLink({
+        email: signupEmail,
+        surface: "ios",
+        website: "",
+      });
+      setEmailMagicLinkPhase("sent");
+    } catch (caught) {
+      setEmailMagicLinkPhase("idle");
+      setAppError(userFacingError(displayError(caught, "The sign-in link could not be requested.")));
+    }
+  }
+
+  async function completeEmailMagicLink(tokenValue: string) {
+    const magicToken = tokenValue.trim();
+    if (!magicToken || emailMagicLinkConsumedRef.current === magicToken) return;
+    emailMagicLinkConsumedRef.current = magicToken;
+    setEmailMagicLinkPhase("completing");
+    setAppError(null);
+    try {
+      const session = await createApiClient({ baseUrl: API_BASE, token: "email-signup" })
+        .completeEmailMagicLink({ surface: "ios", token: magicToken });
+      await persistToken(session.token);
+      refreshGenerationRef.current += 1;
+      homeChatRefreshSingleFlight.clear();
+      activateAccountSession(session.token);
+      setToken(session.token);
+      snapshotStateRef.current = null;
+      setSnapshot(null);
+      setModelOptions(null);
+      commitWorkspaceStatusTruth(null);
+      setEmailMagicLinkPhase("idle");
+    } catch (caught) {
+      emailMagicLinkConsumedRef.current = null;
+      setEmailMagicLinkPhase("idle");
+      setAppError(userFacingError(displayError(caught, "This sign-in link is invalid or has expired.")));
+    }
   }
 
   async function connectChatGpt() {
@@ -6973,7 +7036,48 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                   </Pressable>
                 </View>
               ) : (
-                <Text style={styles.authModeIntro}>{staticUiCopy(appLocale)["Create your account securely with Google or Apple."]}</Text>
+                <View style={styles.authForm}>
+                  <Text style={styles.authModeIntro}>
+                    {appLocale === "de"
+                      ? "Erstelle deinen Account mit E-Mail, Google oder Apple."
+                      : "Create your account with email, Google, or Apple."}
+                  </Text>
+                  <TextInput
+                    value={emailSignupEmail}
+                    onChangeText={(value) => { setEmailSignupEmail(value); if (emailMagicLinkPhase === "sent") setEmailMagicLinkPhase("idle"); }}
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    keyboardType="email-address"
+                    placeholder={staticUiCopy(appLocale)["Email"]}
+                    style={styles.input}
+                    editable={emailMagicLinkPhase !== "sending" && emailMagicLinkPhase !== "completing"}
+                  />
+                  <Pressable
+                    style={[styles.primaryButtonWide, (!emailSignupEmail.trim() || emailMagicLinkPhase === "sending" || emailMagicLinkPhase === "completing") && styles.disabledButton]}
+                    onPress={() => void requestEmailMagicLink()}
+                    disabled={!emailSignupEmail.trim() || emailMagicLinkPhase === "sending" || emailMagicLinkPhase === "completing"}
+                    accessibilityRole="button"
+                  >
+                    {emailMagicLinkPhase === "sending" || emailMagicLinkPhase === "completing"
+                      ? <ActivityIndicator color={palette.accentText} />
+                      : <Mail size={18} color={palette.accentText} />}
+                    <Text style={styles.primaryButtonText}>
+                      {emailMagicLinkPhase === "sending"
+                        ? (appLocale === "de" ? "Link wird gesendet …" : "Sending link…")
+                        : emailMagicLinkPhase === "completing"
+                          ? (appLocale === "de" ? "Anmeldung wird abgeschlossen …" : "Finishing sign-in…")
+                          : (appLocale === "de" ? "Link per E-Mail senden" : "Email me a sign-in link")}
+                    </Text>
+                  </Pressable>
+                  {emailMagicLinkPhase === "sent" ? (
+                    <Text style={styles.authModeIntro} accessibilityRole="alert">
+                      {appLocale === "de"
+                        ? "Wenn diese E-Mail für Hey Hermes verwendet werden kann, ist ein Anmeldelink unterwegs."
+                        : "If this email can be used with Hey Hermes, a sign-in link is on its way."}
+                    </Text>
+                  ) : null}
+                </View>
               )}
 
               {Platform.OS === "ios" && (nativeAuthConfig?.providers.google || (nativeAuthConfig?.providers.apple && appleSignInAvailable)) ? (
@@ -7009,8 +7113,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                     )
                   ) : null}
                 </View>
-              ) : authEntryMode === "create_account" && nativeAuthConfig ? (
-                <Text style={styles.authModeIntro}>{staticUiCopy(appLocale)["Account creation is not available in this build."]}</Text>
               ) : null}
               {error ? <Notice locale={appLocale} tone="error" text={error} onDismiss={dismissAppError} /> : null}
               <Text style={styles.privacyNote}>{staticUiCopy(appLocale)["Connection details are encrypted. Chat content is private to this workspace and processed by Hey Hermes."]}</Text>
