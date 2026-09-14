@@ -28,7 +28,6 @@ test("a valid Firecracker binding is a confirmed isolated workspace machine with
     ["Environment type", "Private Firecracker microVM"],
     ["Workspace machine ID", identity.workspaceMachineId],
     ["In service since", identity.inServiceSince],
-    ["Provider", "Firecracker"],
   ]);
   const visible = JSON.stringify(workspacePrivacyRows(identity, copy));
   assert.doesNotMatch(visible, /IP address|Server ID|nodeId|agentUrl|MAC address|management/i);
