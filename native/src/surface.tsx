@@ -79,6 +79,7 @@ import {
 import { accountPageCopy, chatRouteAutomationFollowState, heyChatRouteChoices, heyOfferedChatRoutes, personalAccessPresentation } from "../core/index";
 import type {
   AlphaAccount,
+  ApprovalCard,
   AppLocale,
   AppSnapshot,
   AssistantMessageSegmentKind,
@@ -288,11 +289,7 @@ import {
   validateMobileAttachmentSelection,
   type MobileAttachment,
 } from "./mobile-attachments";
-import {
-  createMobileConfirmationDecisionGate,
-  mobileNativeConfirmationView,
-  type MobileConfirmationAction,
-} from "./mobile-native-confirmation";
+import { createMobileConfirmationDecisionGate } from "./mobile-native-confirmation";
 import { mobileAssistantLinkSegments } from "./mobile-message-links";
 import { mobileMarkdownBlocks, type MobileMarkdownInlineSegment } from "./mobile-markdown";
 import {
@@ -1650,6 +1647,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
    */
   const explainedRunFailuresRef = useRef<Set<string>>(new Set());
   const [chatRunStatusesById, setChatRunStatusesById] = useState<Record<string, ChatRunStatus>>({});
+  const [chatApprovalCards, setChatApprovalCards] = useState<ApprovalCard[]>([]);
   const [delegatedTasks, setDelegatedTasks] = useState<HermesDelegatedTask[]>([]);
   const [subthreadOrigin, setSubthreadOrigin] = useState<SubthreadOrigin | null>(null);
   const [messagesNextBefore, setMessagesNextBefore] = useState<string | null>(null);
@@ -2343,6 +2341,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     setChatEventsByRunId({});
     explainedRunFailuresRef.current.clear();
     setChatRunStatusesById({});
+    setChatApprovalCards([]);
     setDelegatedTasks([]);
     setMessagesNextBefore(null);
     setLoadingOlderMessages(false);
@@ -2539,11 +2538,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           api.modelOptions().catch(() => null),
           api.claudeConnectionStatus().catch(() => null),
         ]);
-        const [activeRuns, sessionsPage] = await Promise.all([
+        const [activeRuns, sessionsPage, pendingApprovals] = await Promise.all([
           hermesApi.activeRuns().catch((): ChatRun[] => []),
           chatConversationController.refreshConversations(createHomechatPagedState<ConversationSession>(), { limit: 12 }),
+          api.approvals({ status: "pending", limit: 100 }).catch((): ApprovalCard[] => []),
         ]);
         if (!refreshIsCurrent()) return;
+        setChatApprovalCards(pendingApprovals.filter((card) => Boolean(card.runId && card.conversationSessionId)));
 
         const activeRunRecovery = mobileHomeChatActiveRunRecovery<ChatRun>(
           activeRuns,
@@ -4793,12 +4794,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     setChatSessionsBusy(true);
     setChatSessionNotice(null);
     try {
-      const [page, activeRun] = await Promise.all([
+      const [page, activeRun, pendingApprovals] = await Promise.all([
         chatConversationController.refreshMessages(createHomechatPagedState<ChatMessage>(), {
           conversationId: sessionId,
           limit: 50,
         }),
         hermesApi.activeRun({ conversationId: sessionId }).catch(() => null),
+        api.approvals({ status: "pending", limit: 100 }).catch((): ApprovalCard[] => []),
       ]);
       if (conversationSelectionVersionRef.current !== selectionVersion) return false;
       if (page.phase === "error") throw new Error(page.error || "Could not open that chat.");
@@ -4821,6 +4823,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       setChatEventsByRunId({});
       explainedRunFailuresRef.current.clear();
       setChatRunStatusesById(activeRun ? { [activeRun.id]: activeRun.status } : {});
+      setChatApprovalCards(pendingApprovals.filter((card) => card.conversationSessionId === sessionId && Boolean(card.runId)));
       setChatSessionsOpen(false);
       setMenuOpen(false);
       setTab("chat");
@@ -4992,6 +4995,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       setChatEventsByRunId({});
       explainedRunFailuresRef.current.clear();
       setChatRunStatusesById({});
+      setChatApprovalCards([]);
       setInput("");
       setPendingAttachments([]);
       setAttachmentNotice(null);
@@ -5036,6 +5040,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   }
 
   function commitChatRunStatus(runId: string, status: ChatRunStatus) {
+    if (status === "completed" || status === "cancelled" || status === "failed") {
+      setChatApprovalCards((current) => current.filter((card) => card.runId !== runId));
+    }
     const queued = [...queuedFollowUpRef.current.values()].find((item) => item.runId === runId);
     const terminalStatus = mobileQueuedFollowUpTerminalStatus(queued?.runId, runId, status);
     if (queued && terminalStatus) {
@@ -5198,6 +5205,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       },
       onEvent: (event) => {
         if (!terminalUpdateContinuation.accept(event.runId, shouldAcceptUpdates())) return;
+        if (event.payload.requiresUserReply === true && typeof event.payload.approvalId === "string") {
+          const approvalConversationId = input.conversationSessionId;
+          void api.approvals({ status: "pending", limit: 100 }).then((cards) => {
+            if (!shouldAcceptUpdates() || activeConversationSessionIdRef.current !== approvalConversationId) return;
+            setChatApprovalCards(cards.filter((card) =>
+              card.conversationSessionId === approvalConversationId && Boolean(card.runId),
+            ));
+          }).catch(() => undefined);
+        }
         if (ownsVisibleConversation()) {
           const genericSecureEntry = secureSecretEntryAfterEvent(
             secureSecretEntryRequestRef.current,
@@ -5806,22 +5822,32 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     ]);
   }
 
-  async function submitMobileConfirmation(
-    runId: string,
-    conversationSessionId: string | null,
-    action: MobileConfirmationAction,
-  ) {
+  async function submitMobileConfirmation(card: ApprovalCard, decision: "approved" | "denied") {
+    const runId = card.runId;
+    if (!runId || card.conversationSessionId !== activeConversationSessionIdRef.current) return;
     if (chatRunStatusesById[runId] !== "waiting_for_approval") return;
     if (!confirmationDecisionGate.claim(runId)) return;
     setConfirmationDecisionRuns((current) => ({ ...current, [runId]: true }));
-    const result = await runSend(action, "text", undefined, undefined, conversationSessionId);
-    if (result === "failed" || result === "ignored") {
+    try {
+      await api.decideApproval(card.id, { decision });
+      setChatApprovalCards((current) => current.filter((item) => item.id !== card.id));
+      commitChatRunStatus(runId, "running");
       confirmationDecisionGate.release(runId);
       setConfirmationDecisionRuns((current) => {
         const next = { ...current };
         delete next[runId];
         return next;
       });
+    } catch (err) {
+      confirmationDecisionGate.release(runId);
+      setConfirmationDecisionRuns((current) => {
+        const next = { ...current };
+        delete next[runId];
+        return next;
+      });
+      const message = displayError(err, "That approval decision could not be delivered to Hermes.");
+      recordDiagnostic("error", "Hermes approval failed", message);
+      setChatSessionNotice(userFacingError(message));
     }
   }
 
@@ -7178,6 +7204,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     messages: pageStarterTranscript(homechatTranscriptMessages(messages, { includeEmpty: true }), pageStarter,
       { workspaceId: snapshot.workspace.id, conversationId: activeConversationSessionId ?? "" }, pageStarterCopy(appLocale).question),
   });
+  const visibleChatApprovalCards = chatApprovalCards.filter((card) =>
+    card.status === "pending" &&
+    card.conversationSessionId === activeConversationSessionId &&
+    Boolean(card.runId && chatRunStatusesById[card.runId] === "waiting_for_approval"),
+  );
   const chatGptPanel = mobileChatGptConnectionCardView({
     dismissedKey: dismissedChatGptPanelKey,
     pendingSessionId: chatGptConnection?.sessionId ?? null,
@@ -7594,14 +7625,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                 <MessageBubble
                   key={message.id}
                   message={message}
-                  activityEvents={message.role === "assistant" ? chatEventsByRunId[message.runId] ?? [] : []}
-                  runStatus={message.role === "assistant" ? chatRunStatusesById[message.runId] ?? null : null}
-                  confirmationPending={Boolean(confirmationDecisionRuns[message.runId])}
-                  onConfirm={(action) => void submitMobileConfirmation(
-                    message.runId,
-                    message.conversationSessionId ?? activeConversationSessionId,
-                    action,
-                  )}
                   locale={appLocale}
                   copy={t.chat}
                   onVisibleTextLayout={
@@ -7609,6 +7632,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                       ? recordFirstVisibleMobileToken
                       : undefined
                   }
+                />
+              ))}
+              {visibleChatApprovalCards.map((card) => (
+                <MobileChatApprovalCard
+                  key={card.id}
+                  card={card}
+                  pending={Boolean(card.runId && confirmationDecisionRuns[card.runId])}
+                  onDecision={(decision) => void submitMobileConfirmation(card, decision)}
                 />
               ))}
               {pendingAssistantText || activeChatRunActivityView ? (
@@ -9178,19 +9209,11 @@ function ChatEmptyState({
 
 function MessageBubble({
   message,
-  activityEvents,
-  runStatus,
-  confirmationPending,
-  onConfirm,
   locale,
   copy,
   onVisibleTextLayout,
 }: {
   message: ChatMessage;
-  activityEvents: ChatRunEvent[];
-  runStatus: ChatRunStatus | null;
-  confirmationPending: boolean;
-  onConfirm: (action: MobileConfirmationAction) => void;
   locale: AppLocale;
   copy: ReturnType<typeof mobileText>["chat"];
   onVisibleTextLayout?: () => void;
@@ -9202,13 +9225,6 @@ function MessageBubble({
   const assistantText = assistantView?.visibleText || (assistantView?.technicalActivities.length
     ? "Hermes finished without a visible reply."
     : message.content);
-  const confirmation = isUser ? null : mobileNativeConfirmationView({
-    runId: message.runId,
-    runStatus,
-    text: assistantText,
-    events: activityEvents,
-  });
-  const visibleAssistantText = confirmation?.explanation || assistantText;
   const uploadReferences = isUser
     ? (message.artifactReferences ?? []).filter((reference) => reference.source === "upload")
     : [];
@@ -9231,33 +9247,51 @@ function MessageBubble({
       ) : null}
       {isUser
         ? <Text style={textStyle} selectable>{message.content}</Text>
-        : <View onLayout={onVisibleTextLayout}><LinkedMessageText text={visibleAssistantText} /></View>}
-      {!isUser && confirmation ? (
-        <View style={styles.confirmationActions} accessibilityLabel={staticUiCopy(locale)["Confirmation choices"]}>
-          {confirmation.actions.map((action) => (
-            <Pressable
-              key={action}
-              style={[
-                action === "Approve Once" ? styles.confirmationPrimaryButton : styles.confirmationSecondaryButton,
-                confirmationPending && styles.disabledButton,
-              ]}
-              onPress={() => onConfirm(action)}
-              disabled={confirmationPending}
-              accessibilityRole="button"
-              accessibilityLabel={action}
-            >
-              <Text style={action === "Approve Once" ? styles.confirmationPrimaryText : styles.confirmationSecondaryText}>
-                {action}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
+        : <View onLayout={onVisibleTextLayout}><LinkedMessageText text={assistantText} /></View>}
       {messageTime ? (
         <Text style={[styles.messageTime, isUser && styles.userMessageTime]} accessibilityLabel={`${copy.messageTime} ${messageTime}`}>
           {messageTime}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+function MobileChatApprovalCard({
+  card,
+  pending,
+  onDecision,
+}: {
+  card: ApprovalCard;
+  pending: boolean;
+  onDecision: (decision: "approved" | "denied") => void;
+}) {
+  return (
+    <View style={[styles.message, styles.assistantMessage]} accessibilityRole="summary">
+      <Text style={styles.rowTitle}>{card.title}</Text>
+      {card.summary ? <Text style={styles.muted}>{card.summary}</Text> : null}
+      {card.preview.markdown ? <LinkedMessageText text={card.preview.markdown} /> : null}
+      <View style={styles.confirmationActions} accessibilityLabel="Confirmation choices">
+        <Pressable
+          style={[styles.confirmationPrimaryButton, pending && styles.disabledButton]}
+          onPress={() => onDecision("approved")}
+          disabled={pending}
+          accessibilityRole="button"
+          accessibilityLabel={card.approveLabel}
+        >
+          {pending ? <ActivityIndicator size="small" color={palette.surface} /> : null}
+          <Text style={styles.confirmationPrimaryText}>{card.approveLabel}</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.confirmationSecondaryButton, pending && styles.disabledButton]}
+          onPress={() => onDecision("denied")}
+          disabled={pending}
+          accessibilityRole="button"
+          accessibilityLabel={card.denyLabel}
+        >
+          <Text style={styles.confirmationSecondaryText}>{card.denyLabel}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

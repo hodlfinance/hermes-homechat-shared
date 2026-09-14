@@ -89,5 +89,7 @@ test("the shared chat renderer keeps tables inside the transcript without a nest
   assert.match(surfaceSource, /markdownTableHeaderCell:\s*\{[\s\S]*?backgroundColor: palette\.tealSoft/);
   assert.match(surfaceSource, /markdownTableBoldText:\s*\{[\s\S]*?fontWeight: "700"/);
   assert.equal((surfaceSource.match(/mobileMarkdownBlocks\(text\)/g) || []).length, 1);
-  assert.equal((surfaceSource.match(/<LinkedMessageText /g) || []).length, 2);
+  // Persisted answers, the transient answer, and HPD-678's durable approval
+  // preview all share the same non-scrolling Markdown renderer.
+  assert.equal((surfaceSource.match(/<LinkedMessageText /g) || []).length, 3);
 });
