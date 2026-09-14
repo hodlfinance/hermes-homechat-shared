@@ -67,7 +67,6 @@ export function workspacePrivacyRows(identity: WorkspaceServerIdentity | null, c
       [copy.allocatedMemory, identity.allocatedMemoryMb === null ? null : `${identity.allocatedMemoryMb} MB`],
       [copy.allocatedStorage, identity.allocatedPrivateStorageGb === null ? null : `${identity.allocatedPrivateStorageGb} GB`],
       [copy.inServiceSince, identity.inServiceSince],
-      [copy.provider, "Firecracker"],
     ];
     return rows.filter((row): row is readonly [string, string] => Boolean(row[1]));
   }
