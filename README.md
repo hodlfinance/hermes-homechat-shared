@@ -71,7 +71,9 @@ transport failures through `SharedHomechatTransportError` (the native Hermes
 client does this with `HermesApiClientError`). A product may set `timeoutMs`
 when it deliberately owns a finite observation window; reaching that opt-in
 deadline likewise ends only that observation and does not mark the server run
-failed.
+failed. Detached `follow: false` sends expose that local observation end through
+`waitForBackgroundFollow()` while retaining the run identity needed to reconnect
+or stop the canonical server run.
 
 ```ts
 import { createHomechatClientController } from "@hodlfinance/hermes-homechat-shared/core";

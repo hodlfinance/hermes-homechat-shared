@@ -1,4 +1,8 @@
-import type { ChatRunStatus, ConnectionSetupIntent } from "../core/index";
+import {
+  isSharedHomechatRunControllerError,
+  type ChatRunStatus,
+  type ConnectionSetupIntent,
+} from "../core/index";
 
 export type MobileMessageSource = "text" | "voice";
 
@@ -76,6 +80,11 @@ export type MobileQueuedFollowUpNoticeActionState = {
   showDismiss: boolean;
 };
 export type MobileRunAttemptOutcome = "pending" | "completed" | "cancelled" | "failed";
+
+export function mobileQueuedFollowUpKeepsOwnershipAfterBackgroundError(error: unknown): boolean {
+  return isSharedHomechatRunControllerError(error, "observation_failed") ||
+    isSharedHomechatRunControllerError(error, "timeout");
+}
 
 /**
  * A reply that has been asked for but has not been given a run yet can take

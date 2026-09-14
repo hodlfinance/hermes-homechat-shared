@@ -2236,8 +2236,18 @@ export function createHomechatClientController<
       if (sendOptions.follow === false) {
         backgroundFollow = follow(run, sendOptions).catch((error) => {
           captureError(error);
+          if (
+            isSharedHomechatRunControllerError(error, "observation_failed") ||
+            isSharedHomechatRunControllerError(error, "timeout")
+          ) {
+            throw error;
+          }
           return state;
         });
+        // Detached following must never create an unhandled rejection, but the
+        // owned observer still needs the original rejected promise so it can
+        // distinguish a local observation end from a canonical run failure.
+        void backgroundFollow.catch(() => undefined);
         return state;
       }
       return await follow(run, sendOptions);

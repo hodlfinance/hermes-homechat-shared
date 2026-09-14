@@ -270,6 +270,7 @@ import {
   mobileMessagesWithoutRun,
   reconcileMobileQueuedFollowUpTerminalState,
   mobileQueuedFollowUpHasStarted,
+  mobileQueuedFollowUpKeepsOwnershipAfterBackgroundError,
   mobileQueuedFollowUpBlocksComposer,
   mobileQueuedFollowUpNoticeActionState,
   mobileQueuedFollowUpNoticeVisible,
@@ -5403,6 +5404,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   }
 
   async function finishQueuedFollowUp(queued: MobileQueuedFollowUpRef) {
+    let keepOwnership = false;
     try {
       const finalState = await queued.session.waitForBackgroundFollow();
       if (!queuedFollowUpOwner.owns(queued.ownershipToken)) return;
@@ -5455,8 +5457,39 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         }
         updateQueuedFollowUp(queued, { content: queued.content, runId: queued.runId, status: "failed" });
       }
+    } catch (error) {
+      keepOwnership = mobileQueuedFollowUpKeepsOwnershipAfterBackgroundError(error);
+      if (keepOwnership) {
+        if (
+          queuedFollowUpOwner.owns(queued.ownershipToken) &&
+          queuedFollowUpRef.current.get(queued.ownershipToken) === queued
+        ) {
+          queued.terminalCleanupPending = false;
+          recordDiagnostic(
+            "info",
+            "Follow-up observation paused",
+            displayError(error, "The saved follow-up is still running and can be cancelled."),
+          );
+        }
+        return;
+      }
+      if (
+        queuedFollowUpOwner.owns(queued.ownershipToken) &&
+        queuedFollowUpRef.current.get(queued.ownershipToken) === queued
+      ) {
+        setFailedMessage({
+          content: queued.content,
+          idempotencyKey: queued.idempotencyKey,
+          source: queued.source,
+          attachments: queued.attachments,
+          conversationSessionId: queued.conversationSessionId,
+          runId: queued.runId,
+        });
+        updateQueuedFollowUp(queued, { content: queued.content, runId: queued.runId, status: "failed" });
+        recordDiagnostic("error", "Follow-up observation failed", displayError(error, "Could not follow the saved reply."));
+      }
     } finally {
-      if (queuedFollowUpOwner.owns(queued.ownershipToken)) {
+      if (!keepOwnership && queuedFollowUpOwner.owns(queued.ownershipToken)) {
         if (queuedFollowUpRef.current.get(queued.ownershipToken) === queued) queuedFollowUpRef.current.delete(queued.ownershipToken);
         queued.terminalCleanupPending = false;
       }
@@ -5513,6 +5546,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           isChatRunCancelledError(error) ||
           isSharedHomechatRunControllerError(error, "aborted")
         ) return;
+        if (mobileQueuedFollowUpKeepsOwnershipAfterBackgroundError(error)) {
+          recordDiagnostic(
+            "info",
+            "Follow-up recovery observation paused",
+            displayError(error, "The saved follow-up is still running and can be cancelled."),
+          );
+          return;
+        }
         if (queuedFollowUpRef.current.get(queued.ownershipToken) === queued) queuedFollowUpRef.current.delete(queued.ownershipToken);
         setFailedMessage({
           content: queued.content,

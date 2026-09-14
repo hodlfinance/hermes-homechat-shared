@@ -1124,6 +1124,42 @@ test("keeps exactly one shared poller for a follow:false queued run", async () =
   assert.deepEqual(background.messages, [persistedUser, persistedAssistant]);
 });
 
+test("follow:false exposes a local observation end while retaining the real run for stop", async () => {
+  type Message = SharedHomechatMessage & { id: string };
+  type Run = { id: string; status: string; messages: Message[] };
+  const user: Message = { id: "owned-user", runId: "owned-run", role: "user", content: "Keep going" };
+  let stoppedRunId: string | null = null;
+  const transport: SharedHomechatRunTransport<Run, { message: string }> = {
+    createRun: async () => ({ id: "owned-run", status: "queued", messages: [user] }),
+    getRun: async () => {
+      throw new SharedHomechatTransportError("Observation endpoint missing", { status: 404 });
+    },
+    stopRun: async (runId) => {
+      stoppedRunId = runId;
+      return { id: runId, status: "cancelled", messages: [user] };
+    },
+  };
+  const controller = createHomechatClientController<Message, Run, { message: string }>({
+    transport,
+    runController: createHomechatRunController(transport, { sleep: async () => undefined }),
+  });
+
+  const accepted = await controller.send({ message: "Keep going" }, { follow: false });
+  assert.equal(accepted.runId, "owned-run");
+  assert.equal(accepted.status, "queued");
+  await assert.rejects(
+    controller.waitForBackgroundFollow(),
+    (error) => error instanceof SharedHomechatObservationError && error.code === "observation_failed",
+  );
+  assert.equal(controller.getState().error, null);
+  assert.equal(controller.getState().status, "queued");
+
+  const stopped = await controller.stop("owned-run");
+  assert.equal(stoppedRunId, "owned-run");
+  assert.equal(stopped.phase, "stopped");
+  assert.equal(stopped.status, "cancelled");
+});
+
 test("loads paged conversation and job history through an injected transport", async () => {
   const requests: Array<string | null | undefined> = [];
   const controller = createHomechatHistoryController<SharedHomechatHistoryItem>({
