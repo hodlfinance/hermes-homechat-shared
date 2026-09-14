@@ -1875,11 +1875,16 @@ export function createHomechatRunController<
 
   async function wait(runId: string, options: SharedHomechatRunWaitOptions<Run> = {}): Promise<Run> {
     const startedAt = options.startedAt ?? now();
-    const timeoutMs = options.timeoutMs ?? defaults.timeoutMs ?? 245_000;
+    // A client-side observation deadline is not evidence that the server-side
+    // run failed. Long runs and runs whose event stream disconnected therefore
+    // keep polling until the server reports a terminal state or the caller
+    // aborts. Products that deliberately own a finite wait may still opt into
+    // one through `timeoutMs`.
+    const timeoutMs = options.timeoutMs ?? defaults.timeoutMs;
     const intervalMs = options.intervalMs ?? defaults.intervalMs ?? 1_600;
     options.onPhase?.("waiting");
 
-    while (now() - startedAt <= timeoutMs) {
+    while (timeoutMs === undefined || now() - startedAt <= timeoutMs) {
       assertHomechatNotAborted(options.signal, options.copy);
       const run = await transport.getRun(runId, { signal: options.signal });
       await options.onSnapshot?.(run);

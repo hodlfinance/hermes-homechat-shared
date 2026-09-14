@@ -688,6 +688,138 @@ test("owns send, stream-to-poll hydration, terminal errors, reconnect, and persi
   assert.deepEqual(stopped.messages, [persistedUser]);
 });
 
+test("keeps a stream-disconnected run visible beyond the former 245 second client deadline", async () => {
+  type Message = SharedHomechatMessage & { id: string };
+  type Run = { id: string; status: string; messages: Message[] };
+  const user: Message = { id: "long-user", runId: "long-run", role: "user", content: "Keep working" };
+  const answer: Message = { id: "long-answer", runId: "long-run", role: "assistant", content: "Finished" };
+  let clock = 0;
+  let reads = 0;
+  const observations: Array<{ clock: number; phase: string; status: string | null; streamingText: string }> = [];
+  const transport: SharedHomechatRunTransport<Run, { message: string }> = {
+    createRun: async () => ({ id: "long-run", status: "running", messages: [user] }),
+    getRun: async () => {
+      reads += 1;
+      return reads < 5
+        ? { id: "long-run", status: "running", messages: [user] }
+        : { id: "long-run", status: "completed", messages: [user, answer] };
+    },
+    streamRun: async (runId, context) => {
+      await context.onEvent({ id: "long-delta", runId, type: "message.delta", text: "Still working" });
+      throw new Error("event stream disconnected");
+    },
+  };
+  const controller = createHomechatClientController<Message, Run, { message: string }>({
+    transport,
+    runController: createHomechatRunController(transport, {
+      intervalMs: 100_000,
+      now: () => clock,
+      sleep: async (milliseconds) => { clock += milliseconds; },
+    }),
+    onState: (state) => {
+      observations.push({
+        clock,
+        phase: state.phase,
+        status: state.status,
+        streamingText: state.streamingText,
+      });
+    },
+  });
+
+  const state = await controller.send(
+    { message: "Keep working" },
+    {
+      maxReconnectAttempts: 0,
+      optimisticMessage: { id: "long-local", role: "user", content: "Keep working" },
+    },
+  );
+
+  assert.equal(reads, 5);
+  assert.ok(clock > 245_000);
+  assert.ok(observations.some((item) =>
+    item.clock > 245_000 &&
+    (item.phase === "reconnecting" || item.phase === "waiting") &&
+    item.status === "running" &&
+    item.streamingText === "Still working"
+  ));
+  assert.equal(state.phase, "completed");
+  assert.equal(state.error, null);
+  assert.deepEqual(state.messages, [user, answer]);
+});
+
+test("keeps an explicitly configured run timeout available", async () => {
+  let clock = 0;
+  const controller = createHomechatRunController(
+    { getRun: async (id) => ({ id, status: "running" }) },
+    {
+      intervalMs: 6,
+      now: () => clock,
+      sleep: async (milliseconds) => { clock += milliseconds; },
+    },
+  );
+
+  await assert.rejects(
+    controller.wait("bounded-run", { timeoutMs: 5 }),
+    (error) => error instanceof SharedHomechatRunControllerError && error.code === "timeout",
+  );
+});
+
+test("keeps a queued background follow-up owned and visible past 245 seconds", async () => {
+  type Message = SharedHomechatMessage & { id: string };
+  type Run = { id: string; status: string; messages: Message[] };
+  const user: Message = { id: "queued-long-user", runId: "queued-long", role: "user", content: "Next question" };
+  const answer: Message = { id: "queued-long-answer", runId: "queued-long", role: "assistant", content: "Next answer" };
+  let clock = 0;
+  let reads = 0;
+  let releasePastDeadline!: () => void;
+  let markPastDeadline!: () => void;
+  const pastDeadlineHeld = new Promise<void>((resolve) => { releasePastDeadline = resolve; });
+  const pastDeadlineReached = new Promise<void>((resolve) => { markPastDeadline = resolve; });
+  const transport: SharedHomechatRunTransport<Run, { message: string }> = {
+    createRun: async () => ({ id: "queued-long", status: "queued", messages: [user] }),
+    getRun: async () => {
+      reads += 1;
+      return reads < 4
+        ? { id: "queued-long", status: "running", messages: [user] }
+        : { id: "queued-long", status: "completed", messages: [user, answer] };
+    },
+  };
+  const controller = createHomechatClientController<Message, Run, { message: string }>({
+    transport,
+    runController: createHomechatRunController(transport, {
+      intervalMs: 100_000,
+      now: () => clock,
+      sleep: async (milliseconds) => {
+        clock += milliseconds;
+        if (clock > 245_000) {
+          markPastDeadline();
+          await pastDeadlineHeld;
+        }
+      },
+    }),
+  });
+
+  await controller.send(
+    { message: "Next question" },
+    {
+      follow: false,
+      optimisticMessage: { id: "queued-long-local", role: "user", content: "Next question" },
+    },
+  );
+  await pastDeadlineReached;
+
+  const activeState = controller.getState();
+  assert.equal(activeState.error, null);
+  assert.equal(activeState.phase, "waiting");
+  assert.equal(activeState.status, "running");
+  assert.deepEqual(activeState.messages, [user]);
+
+  releasePastDeadline();
+  const finalState = await controller.waitForBackgroundFollow();
+  assert.equal(finalState.phase, "completed");
+  assert.deepEqual(finalState.messages, [user, answer]);
+});
+
 test("a terminal stream error settles without polling or reconnecting", async () => {
   type Message = SharedHomechatMessage & { id: string };
   type Run = { id: string; status: string; messages: Message[] };
