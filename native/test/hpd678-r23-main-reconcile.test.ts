@@ -10,7 +10,7 @@ test("R23 durable approvals coexist with assistant identity and Finance cards", 
     surface.indexOf("function MobileChatApprovalCard("),
   );
 
-  assert.match(surface, /const visibleChatApprovalCards = chatApprovalCards\.filter/);
+  assert.match(surface, /const visibleChatApprovalCards = mobileVisibleChatApprovalCards\(\{/);
   assert.match(surface, /visibleChatApprovalCards\.map\(\(card\) =>/);
   assert.match(surface, /const firstVisibleAssistantMessageId = host\.presentation\?\.showAssistantIdentity/);
   assert.match(surface, /showAssistantIdentity=\{message\.id === firstVisibleAssistantMessageId\}/);

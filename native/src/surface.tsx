@@ -295,6 +295,11 @@ import {
   type MobileAttachment,
 } from "./mobile-attachments";
 import { createMobileConfirmationDecisionGate } from "./mobile-native-confirmation";
+import {
+  mobileChatUserDecisionStatusFromEvent,
+  mobileVisibleChatApprovalCards,
+  mobileVisibleChatClarifyRequest,
+} from "./mobile-chat-user-decision";
 import { mobileAssistantLinkSegments } from "./mobile-message-links";
 import { mobileMarkdownBlocks, type MobileMarkdownInlineSegment } from "./mobile-markdown";
 import {
@@ -5349,10 +5354,16 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           explainedRunFailuresRef.current.add(legacy.runId);
         }
         const terminalStatus = mobileRunStatusFromTerminalEvent(legacy);
+        const userDecisionStatus = mobileChatUserDecisionStatusFromEvent(legacy);
         if (terminalStatus) {
           if (latestRunSnapshot?.id === legacy.runId) latestRunSnapshot = { ...latestRunSnapshot, status: terminalStatus };
           commitChatRunStatus(legacy.runId, terminalStatus);
           closeLivePresentation();
+        } else if (userDecisionStatus) {
+          if (latestRunSnapshot?.id === legacy.runId) {
+            latestRunSnapshot = { ...latestRunSnapshot, status: userDecisionStatus };
+          }
+          commitChatRunStatus(legacy.runId, userDecisionStatus);
         } else if (legacy.type === "status") {
           // Canonical normalization defaults diagnostic/malformed statuses to
           // running. Only the original gateway payload can prove takeover.
@@ -7462,17 +7473,16 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     messages: pageStarterTranscript(homechatTranscriptMessages(messages, { includeEmpty: true }), pageStarter,
       { workspaceId: snapshot.workspace.id, conversationId: activeConversationSessionId ?? "" }, pageStarterCopy(appLocale).question),
   });
-  const visibleChatApprovalCards = chatApprovalCards.filter((card) =>
-    card.status === "pending" &&
-    card.conversationSessionId === activeConversationSessionId &&
-    Boolean(card.runId && chatRunStatusesById[card.runId] === "waiting_for_approval"),
-  );
+  const visibleChatApprovalCards = mobileVisibleChatApprovalCards({
+    cards: chatApprovalCards,
+    conversationSessionId: activeConversationSessionId,
+    runStatuses: chatRunStatusesById,
+  });
   const firstVisibleAssistantMessageId = host.presentation?.showAssistantIdentity
     ? visibleMobileMessages.find((message) => message.role === "assistant")?.id ?? null
     : null;
   const visibleChatClarifyRequests = Object.entries(chatEventsByRunId).flatMap(([runId, events]) => {
-    if (chatRunStatusesById[runId] !== "waiting_for_approval") return [];
-    const clarify = [...events].reverse().map(chatClarifyRequestFromEvent).find(Boolean);
+    const clarify = mobileVisibleChatClarifyRequest(chatRunStatusesById[runId], events);
     return clarify ? [{ runId, clarify }] : [];
   });
   const chatGptPanel = mobileChatGptConnectionCardView({
@@ -9571,23 +9581,6 @@ function MessageBubble({
       ) : null}
     </View>
   );
-}
-
-function chatClarifyRequestFromEvent(event: ChatRunEvent): ChatClarifyRequest | null {
-  const raw = event.payload?.clarifyRequest;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const source = raw as Record<string, unknown>;
-  const id = typeof source.id === "string" ? source.id : "";
-  const question = typeof source.question === "string" ? source.question : "";
-  const expiresAt = typeof source.expiresAt === "string" ? source.expiresAt : "";
-  if (!id || !question || !expiresAt) return null;
-  return {
-    id,
-    question,
-    choices: Array.isArray(source.choices) ? source.choices.filter((choice): choice is string => typeof choice === "string") : [],
-    allowOther: source.allowOther === true,
-    expiresAt,
-  };
 }
 
 function MobileChatApprovalCard({
