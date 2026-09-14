@@ -113,6 +113,7 @@ import type {
   WorkspaceCapabilityPreflightResponse,
   HermesRuntimeInventory,
   HeyNativeAuthConfig,
+  HeyNativeAuthMode,
   HeyNativeAuthProvider,
   HeyNativeAuthSession,
   HeyNativeAuthSurface,
@@ -172,6 +173,25 @@ export interface ApiClientOptions {
   baseUrl: string;
   token?: string;
   fetchImpl?: typeof fetch;
+}
+
+/** A non-2xx API response whose stable code survives the transport boundary. */
+export class ApiError extends Error {
+  readonly name = "ApiError";
+
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string | null,
+  ) {
+    super(message);
+  }
+}
+
+export function apiErrorCode(error: unknown): string | null {
+  if (!(error instanceof Error) || !("code" in error)) return null;
+  const code = (error as Error & { code?: unknown }).code;
+  return typeof code === "string" && code.trim() ? code : null;
 }
 
 export interface CreateChatRunRequest {
@@ -328,16 +348,21 @@ export interface HeyAccountDeletionReceipt {
 export interface HeyNativeAuthSessionRequest {
   challengeId: string;
   idToken: string;
-  mode?: "link" | "login";
+  mode?: HeyNativeAuthMode;
   nonce: string;
   provider: HeyNativeAuthProvider;
   surface: HeyNativeAuthSurface;
 }
 
 export interface HeyNativeAuthChallengeRequest {
-  mode?: "link" | "login";
+  mode?: HeyNativeAuthMode;
   provider: HeyNativeAuthProvider;
   surface: HeyNativeAuthSurface;
+}
+
+export interface HeyAccountDeletionReauthenticationMethods {
+  hasPassword: boolean;
+  linkedProviders: HeyNativeAuthProvider[];
 }
 
 export interface CreateAccountRequest {
@@ -455,7 +480,11 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
       const body = await res.text();
       const recovered = recoverError?.(res.status, body);
       if (recovered !== undefined) return recovered;
-      throw new Error(errorMessageFromResponseBody(body, res.status, res.statusText));
+      throw new ApiError(
+        errorMessageFromResponseBody(body, res.status, res.statusText),
+        res.status,
+        errorCodeFromResponseBody(body),
+      );
     }
 
     if (res.status === 204) return undefined as T;
@@ -478,6 +507,15 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     }
     if (/<(?:!doctype|html|head|body|script|div)\b/i.test(text)) return fallback;
     return text.length > 500 ? `${text.slice(0, 497)}...` : text;
+  }
+
+  function errorCodeFromResponseBody(body: string) {
+    try {
+      const data = JSON.parse(body) as Record<string, unknown>;
+      return typeof data.code === "string" && data.code.trim() ? data.code : null;
+    } catch {
+      return null;
+    }
   }
 
   function terminalChatGptCompletion(status: number, body: string): ChatGptConnectionCompleteResponse | undefined {
@@ -539,6 +577,8 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
         `/account/deletion/requests/${encodeURIComponent(id)}`,
         { method: "DELETE", body: JSON.stringify(body) },
       ),
+    heyAccountDeletionReauthenticationMethods: () =>
+      request<HeyAccountDeletionReauthenticationMethods>("/account/deletion/reauthentication-methods"),
     reauthenticateHeyAccountDeletion: (body: HeyAccountDeletionAuthorityRequest & { credential?: string }) =>
       request<{ expiresAt: string; reauthenticationToken: string }>("/account/deletion/reauthenticate", {
         method: "POST",

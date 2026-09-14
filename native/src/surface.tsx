@@ -105,6 +105,7 @@ import type {
   HermesAutomationsView,
   HermesDelegatedTask,
   HeyNativeAuthConfig,
+  HeyNativeAuthMode,
   IntegrationKind,
   MobilePushStatus,
   ModelOptionsView,
@@ -174,6 +175,8 @@ import {
   heyAccountMenuNavigation,
 } from "../ui/navigation-structure";
 import { AccountDeletionSection } from "./AccountDeletionSection";
+import { accountDeletionNativeReauthenticationCopy } from "./account-deletion";
+import { mobileNativeAuthChallengeRefreshDelayMs } from "./mobile-native-auth-challenge";
 import { PluginCatalogScreen } from "./PluginCatalogScreen";
 import {
   SecureConnectionCredentialForm,
@@ -1510,6 +1513,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [googleChallenge, setGoogleChallenge] = useState<{ id: string; mode: "link" | "login"; nonce: string } | null>(null);
   const [googleChallengeVersion, setGoogleChallengeVersion] = useState(0);
   const nativeAuthModeRef = useRef<"link" | "login">("login");
+  const [accountDeletionNativeReauthenticationRequired, setAccountDeletionNativeReauthenticationRequired] = useState(false);
+  const [googleDeletionChallenge, setGoogleDeletionChallenge] = useState<{ expiresAt: string; id: string; nonce: string } | null>(null);
+  const [googleDeletionChallengeVersion, setGoogleDeletionChallengeVersion] = useState(0);
   const [input, setInput] = useState(initialDraft);
   const inputRef = useRef(input);
   inputRef.current = input;
@@ -2084,6 +2090,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [googleAuthRequest, googleAuthResponse, promptGoogleAuth] = Google.useIdTokenAuthRequest({
     clientId: googleAuthHookClientId,
     extraParams: googleChallenge ? { nonce: googleChallenge.nonce } : undefined,
+    iosClientId: googleAuthHookClientId,
+    selectAccount: true,
+  });
+  const [googleDeletionAuthRequest, googleDeletionAuthResponse, promptGoogleDeletionAuth] = Google.useIdTokenAuthRequest({
+    clientId: googleAuthHookClientId,
+    extraParams: googleDeletionChallenge ? { nonce: googleDeletionChallenge.nonce } : undefined,
     iosClientId: googleAuthHookClientId,
     selectAccount: true,
   });
@@ -4498,6 +4510,48 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     };
   }, [googleChallengeVersion, nativeAuthConfig?.providers.google?.clientId, token]);
 
+  useEffect(() => {
+    if (
+      Platform.OS !== "ios" ||
+      !accountDeletionNativeReauthenticationRequired ||
+      !token ||
+      !nativeAuthConfig?.providers.google
+    ) {
+      setGoogleDeletionChallenge(null);
+      return;
+    }
+    let cancelled = false;
+    createApiClient({ baseUrl: API_BASE, token })
+      .nativeAuthChallenge({ mode: "reauthenticate", provider: "google", surface: "ios" })
+      .then((challenge) => {
+        if (!cancelled) setGoogleDeletionChallenge(challenge);
+      })
+      .catch(() => {
+        if (!cancelled) setGoogleDeletionChallenge(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    accountDeletionNativeReauthenticationRequired,
+    googleDeletionChallengeVersion,
+    nativeAuthConfig?.providers.google?.clientId,
+    token,
+  ]);
+
+  useEffect(() => {
+    if (!accountDeletionNativeReauthenticationRequired || !googleDeletionChallenge || nativeAuthBusy) return;
+    const timer = setTimeout(
+      () => setGoogleDeletionChallengeVersion((current) => current + 1),
+      mobileNativeAuthChallengeRefreshDelayMs(
+        googleDeletionChallenge.expiresAt,
+        Date.now(),
+        nativeAuthChallengeRefreshMs,
+      ),
+    );
+    return () => clearTimeout(timer);
+  }, [accountDeletionNativeReauthenticationRequired, googleDeletionChallenge, nativeAuthBusy]);
+
   // The Google challenge has to be minted before the user taps, because the auth
   // request needs its nonce up front. Server-side challenges expire, so refresh
   // this one while the sign-in surface stays open instead of letting an idle
@@ -4512,11 +4566,32 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     return () => clearInterval(timer);
   }, [nativeAuthConfig?.providers.google?.clientId, nativeAuthBusy]);
 
+  useEffect(() => {
+    if (!googleDeletionAuthResponse) return;
+    if (googleDeletionAuthResponse.type !== "success") {
+      setNativeAuthBusy(null);
+      setGoogleDeletionChallengeVersion((current) => current + 1);
+      return;
+    }
+    const idToken = googleDeletionAuthResponse.params.id_token;
+    if (!idToken || !googleDeletionChallenge) {
+      setNativeAuthBusy(null);
+      setAppError("Google did not return a valid Hey Hermes identity.");
+      return;
+    }
+    void completeNativeSignIn("google", idToken, googleDeletionChallenge, "reauthenticate")
+      .catch((caught) => setAppError(userFacingError(displayError(caught, "Google sign-in failed."))))
+      .finally(() => {
+        setNativeAuthBusy(null);
+        setGoogleDeletionChallengeVersion((current) => current + 1);
+      });
+  }, [googleDeletionAuthResponse]);
+
   async function completeNativeSignIn(
     provider: "apple" | "google",
     idToken: string,
     challenge: { id: string; nonce: string },
-    mode: "link" | "login" = "login",
+    mode: HeyNativeAuthMode = "login",
   ) {
     const session = await createApiClient({ baseUrl: API_BASE, token: token || "login" }).nativeAuthSession({
       challengeId: challenge.id,
@@ -4536,6 +4611,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     setModelOptions(null);
     commitWorkspaceStatusTruth(null);
     setAppError(null);
+    if (mode === "reauthenticate") setAccountDeletionNativeReauthenticationRequired(false);
   }
 
   useEffect(() => {
@@ -4577,7 +4653,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     }
   }
 
-  async function signInWithApple(mode: "link" | "login" = "login") {
+  async function signInWithApple(mode: HeyNativeAuthMode = "login") {
     if (!nativeAuthConfig?.providers.apple || !appleSignInAvailable || nativeAuthBusy) return;
     setNativeAuthBusy("apple");
     setAppError(null);
@@ -4605,6 +4681,19 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       }
     } finally {
       setNativeAuthBusy(null);
+    }
+  }
+
+  async function reauthenticateAccountDeletionWithGoogle() {
+    if (!googleDeletionAuthRequest || !googleDeletionChallenge || nativeAuthBusy) return;
+    setNativeAuthBusy("google");
+    setAppError(null);
+    try {
+      await promptGoogleDeletionAuth();
+    } catch (caught) {
+      setNativeAuthBusy(null);
+      setAppError(userFacingError(displayError(caught, "Google sign-in failed.")));
+      setGoogleDeletionChallengeVersion((current) => current + 1);
     }
   }
 
@@ -8315,7 +8404,40 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                     {snapshot ? (
                       <MobileSystemSection title={mobileDangerZoneText(appLocale)}>
                         <View style={styles.systemSurfaceNotice}>
-                          <AccountDeletionSection accountId={snapshot.me.id} api={api} busy={busy} onDeleted={logout} copy={t.systemPages.account.deletion} locale={appLocale} />
+                          <AccountDeletionSection
+                            accountId={snapshot.me.id}
+                            api={api}
+                            busy={busy}
+                            onDeleted={logout}
+                            copy={t.systemPages.account.deletion}
+                            locale={appLocale}
+                            onNativeReauthenticationChange={setAccountDeletionNativeReauthenticationRequired}
+                            reauthenticationActions={(linkedProviders) => (
+                              <View style={styles.nativeAuthGroup}>
+                                {linkedProviders.includes("google") && nativeAuthConfig?.providers.google ? (
+                                  <Pressable
+                                    style={[styles.secondaryButtonWide, (!googleDeletionAuthRequest || !googleDeletionChallenge || Boolean(nativeAuthBusy)) && styles.disabledButton]}
+                                    onPress={() => void reauthenticateAccountDeletionWithGoogle()}
+                                    disabled={!googleDeletionAuthRequest || !googleDeletionChallenge || Boolean(nativeAuthBusy)}
+                                    accessibilityRole="button"
+                                  >
+                                    {nativeAuthBusy === "google" ? <ActivityIndicator color={palette.teal} /> : <Text style={styles.secondaryButtonText}>{accountDeletionNativeReauthenticationCopy(appLocale).googleAction}</Text>}
+                                  </Pressable>
+                                ) : null}
+                                {linkedProviders.includes("apple") && nativeAuthConfig?.providers.apple && appleSignInAvailable ? (
+                                  nativeAuthBusy === "apple" ? <ActivityIndicator color={palette.teal} /> : (
+                                    <AppleAuthentication.AppleAuthenticationButton
+                                      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                                      cornerRadius={8}
+                                      onPress={() => void signInWithApple("reauthenticate")}
+                                      style={styles.appleAuthButton}
+                                    />
+                                  )
+                                ) : null}
+                              </View>
+                            )}
+                          />
                         </View>
                       </MobileSystemSection>
                     ) : null}

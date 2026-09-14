@@ -731,6 +731,7 @@ export interface AuthSession {
 
 export type HeyNativeAuthProvider = "apple" | "google";
 export type HeyNativeAuthSurface = "ios" | "web";
+export type HeyNativeAuthMode = "link" | "login" | "reauthenticate";
 
 export interface HeyNativeAuthConfig {
   productRealm: "heyhermes.v1";
@@ -1222,16 +1223,41 @@ export function workspaceServerHostname(workspaceId: string): string {
   return `hey-hermes-${workspaceId.replace(/_/g, "-").toLowerCase()}`;
 }
 
-export interface WorkspaceServerIdentity {
-  provider?: string | null;
-  serverId?: string | null;
+interface WorkspaceServerIdentityBase {
   hostname: string;
   workspaceId: string;
   publicIpv4: string | null;
   serverType: string | null;
   location: string | null;
   inServiceSince: string | null;
+  allocatedVcpu: number | null;
+  allocatedMemoryMb: number | null;
+  allocatedPrivateStorageGb: number | null;
 }
+
+export type WorkspaceServerIdentity = WorkspaceServerIdentityBase & (
+  | {
+      confirmed: true;
+      hostingKind: "dedicated_vps";
+      provider: string;
+      serverId: string;
+      workspaceMachineId: null;
+    }
+  | {
+      confirmed: true;
+      hostingKind: "firecracker_microvm";
+      provider: null;
+      serverId: null;
+      workspaceMachineId: string;
+    }
+  | {
+      confirmed: false;
+      hostingKind: "unconfirmed";
+      provider: null;
+      serverId: null;
+      workspaceMachineId: null;
+    }
+);
 
 export type BrowserResultCardStatus = "started" | "viewed" | "blocked_for_approval" | "completed" | "failed";
 

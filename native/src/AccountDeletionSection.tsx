@@ -1,13 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Trash2 } from "lucide-react-native";
 import {
   createApiClient,
   heyAccountDeletionConfirmationPhrase,
   heyAccountDeletionProductRealm,
+  type AppLocale,
+  type HeyAccountDeletionReauthenticationMethods,
+  type HeyNativeAuthProvider,
 } from "../core/index";
 import { palette } from "./mobile-palette";
-import { accountDeletionPhraseMatches } from "./account-deletion";
+import {
+  accountDeletionNativeReauthenticationCopy,
+  accountDeletionPhraseMatches,
+  needsAccountDeletionNativeReauthentication,
+} from "./account-deletion";
 
 export type AccountDeletionSectionCopy = {
   confirmTitle: string;
@@ -45,18 +52,40 @@ export function AccountDeletionSection({
   onDeleted,
   copy,
   locale,
+  onNativeReauthenticationChange,
+  reauthenticationActions,
 }: {
   accountId: string;
   api: ReturnType<typeof createApiClient>;
   busy: boolean;
   onDeleted: (message: string) => Promise<void> | void;
   copy: AccountDeletionSectionCopy;
-  locale: string;
+  locale: AppLocale;
+  onNativeReauthenticationChange?: (required: boolean) => void;
+  reauthenticationActions?: (providers: HeyNativeAuthProvider[]) => ReactNode;
 }) {
   const [credential, setCredential] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [showReauthenticationActions, setShowReauthenticationActions] = useState(false);
+  const [reauthenticationMethods, setReauthenticationMethods] = useState<HeyAccountDeletionReauthenticationMethods | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.heyAccountDeletionReauthenticationMethods()
+      .then((methods) => {
+        if (!cancelled) setReauthenticationMethods(methods);
+      })
+      .catch(() => {
+        if (!cancelled) setReauthenticationMethods(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, api]);
+
+  useEffect(() => () => onNativeReauthenticationChange?.(false), [onNativeReauthenticationChange]);
 
   const phraseMatches = accountDeletionPhraseMatches(confirmation);
   const disabled = busy || deleting || !phraseMatches;
@@ -66,6 +95,8 @@ export function AccountDeletionSection({
     let intentId: string | null = null;
     setDeleting(true);
     setNotice(null);
+    setShowReauthenticationActions(false);
+    onNativeReauthenticationChange?.(false);
     try {
       const intent = await api.prepareHeyAccountDeletion(authority);
       intentId = intent.id;
@@ -88,12 +119,17 @@ export function AccountDeletionSection({
       // Leave no half-started request behind: an abandoned pending intent would block the
       // next attempt, since only one can be pending per account.
       if (intentId) await api.cancelHeyAccountDeletion(intentId, authority).catch(() => undefined);
+      const nativeReauthenticationRequired = needsAccountDeletionNativeReauthentication(error);
       const raw = error instanceof Error ? error.message : "";
-      setNotice(raw.includes("reauthentication")
-        ? copy.reauthenticationError
-        : raw.includes("confirmation")
-          ? copy.confirmationError.replace("{phrase}", heyAccountDeletionConfirmationPhrase)
-          : copy.genericError);
+      setShowReauthenticationActions(nativeReauthenticationRequired);
+      onNativeReauthenticationChange?.(nativeReauthenticationRequired);
+      setNotice(nativeReauthenticationRequired
+        ? accountDeletionNativeReauthenticationCopy(locale).message
+        : raw.includes("reauthentication")
+          ? copy.reauthenticationError
+          : raw.includes("confirmation")
+            ? copy.confirmationError.replace("{phrase}", heyAccountDeletionConfirmationPhrase)
+            : copy.genericError);
     } finally {
       setDeleting(false);
     }
@@ -155,6 +191,9 @@ export function AccountDeletionSection({
         <Text style={styles.dangerButtonText}>{deleting ? copy.deleting : copy.title}</Text>
       </Pressable>
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+      {showReauthenticationActions
+        ? reauthenticationActions?.(reauthenticationMethods?.linkedProviders ?? [])
+        : null}
     </View>
   );
 }
