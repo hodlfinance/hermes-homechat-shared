@@ -8,7 +8,7 @@ test("a valid Firecracker binding is a confirmed isolated workspace machine with
   const identity: WorkspaceServerIdentity = {
     confirmed: true,
     hostingKind: "firecracker_microvm",
-    provider: "firecracker",
+    provider: null,
     serverId: null,
     workspaceMachineId: "9a7b6c5d-4e3f-4a2b-9c1d-0e8f7a6b5c44",
     hostname: "hey-hermes-ws-test",
