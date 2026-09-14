@@ -764,6 +764,110 @@ test("keeps an explicitly configured run timeout available", async () => {
   );
 });
 
+test("an explicit client timeout ends observation without persisting a server failure", async () => {
+  type Message = SharedHomechatMessage & { id: string };
+  type Run = { id: string; status: string; messages: Message[] };
+  const user: Message = { id: "bounded-user", runId: "bounded-run", role: "user", content: "Long work" };
+  let clock = 0;
+  const transport: SharedHomechatRunTransport<Run, { message: string }> = {
+    createRun: async () => ({ id: "bounded-run", status: "running", messages: [user] }),
+    getRun: async () => ({ id: "bounded-run", status: "running", messages: [user] }),
+  };
+  const controller = createHomechatClientController<Message, Run, { message: string }>({
+    transport,
+    runController: createHomechatRunController(transport, {
+      intervalMs: 6,
+      now: () => clock,
+      sleep: async (milliseconds) => { clock += milliseconds; },
+      timeoutMs: 5,
+    }),
+  });
+
+  await assert.rejects(
+    controller.send({ message: "Long work" }),
+    (error) => error instanceof SharedHomechatRunControllerError &&
+      error.code === "timeout" &&
+      (error.run as Run | undefined)?.status === "running",
+  );
+  const state = controller.getState();
+  assert.equal(state.error, null);
+  assert.equal(state.phase, "waiting");
+  assert.equal(state.status, "running");
+  assert.deepEqual(state.messages, [user]);
+});
+
+test("retries a temporary polling failure and completes the same run", async () => {
+  type Message = SharedHomechatMessage & { id: string };
+  type Run = { id: string; status: string; messages: Message[] };
+  const user: Message = { id: "retry-user", runId: "retry-run", role: "user", content: "Continue" };
+  const answer: Message = { id: "retry-answer", runId: "retry-run", role: "assistant", content: "Recovered" };
+  let reads = 0;
+  const transport: SharedHomechatRunTransport<Run, { message: string }> = {
+    createRun: async () => ({ id: "retry-run", status: "running", messages: [user] }),
+    getRun: async () => {
+      reads += 1;
+      if (reads === 1) throw new Error("temporary network loss");
+      return { id: "retry-run", status: "completed", messages: [user, answer] };
+    },
+    streamRun: async () => { throw new Error("event stream disconnected"); },
+  };
+  const controller = createHomechatClientController<Message, Run, { message: string }>({
+    transport,
+    runController: createHomechatRunController(transport, { sleep: async () => undefined }),
+  });
+
+  const state = await controller.send({ message: "Continue" }, { maxReconnectAttempts: 0 });
+
+  assert.equal(reads, 2);
+  assert.equal(state.error, null);
+  assert.equal(state.phase, "completed");
+  assert.equal(state.status, "completed");
+  assert.deepEqual(state.messages, [user, answer]);
+});
+
+test("only a server-confirmed failed snapshot terminalizes a followed run", async () => {
+  type Run = { id: string; status: string; messages: SharedHomechatMessage[]; error?: string };
+  const transport: SharedHomechatRunTransport<Run, { message: string }> = {
+    createRun: async () => ({ id: "failed-run", status: "running", messages: [] }),
+    getRun: async () => ({ id: "failed-run", status: "failed", messages: [], error: "Runtime failed" }),
+  };
+  const controller = createHomechatClientController({
+    transport,
+    runController: createHomechatRunController(transport, { sleep: async () => undefined }),
+  });
+
+  await assert.rejects(
+    controller.send({ message: "Fail on server" }),
+    (error) => error instanceof SharedHomechatRunControllerError && error.code === "failed",
+  );
+  assert.equal(controller.getState().phase, "error");
+  assert.equal(controller.getState().status, "failed");
+  assert.equal(controller.getState().error, "Runtime failed");
+});
+
+test("an unbounded polling retry remains abortable", async () => {
+  const abort = new AbortController();
+  let markDelayStarted!: () => void;
+  const delayStarted = new Promise<void>((resolve) => { markDelayStarted = resolve; });
+  const controller = createHomechatRunController(
+    { getRun: async () => { throw new Error("network unavailable"); } },
+    {
+      sleep: async () => {
+        markDelayStarted();
+        await new Promise<void>(() => undefined);
+      },
+    },
+  );
+  const waiting = controller.wait("abortable-run", { signal: abort.signal });
+  await delayStarted;
+  abort.abort();
+
+  await assert.rejects(
+    waiting,
+    (error) => error instanceof SharedHomechatRunControllerError && error.code === "aborted",
+  );
+});
+
 test("keeps a queued background follow-up owned and visible past 245 seconds", async () => {
   type Message = SharedHomechatMessage & { id: string };
   type Run = { id: string; status: string; messages: Message[] };

@@ -1883,10 +1883,22 @@ export function createHomechatRunController<
     const timeoutMs = options.timeoutMs ?? defaults.timeoutMs;
     const intervalMs = options.intervalMs ?? defaults.intervalMs ?? 1_600;
     options.onPhase?.("waiting");
+    let lastSnapshot: Run | undefined;
 
     while (timeoutMs === undefined || now() - startedAt <= timeoutMs) {
       assertHomechatNotAborted(options.signal, options.copy);
-      const run = await transport.getRun(runId, { signal: options.signal });
+      let run: Run;
+      try {
+        run = await transport.getRun(runId, { signal: options.signal });
+      } catch {
+        // Losing the observation transport says nothing about the server-side
+        // run. Keep trying until its own terminal snapshot arrives, the caller
+        // aborts, or a product-owned finite observation window expires.
+        assertHomechatNotAborted(options.signal, options.copy);
+        await homechatControllerDelay(intervalMs, options.signal, sleep, options.copy);
+        continue;
+      }
+      lastSnapshot = run;
       await options.onSnapshot?.(run);
       const status = normalizeHomechatRunStatus(run.status) ?? "running";
       if (status === "completed") return run;
@@ -1899,7 +1911,11 @@ export function createHomechatRunController<
       await homechatControllerDelay(intervalMs, options.signal, sleep, options.copy);
     }
 
-    throw new SharedHomechatRunControllerError("timeout", options.copy?.timeout ?? "The run is taking longer than expected.");
+    throw new SharedHomechatRunControllerError(
+      "timeout",
+      options.copy?.timeout ?? "The run is taking longer than expected.",
+      lastSnapshot,
+    );
   }
 
   async function stop(
@@ -2037,7 +2053,11 @@ export function createHomechatClientController<
 
   function captureError(error: unknown) {
     const terminal = state.phase === "completed" || state.phase === "stopped" || state.phase === "error";
-    if (!terminal && !isSharedHomechatRunControllerError(error, "aborted")) {
+    // A caller-owned observation timeout is not a server failure. Leave the
+    // last canonical run status and visible work intact so a later observer can
+    // reconnect to the same run.
+    const observationEnded = isSharedHomechatRunControllerError(error, "timeout");
+    if (!terminal && !observationEnded && !isSharedHomechatRunControllerError(error, "aborted")) {
       dispatch({ type: "run.error", error: error instanceof Error ? error.message : "The run could not finish." });
     }
   }
