@@ -8090,6 +8090,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                     value={input}
                     onChangeText={setInput}
                     placeholder={voiceControllerBusy ? t.chat.transcribing : t.chat.placeholder}
+                    placeholderTextColor={palette.secondary}
                     multiline
                     accessibilityLabel={staticUiCopy(appLocale)["Message"]}
                     editable={!composerController.view.inputDisabled}
@@ -13396,7 +13397,7 @@ const styles = StyleSheet.create({
   },
   inputDisabled: {
     backgroundColor: "transparent",
-    color: palette.muted,
+    color: palette.secondary,
   },
   formStack: {
     gap: 8,
