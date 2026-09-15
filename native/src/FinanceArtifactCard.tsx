@@ -25,19 +25,30 @@ function MarkdownInlineText({
   segments,
   styles,
   variant = "paragraph",
+  headingLevel = 2,
 }: {
   onOpenUrl: (url: string) => void;
   segments: MobileMarkdownInlineSegment[];
   styles: ReturnType<typeof createStyles>;
-  variant?: "paragraph" | "table_header" | "table_cell";
+  variant?: "paragraph" | "heading" | "table_header" | "table_cell";
+  headingLevel?: number;
 }) {
-  const textStyle = variant === "table_header"
+  const textStyle = variant === "heading"
+    ? [
+        styles.markdownHeadingText,
+        headingLevel <= 2
+          ? styles.markdownHeadingLargeText
+          : headingLevel <= 4
+            ? styles.markdownHeadingMediumText
+            : styles.markdownHeadingSmallText,
+      ]
+    : variant === "table_header"
     ? styles.markdownTableHeaderText
     : variant === "table_cell"
       ? styles.markdownTableCellText
       : styles.answerText;
   return (
-    <Text selectable style={textStyle}>
+    <Text accessibilityRole={variant === "heading" ? "header" : "text"} selectable style={textStyle}>
       {segments.flatMap((segment, segmentIndex) => {
         if (segment.kind === "inline_code") {
           return <Text key={`${segmentIndex}-${segment.text}`} style={styles.inlineCode}>{segment.text}</Text>;
@@ -100,6 +111,15 @@ function MarkdownContent({
             </View>
           ))}
         </View>
+      ) : block.kind === "heading" ? (
+        <MarkdownInlineText
+          headingLevel={block.level}
+          key={`heading-${blockIndex}`}
+          onOpenUrl={onOpenUrl}
+          segments={block.segments}
+          styles={styles}
+          variant="heading"
+        />
       ) : (
         <MarkdownInlineText key={`paragraph-${blockIndex}`} onOpenUrl={onOpenUrl} segments={block.segments} styles={styles} />
       ))}
@@ -336,6 +356,22 @@ function createStyles(palette: ReturnType<typeof useMobilePalette>) {
     markdownBlocks: {
       alignSelf: "stretch",
       gap: 9,
+    },
+    markdownHeadingText: {
+      color: palette.ink,
+      fontWeight: "700",
+    },
+    markdownHeadingLargeText: {
+      fontSize: 18,
+      lineHeight: 24,
+    },
+    markdownHeadingMediumText: {
+      fontSize: 16,
+      lineHeight: 22,
+    },
+    markdownHeadingSmallText: {
+      fontSize: 14,
+      lineHeight: 21,
     },
     inlineCode: {
       backgroundColor: palette.tealSoft,
