@@ -19,8 +19,19 @@ export type MobileFinanceArtifactSource = {
   warnings: string[];
 };
 
+export type MobileFinanceArtifactContextTab = {
+  available: boolean;
+  count: number;
+  key: "research" | "data" | "web";
+  label: "Research" | "Data" | "Web Results";
+  sections: MobileFinanceArtifactSection[];
+  sources: MobileFinanceArtifactSource[];
+};
+
 export type MobileFinanceArtifactCard = {
+  answerMarkdown?: string | null;
   capturedAt: string | null;
+  contextTabs?: MobileFinanceArtifactContextTab[];
   message: string | null;
   presentation: string;
   sections: MobileFinanceArtifactSection[];
@@ -138,6 +149,20 @@ const PRESENTATION_POLICIES: Record<string, PresentationPolicy> = {
   attachment_context: policy({ containers: ["attachments", "missingIds"], scalars: ["createdAt", "extractionKind", "fileName", "mimeType", "size", "truncated"] }),
   context_items: policy({ containers: ["contextItems", "missingIds"], scalars: ["artifactId", "createdAt", "historyComplete", "kind", "messageId", "runId", "sourceCount", "summary"] }),
   media_transcript: policy({ containers: ["artifact", "episode", "segments"], scalars: ["end", "mediaType", "showName", "sourceFirm", "start", "wordCount"] }),
+  capchat_context_data: policy({
+    containers: [
+      ...TOPIC_CONTAINERS,
+      "assetMetrics", "asset_metrics", "etfScreener", "etf_screener", "etfTopics", "etf_topics",
+      "fundamentals", "fundamentalsList", "fundamentals_list", "marketSnapshot", "market_snapshot",
+      "portfolioContext", "portfolio_context", "positions", "primaryAsset", "primary_asset", "screener",
+      "semanticUiState", "semantic_ui_state", "warehouseTopics", "warehouse_topics",
+    ],
+    metrics: true,
+    scalars: [
+      "amount", "companyName", "company_name", "country", "description", "displayName", "display_name",
+      "employees", "exchange", "industry", "market", "mode", "name", "sector", "source", "symbol",
+    ],
+  }),
 };
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -150,6 +175,14 @@ function text(value: unknown, max = MAX_TEXT): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.replace(/\s+/g, " ").trim();
   return normalized && !sensitiveText(normalized) ? normalized.slice(0, max) : null;
+}
+
+function markdownText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/\r\n?/g, "\n").trim();
+  return normalized && normalized.length <= 256 * 1024 && !sensitiveText(normalized)
+    ? normalized
+    : null;
 }
 
 function sensitiveText(value: string): boolean {
@@ -348,21 +381,84 @@ function firstObjectCollection(value: unknown, policy: PresentationPolicy, depth
   return null;
 }
 
-function sourcesFrom(value: unknown): MobileFinanceArtifactSource[] {
+function sourcesFrom(value: unknown, limit = 12): MobileFinanceArtifactSource[] {
   if (!Array.isArray(value)) return [];
-  return value.slice(0, 12).flatMap((item) => {
+  return value.slice(0, limit).flatMap((item, index) => {
     const source = record(item);
-    const label = text(source?.label, 160);
+    const plainLabel = text(source?.label, 160) ?? text(source?.title, 160) ??
+      text(source?.name, 160) ?? text(source?.publisher, 160);
+    const sourceNumber = typeof source?.source_number === "number" && Number.isSafeInteger(source.source_number) && source.source_number > 0
+      ? source.source_number
+      : index + 1;
+    const label = plainLabel ? `[${sourceNumber}] ${plainLabel}` : null;
     if (!source || !label) return [];
     return [{
       label,
-      detail: text(source.detail, 300),
+      detail: text(source.detail, 300) ?? text(source.summary, 300) ??
+        text(source.snippet, 300) ?? text(source.excerpt, 300),
       url: safeUrl(source.url),
       warnings: Array.isArray(source.warnings)
         ? source.warnings.flatMap((warning) => text(warning, 240) ? [text(warning, 240)!] : []).slice(0, 4)
         : [],
     }];
   });
+}
+
+const CAPCHAT_CONTEXT_TAB_ORDER = ["research", "data", "web"] as const;
+const CAPCHAT_CONTEXT_TAB_LABELS = {
+  research: "Research",
+  data: "Data",
+  web: "Web Results",
+} as const;
+
+function capChatContextTabs(value: unknown): MobileFinanceArtifactContextTab[] | null {
+  const contextCard = record(value);
+  if (contextCard?.schema !== "capchat.context_card.v1" || !Array.isArray(contextCard.tabs)) return null;
+  const tabs = contextCard.tabs.flatMap((candidate, index) => {
+    const tab = record(candidate);
+    const key = CAPCHAT_CONTEXT_TAB_ORDER[index];
+    const content = record(tab?.content);
+    if (
+      !key || !tab || !content || tab.key !== key || tab.label !== CAPCHAT_CONTEXT_TAB_LABELS[key] ||
+      typeof tab.available !== "boolean" || typeof tab.count !== "number" ||
+      !Number.isSafeInteger(tab.count) || tab.count < 0
+    ) return [];
+    return [{
+      available: tab.available,
+      count: tab.count,
+      key,
+      label: CAPCHAT_CONTEXT_TAB_LABELS[key],
+      sections: key === "data" ? sectionsFromData(content, "capchat_context_data") : [],
+      sources: key === "data" ? [] : sourcesFrom(content.sources, 1_000),
+    }];
+  });
+  return tabs.length === CAPCHAT_CONTEXT_TAB_ORDER.length ? tabs : null;
+}
+
+function capChatContextCard(
+  reference: ChatArtifactReference,
+  payload: Record<string, unknown>,
+): MobileFinanceArtifactCard | null {
+  const answer = record(payload.answer);
+  const provenance = record(payload.provenance);
+  const tabs = capChatContextTabs(payload.contextCard);
+  const answerMarkdown = answer?.format === "markdown" ? markdownText(answer.text) : null;
+  if (
+    payload.presentation !== "capchat_context_card" || payload.status !== "ok" ||
+    !answerMarkdown || !tabs || provenance?.answer_author !== "capchat" ||
+    provenance.mode !== "delegated_answer" || provenance.upstream !== "capchat_chat_brain"
+  ) return null;
+  return {
+    answerMarkdown,
+    capturedAt: timestamp(payload.capturedAt),
+    contextTabs: tabs,
+    message: null,
+    presentation: "capchat_context_card",
+    sections: [],
+    sources: sourcesFrom(payload.references, 1_000),
+    status: "ok",
+    title: text(payload.title, 160) ?? text(reference.label, 160) ?? "CapChat",
+  };
 }
 
 function sourceBundleCard(reference: ChatArtifactReference, payload: Record<string, unknown>): MobileFinanceArtifactCard | null {
@@ -521,6 +617,9 @@ export function mobileFinanceArtifactCard(reference: ChatArtifactReference): Mob
   ) return null;
   const payload = record(presentation.payload);
   if (!payload) return null;
+  if (reference.kind === "source_bundle" && reference.version === 3) {
+    return capChatContextCard(reference, payload);
+  }
   if (reference.kind === "source_bundle" && reference.version === 2) {
     return sourceBundleCard(reference, payload);
   }
