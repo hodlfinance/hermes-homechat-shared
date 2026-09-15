@@ -5,8 +5,9 @@ import type { AppLocale } from "../core/index";
 import { HEY_LEGAL_LINKS } from "../core/legal";
 import { workspacePrivacyCopy, workspacePrivacyHasServer, workspacePrivacyRows } from "../ui/workspace-privacy-copy";
 import { useWorkspacePrivacyIdentity, type PrivacyIdentityClient } from "../ui/workspace-privacy-identity";
-import { palette } from "./mobile-palette";
+import { useMobilePalette } from "./mobile-palette-context";
 export function MobilePrivacySheet({ client, workspaceId, locale, onClose }: { client: PrivacyIdentityClient; workspaceId: string; locale: AppLocale; onClose: () => void }) {
+  const palette = useMobilePalette();
   const identity = useWorkspacePrivacyIdentity(client, workspaceId);
   const [expanded, setExpanded] = useState(false);
   const server = workspacePrivacyHasServer(identity, workspaceId) ? identity : null;
