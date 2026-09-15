@@ -61,6 +61,62 @@ function reference(overrides: Partial<ChatArtifactReference> = {}): ChatArtifact
   };
 }
 
+function capChatReference(overrides: Partial<ChatArtifactReference> = {}): ChatArtifactReference {
+  const researchSources = Array.from({ length: 13 }, (_, index) => ({
+    source_number: index + 1,
+    source_type: "research",
+    title: `Research source ${index + 1}`,
+    summary: `Research detail ${index + 1}`,
+    url: `https://research.example/source-${index + 1}?token=hidden#section`,
+  }));
+  return reference({
+    version: 3,
+    sensitivity: "finance_context",
+    label: "CapChat context",
+    safeSummary: "A complete CapChat answer is available.",
+    artifactPresentation: {
+      type: "finhermes_artifact_payload",
+      version: 1,
+      kind: "source_bundle",
+      payloadVersion: 3,
+      payload: {
+        presentation: "capchat_context_card",
+        title: "CapChat",
+        status: "ok",
+        answer: {
+          format: "markdown",
+          text: "## View\n\n| Asset | Score |\n| --- | ---: |\n| NVDA | 9 |\n\nSee [1] and [13].",
+        },
+        references: researchSources,
+        contextCard: {
+          schema: "capchat.context_card.v1",
+          tabs: [
+            { key: "research", label: "Research", count: 13, available: true, content: { sources: researchSources } },
+            {
+              key: "data", label: "Data", count: 1, available: true,
+              content: {
+                fundamentals: {
+                  symbol: "NVDA", company_name: "NVIDIA", revenue: 130000000000,
+                  access_token: "must-not-render", internalAccountId: "must-not-render",
+                },
+              },
+            },
+            { key: "web", label: "Web Results", count: 0, available: false, content: { sources: [] } },
+          ],
+        },
+        provenance: {
+          answer_author: "capchat",
+          mode: "delegated_answer",
+          response_mode: "full_answer",
+          upstream: "capchat_chat_brain",
+        },
+        capturedAt: "2026-09-15T12:00:00.000Z",
+      },
+    },
+    ...overrides,
+  });
+}
+
 test("a Finance comparison becomes a bounded native card without internal fields", () => {
   const card = mobileFinanceArtifactCard(reference());
   assert.ok(card);
@@ -120,6 +176,37 @@ test("market point series are summarized instead of flooding the transcript", ()
   assert.ok(card);
   assert.match(JSON.stringify(card), /40 points, latest 139/);
   assert.ok(card.sections.reduce((sum, section) => sum + section.rows.length, 0) <= 80);
+});
+
+test("a complete CapChat answer keeps Markdown, all references, and the three native context tabs", () => {
+  const card = mobileFinanceArtifactCard(capChatReference());
+  assert.ok(card);
+  assert.equal(card.presentation, "capchat_context_card");
+  assert.match(card.answerMarkdown ?? "", /\| NVDA \| 9 \|/);
+  assert.deepEqual(card.contextTabs?.map((tab) => tab.label), ["Research", "Data", "Web Results"]);
+  assert.equal(card.contextTabs?.[0]?.sources.length, 13);
+  assert.equal(card.contextTabs?.[0]?.sources[12]?.label, "[13] Research source 13");
+  assert.equal(card.contextTabs?.[0]?.sources[0]?.url, "https://research.example/source-1");
+  assert.match(JSON.stringify(card.contextTabs?.[1]?.sections), /130000000000/);
+  assert.doesNotMatch(JSON.stringify(card), /must-not-render|hidden/);
+  assert.equal(card.contextTabs?.[2]?.available, false);
+});
+
+test("malformed CapChat context cards fail closed", () => {
+  const reference = capChatReference();
+  const presentation = reference.artifactPresentation as Record<string, unknown>;
+  const payload = presentation.payload as Record<string, unknown>;
+  const contextCard = payload.contextCard as Record<string, unknown>;
+  const tabs = contextCard.tabs as Array<Record<string, unknown>>;
+  assert.equal(mobileFinanceArtifactCard(capChatReference({
+    artifactPresentation: {
+      ...presentation,
+      payload: {
+        ...payload,
+        contextCard: { ...contextCard, tabs: [tabs[1], tabs[0], tabs[2]] },
+      },
+    },
+  })), null);
 });
 
 test("mismatched, broker-owned, or unsupported artifact payloads fail closed", () => {
@@ -206,8 +293,10 @@ test("the actual native card mounts and its source link calls the host", () => {
     exports,
     require(name: string) {
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
+      if (name === "react") return { useState: (initial: unknown) => [typeof initial === "function" ? (initial as () => unknown)() : initial, () => {}] };
       if (name === "react-native") {
         return {
+          Platform: { select: (value: Record<string, unknown>) => value.ios },
           Pressable: "Pressable",
           StyleSheet: { create: (value: unknown) => value },
           Text: "Text",
@@ -215,7 +304,7 @@ test("the actual native card mounts and its source link calls the host", () => {
         };
       }
       if (name === "lucide-react-native") {
-        return { AlertTriangle: "AlertTriangle", ExternalLink: "ExternalLink", FileText: "FileText" };
+        return { AlertTriangle: "AlertTriangle", ChevronDown: "ChevronDown", ExternalLink: "ExternalLink", FileText: "FileText" };
       }
       if (name.includes("mobile-palette-context")) {
         return { useMobilePalette: () => ({
@@ -226,6 +315,12 @@ test("the actual native card mounts and its source link calls the host", () => {
       }
       if (name.includes("mobile-finance-artifacts")) {
         return { mobileFinanceArtifactCard, mobileFinanceArtifactTimestamp };
+      }
+      if (name.includes("mobile-markdown")) {
+        return { mobileMarkdownBlocks: () => [] };
+      }
+      if (name.includes("mobile-message-links")) {
+        return { mobileAssistantLinkSegments: (value: string) => [{ kind: "plain", text: value }] };
       }
       throw new Error(`Unexpected dependency: ${name}`);
     },
@@ -244,6 +339,28 @@ test("the actual native card mounts and its source link calls the host", () => {
   (link.props.onPress as () => void)();
   assert.deepEqual(opened, ["https://warehouse.example/metrics"]);
   assert.equal(component({ reference: reference({ sensitivity: "broker_context" }), locale: "en", onOpenUrl: () => {} }), null);
+
+  const globalOnlyReference = capChatReference();
+  const globalOnlyPresentation = globalOnlyReference.artifactPresentation as Record<string, unknown>;
+  const globalOnlyPayload = globalOnlyPresentation.payload as Record<string, unknown>;
+  const globalOnlyContext = globalOnlyPayload.contextCard as Record<string, unknown>;
+  const globalOnlyTabs = globalOnlyContext.tabs as Array<Record<string, unknown>>;
+  const researchTab = globalOnlyTabs[0];
+  researchTab.content = { sources: [] };
+  const globalOnlyTree = component({ reference: globalOnlyReference, locale: "en", onOpenUrl: () => {} });
+  const globalOnlyLinks = nodes(globalOnlyTree).filter(
+    (node) => node.type === "Pressable" && node.props.accessibilityRole === "link",
+  );
+  assert.equal(globalOnlyLinks.length, 13);
+});
+
+test("the native CapChat card renders its answer and expandable tab controls", () => {
+  const source = readFileSync(new URL("../src/FinanceArtifactCard.tsx", import.meta.url), "utf8");
+  assert.match(source, /<MarkdownContent[^>]+text=\{card\.answerMarkdown\}/);
+  assert.match(source, /contextTabs\.map/);
+  assert.match(source, /accessibilityState=\{\{ disabled: !tab\.available, expanded: selected, selected \}\}/);
+  assert.match(source, /setActiveContextTab\(selected \? null : tab\.key\)/);
+  assert.match(source, /selectedContextTab\.sources\.map/);
 });
 
 test("the assistant transcript mounts cards for Fin Hermes artifacts only", () => {
