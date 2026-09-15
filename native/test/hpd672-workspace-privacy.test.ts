@@ -39,3 +39,10 @@ test("the native privacy sheet renders only the rows selected by the safe projec
   assert.match(source, /server\?\.hostingKind \?\? "unconfirmed"/);
   assert.doesNotMatch(source, /server\?\.(nodeId|agentUrl|publicIpv4|serverId)/);
 });
+
+test("the native privacy sheet follows the palette supplied by its host app", () => {
+  const source = readFileSync(new URL("../src/MobilePrivacySheet.tsx", import.meta.url), "utf8");
+  assert.match(source, /import \{ useMobilePalette \} from "\.\/mobile-palette-context"/);
+  assert.match(source, /const palette = useMobilePalette\(\)/);
+  assert.doesNotMatch(source, /import \{ palette \} from "\.\/mobile-palette"/);
+});
