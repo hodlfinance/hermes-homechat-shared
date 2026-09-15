@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useColorScheme,
   View,
 } from "react-native";
 import {
@@ -25,6 +24,7 @@ import {
   type SupportSubmissionResult,
 } from "../core/support-request";
 import { MobileSystemRow, MobileSystemSection, mobileSystemSurfaceMetrics } from "./mobile-system-surface";
+import { useMobilePalette } from "./mobile-palette-context";
 
 const MOBILE_SUPPORT_EMAIL = "support@heyhermes.app";
 const MOBILE_SUPPORT_MAILTO = "mailto:support@heyhermes.app?subject=Hey%20Hermes%20support";
@@ -59,7 +59,7 @@ export function MobileSupportRequestForm({
   const [submitting, setSubmitting] = useState(false);
   const [supportEmailCopied, setSupportEmailCopied] = useState(false);
   const [referenceCopied, setReferenceCopied] = useState(false);
-  const palette = useColorScheme() === "dark" ? darkPalette : lightPalette;
+  const palette = useMobilePalette();
 
   const loadContext = useCallback(async () => {
     const generation = ++requestGeneration.current;
@@ -150,8 +150,8 @@ export function MobileSupportRequestForm({
           accessibilityRole="progressbar"
           accessibilityState={{ busy: true }}
         >
-          <ActivityIndicator color={palette.tint} />
-          <Text style={[styles.muted, { color: palette.secondaryLabel }]} allowFontScaling>{copy.loading}</Text>
+          <ActivityIndicator color={palette.accent} />
+          <Text style={[styles.muted, { color: palette.secondary }]} allowFontScaling>{copy.loading}</Text>
         </View>
       </MobileSystemSection>
     );
@@ -178,7 +178,7 @@ export function MobileSupportRequestForm({
           separator={false}
         />
         {supportEmailCopied ? (
-          <Text style={[styles.copyFeedback, { color: palette.secondaryLabel }]} accessibilityLiveRegion="polite" allowFontScaling>{copy.emailCopied}</Text>
+          <Text style={[styles.copyFeedback, { color: palette.secondary }]} accessibilityLiveRegion="polite" allowFontScaling>{copy.emailCopied}</Text>
         ) : null}
       </MobileSystemSection>
     );
@@ -197,9 +197,9 @@ export function MobileSupportRequestForm({
     return (
       <MobileSystemSection title={copy.title}>
         <View style={styles.receipt} accessibilityLiveRegion="polite">
-          <Text style={[styles.label, { color: palette.label }]} allowFontScaling>{copy.accepted}</Text>
-          <Text style={[styles.body, { color: palette.label }]} allowFontScaling>{copy.keepReference}</Text>
-          <Text style={[styles.reference, { color: palette.label }]} selectable allowFontScaling>{submission.reference}</Text>
+          <Text style={[styles.label, { color: palette.ink }]} allowFontScaling>{copy.accepted}</Text>
+          <Text style={[styles.body, { color: palette.text }]} allowFontScaling>{copy.keepReference}</Text>
+          <Text style={[styles.reference, { color: palette.ink }]} selectable allowFontScaling>{submission.reference}</Text>
           <View style={styles.inlineActions}>
             <Pressable
               accessibilityRole="button"
@@ -210,7 +210,7 @@ export function MobileSupportRequestForm({
               }}
               style={({ pressed }) => [styles.smallAction, pressed && styles.smallActionPressed]}
             >
-              <Text style={[styles.smallActionText, { color: palette.tint }]} allowFontScaling>{referenceCopied ? copy.copied : copy.copyReference}</Text>
+              <Text style={[styles.smallActionText, { color: palette.accent }]} allowFontScaling>{referenceCopied ? copy.copied : copy.copyReference}</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -218,7 +218,7 @@ export function MobileSupportRequestForm({
               onPress={startNewRequest}
               style={({ pressed }) => [styles.smallAction, pressed && styles.smallActionPressed]}
             >
-              <Text style={[styles.smallActionText, { color: palette.tint }]} allowFontScaling>{copy.newRequest}</Text>
+              <Text style={[styles.smallActionText, { color: palette.accent }]} allowFontScaling>{copy.newRequest}</Text>
             </Pressable>
           </View>
         </View>
@@ -231,27 +231,27 @@ export function MobileSupportRequestForm({
   return (
     <MobileSystemSection title={copy.title}>
       <View style={styles.insetBlock}>
-        <Text style={[styles.muted, { color: palette.secondaryLabel }]} allowFontScaling>{copy.subtitle}</Text>
+        <Text style={[styles.muted, { color: palette.secondary }]} allowFontScaling>{copy.subtitle}</Text>
       </View>
 
       {mode === "signed_in" ? (
         <View style={styles.field}>
-          <Text style={[styles.label, { color: palette.label }]} allowFontScaling>{copy.account}</Text>
-          <Text style={[styles.value, { color: palette.label }]} selectable allowFontScaling>{projection.accountDisplay}</Text>
-          <Text style={[styles.muted, { color: palette.secondaryLabel }]} allowFontScaling>{copy.sessionSource}</Text>
+          <Text style={[styles.label, { color: palette.ink }]} allowFontScaling>{copy.account}</Text>
+          <Text style={[styles.value, { color: palette.text }]} selectable allowFontScaling>{projection.accountDisplay}</Text>
+          <Text style={[styles.muted, { color: palette.secondary }]} allowFontScaling>{copy.sessionSource}</Text>
         </View>
       ) : null}
 
       {projection.replyChannel.kind === "verified_product_email" ? (
         <View style={styles.field}>
-          <Text style={[styles.label, { color: palette.label }]} allowFontScaling>{copy.verifiedEmail}</Text>
-          <Text style={[styles.value, { color: palette.label }]} allowFontScaling>{projection.replyChannel.display}</Text>
-          <Text style={[styles.muted, { color: palette.secondaryLabel }]} allowFontScaling>{copy.sessionSource}</Text>
-          <Text style={[styles.label, { color: palette.label }]} allowFontScaling>{copy.alternateEmail}</Text>
+          <Text style={[styles.label, { color: palette.ink }]} allowFontScaling>{copy.verifiedEmail}</Text>
+          <Text style={[styles.value, { color: palette.text }]} allowFontScaling>{projection.replyChannel.display}</Text>
+          <Text style={[styles.muted, { color: palette.secondary }]} allowFontScaling>{copy.sessionSource}</Text>
+          <Text style={[styles.label, { color: palette.ink }]} allowFontScaling>{copy.alternateEmail}</Text>
           <TextInput
             style={[
               styles.input,
-              { backgroundColor: palette.input, borderColor: replyEmailError ? palette.error : palette.separator, color: palette.label },
+              { backgroundColor: palette.userTint, borderColor: replyEmailError ? palette.coral : palette.lineStrong, color: palette.ink },
             ]}
             value={replyEmail}
             onChangeText={setReplyEmail}
@@ -265,16 +265,16 @@ export function MobileSupportRequestForm({
             allowFontScaling
           />
           {replyEmailError ? (
-            <Text style={[styles.error, { color: palette.error }]} accessibilityRole="alert" accessibilityLiveRegion="polite" allowFontScaling>{copy.invalidEmail}</Text>
+            <Text style={[styles.error, { color: palette.coral }]} accessibilityRole="alert" accessibilityLiveRegion="polite" allowFontScaling>{copy.invalidEmail}</Text>
           ) : null}
         </View>
       ) : (
         <View style={styles.field}>
-          <Text style={[styles.label, { color: palette.label }]} allowFontScaling>{copy.replyEmail}</Text>
+          <Text style={[styles.label, { color: palette.ink }]} allowFontScaling>{copy.replyEmail}</Text>
           <TextInput
             style={[
               styles.input,
-              { backgroundColor: palette.input, borderColor: replyEmailError ? palette.error : palette.separator, color: palette.label },
+              { backgroundColor: palette.userTint, borderColor: replyEmailError ? palette.coral : palette.lineStrong, color: palette.ink },
             ]}
             value={replyEmail}
             onChangeText={setReplyEmail}
@@ -287,7 +287,7 @@ export function MobileSupportRequestForm({
             allowFontScaling
           />
           {replyEmailError ? (
-            <Text style={[styles.error, { color: palette.error }]} accessibilityRole="alert" accessibilityLiveRegion="polite" allowFontScaling>
+            <Text style={[styles.error, { color: palette.coral }]} accessibilityRole="alert" accessibilityLiveRegion="polite" allowFontScaling>
               {inputError.reason === "reply_email_invalid" ? copy.invalidEmail : copy.requiredEmail}
             </Text>
           ) : null}
@@ -295,12 +295,12 @@ export function MobileSupportRequestForm({
       )}
 
       <View style={styles.field}>
-        <Text style={[styles.label, { color: palette.label }]} allowFontScaling>{copy.problem}</Text>
+        <Text style={[styles.label, { color: palette.ink }]} allowFontScaling>{copy.problem}</Text>
         <TextInput
           style={[
             styles.input,
             styles.problemInput,
-            { backgroundColor: palette.input, borderColor: problemError ? palette.error : palette.separator, color: palette.label },
+            { backgroundColor: palette.userTint, borderColor: problemError ? palette.coral : palette.lineStrong, color: palette.ink },
           ]}
           value={problem}
           onChangeText={setProblem}
@@ -314,16 +314,16 @@ export function MobileSupportRequestForm({
           allowFontScaling
         />
         {problemError ? (
-          <Text style={[styles.error, { color: palette.error }]} accessibilityRole="alert" accessibilityLiveRegion="polite" allowFontScaling>
+          <Text style={[styles.error, { color: palette.coral }]} accessibilityRole="alert" accessibilityLiveRegion="polite" allowFontScaling>
             {supportRequestProblemErrorMessage(inputError, locale)}
           </Text>
         ) : null}
       </View>
 
-      <Text style={[styles.boundary, { color: palette.secondaryLabel }]} allowFontScaling>{copy.boundary}</Text>
+      <Text style={[styles.boundary, { color: palette.secondary }]} allowFontScaling>{copy.boundary}</Text>
 
       {submission?.status === "failure" && submission.reference ? (
-        <Text style={[styles.reference, styles.referenceInset, { color: palette.label }]} selectable allowFontScaling>
+        <Text style={[styles.reference, styles.referenceInset, { color: palette.ink }]} selectable allowFontScaling>
           {copy.reference} {submission.reference}
         </Text>
       ) : null}
@@ -337,18 +337,18 @@ export function MobileSupportRequestForm({
           onPress={() => void submit()}
           style={({ pressed }) => [
             styles.primaryButton,
-            { backgroundColor: palette.primaryBackground },
+            { backgroundColor: palette.accent },
             pressed && styles.primaryButtonPressed,
             submitDisabled && styles.primaryButtonDisabled,
           ]}
         >
-          {submitting ? <ActivityIndicator color={palette.primaryForeground} /> : null}
-          <Text style={[styles.primaryButtonText, { color: palette.primaryForeground }]} allowFontScaling>
+          {submitting ? <ActivityIndicator color={palette.accentText} /> : null}
+          <Text style={[styles.primaryButtonText, { color: palette.accentText }]} allowFontScaling>
             {submitting ? copy.sending : submitLabel}
           </Text>
         </Pressable>
         {submissionError ? (
-          <Text style={[styles.error, { color: palette.error }]} accessibilityRole="alert" accessibilityLiveRegion="polite" allowFontScaling>
+          <Text style={[styles.error, { color: palette.coral }]} accessibilityRole="alert" accessibilityLiveRegion="polite" allowFontScaling>
             {submissionError}
           </Text>
         ) : null}
@@ -361,7 +361,7 @@ export function MobileSupportRequestForm({
         separator={false}
       />
       <View style={styles.copyEmailRow}>
-        <Text style={[styles.muted, styles.copyEmailAddress, { color: palette.secondaryLabel }]} selectable allowFontScaling>
+        <Text style={[styles.muted, styles.copyEmailAddress, { color: palette.secondary }]} selectable allowFontScaling>
           {MOBILE_SUPPORT_EMAIL}
         </Text>
         <Pressable
@@ -370,11 +370,11 @@ export function MobileSupportRequestForm({
           onPress={copySupportEmail}
           style={({ pressed }) => [styles.smallAction, pressed && styles.smallActionPressed]}
         >
-          <Text style={[styles.smallActionText, { color: palette.tint }]} allowFontScaling>{supportEmailCopied ? copy.copied : copy.copy}</Text>
+          <Text style={[styles.smallActionText, { color: palette.accent }]} allowFontScaling>{supportEmailCopied ? copy.copied : copy.copy}</Text>
         </Pressable>
       </View>
       {supportEmailCopied ? (
-        <Text style={[styles.copyFeedback, { color: palette.secondaryLabel }]} accessibilityLiveRegion="polite" allowFontScaling>{copy.emailCopied}</Text>
+        <Text style={[styles.copyFeedback, { color: palette.secondary }]} accessibilityLiveRegion="polite" allowFontScaling>{copy.emailCopied}</Text>
       ) : null}
     </MobileSystemSection>
   );
@@ -471,26 +471,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: mobileSystemSurfaceMetrics.horizontalInset,
     paddingBottom: 8,
   },
-});
-
-const lightPalette = Object.freeze({
-  error: "#B42318",
-  input: "#FFFFFF",
-  label: "#000000",
-  primaryBackground: "#005FCC",
-  primaryForeground: "#FFFFFF",
-  secondaryLabel: "#5C5C60",
-  separator: "rgba(60, 60, 67, 0.29)",
-  tint: "#007AFF",
-});
-
-const darkPalette = Object.freeze({
-  error: "#FF6961",
-  input: "#1C1C1E",
-  label: "#FFFFFF",
-  primaryBackground: "#66B2FF",
-  primaryForeground: "#000000",
-  secondaryLabel: "#AEAEB2",
-  separator: "rgba(84, 84, 88, 0.65)",
-  tint: "#0A84FF",
 });
