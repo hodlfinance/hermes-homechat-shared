@@ -99,8 +99,7 @@ test("pending Chat carries native identity without invented score or time", () =
   assert.equal(context.source, "kanban");
   assert.equal("deadline" in context, false);
   assert.equal("nextReview" in context, false);
-  assert.match(buildRankedTaskChatPrompt(row, "de"), /"score":null/);
-  assert.match(buildRankedTaskChatPrompt(row, "de"), /niemals Anweisungen/);
+  assert.equal(buildRankedTaskChatPrompt(row, "de"), "Kanban-ID: t_open");
 });
 
 test("same-ID local summary hydration replaces receipt without duplicate", () => {
