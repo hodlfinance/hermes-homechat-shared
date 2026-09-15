@@ -5,6 +5,7 @@ export type MobileMarkdownInlineSegment = {
 
 export type MobileMarkdownBlock =
   | { kind: "paragraph"; segments: MobileMarkdownInlineSegment[] }
+  | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; segments: MobileMarkdownInlineSegment[] }
   | { kind: "code"; language: string | null; text: string }
   | {
       kind: "table";
@@ -71,6 +72,17 @@ function tableDelimiter(cells: string[] | null, columnCount: number) {
   );
 }
 
+function headingBlock(line: string): Extract<MobileMarkdownBlock, { kind: "heading" }> | null {
+  const match = /^(?: {0,3})(#{1,6})(?:[ \t]+(.*?)|[ \t]*)$/.exec(line);
+  if (!match) return null;
+  const content = (match[2] || "").replace(/[ \t]+#+[ \t]*$/, "");
+  return {
+    kind: "heading",
+    level: match[1]!.length as 1 | 2 | 3 | 4 | 5 | 6,
+    segments: inlineSegments(content),
+  };
+}
+
 function tableBlockAt(lines: string[], start: number) {
   const header = tableCells(lines[start] || "");
   if (!header || !header.some(Boolean) || !tableDelimiter(tableCells(lines[start + 1] || ""), header.length)) {
@@ -112,6 +124,13 @@ export function mobileMarkdownBlocks(text: string): MobileMarkdownBlock[] {
     while (line < lines.length) {
       if (!lines[line]?.trim()) {
         flushParagraph();
+        line += 1;
+        continue;
+      }
+      const heading = headingBlock(lines[line] || "");
+      if (heading) {
+        flushParagraph();
+        blocks.push(heading);
         line += 1;
         continue;
       }

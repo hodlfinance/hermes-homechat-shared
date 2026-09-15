@@ -4,6 +4,7 @@ import test from "node:test";
 import { mobileMarkdownBlocks } from "../src/mobile-markdown";
 
 const surfaceSource = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+const financeArtifactCardSource = readFileSync(new URL("../src/FinanceArtifactCard.tsx", import.meta.url), "utf8");
 
 test("native Markdown parses a header and several table rows without changing cell order", () => {
   const blocks = mobileMarkdownBlocks([
@@ -28,6 +29,46 @@ test("native Markdown parses a header and several table rows without changing ce
     table.rows.map((row) => row.map((cell) => cell.map((segment) => segment.text).join(""))),
     [["Alpha", "Open", "First"], ["Beta", "Done", "Second"]],
   );
+});
+
+test("ATX headings become semantic blocks without leaking Markdown markers", () => {
+  const blocks = mobileMarkdownBlocks([
+    "## **View**",
+    "",
+    "Paragraph.",
+    "",
+    "###### Detail `score` ######",
+  ].join("\n"));
+
+  assert.deepEqual(blocks, [
+    {
+      kind: "heading",
+      level: 2,
+      segments: [{ kind: "bold", text: "View" }],
+    },
+    {
+      kind: "paragraph",
+      segments: [{ kind: "plain", text: "Paragraph." }],
+    },
+    {
+      kind: "heading",
+      level: 6,
+      segments: [
+        { kind: "plain", text: "Detail " },
+        { kind: "inline_code", text: "score" },
+      ],
+    },
+  ]);
+  assert.doesNotMatch(JSON.stringify(blocks), /## View|###### Detail/);
+});
+
+test("both native Markdown renderers present semantic headings", () => {
+  for (const source of [surfaceSource, financeArtifactCardSource]) {
+    assert.match(source, /block\.kind === "heading"/);
+    assert.match(source, /variant="heading"/);
+    assert.match(source, /accessibilityRole=\{[^\n]*"header"/);
+    assert.match(source, /markdownHeadingLargeText/);
+  }
 });
 
 test("table cells keep empty values, bold, inline code, and pipes inside code", () => {

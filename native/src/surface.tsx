@@ -9911,17 +9911,28 @@ function assistantSegmentRenderStyle(kind: AssistantMessageSegmentKind) {
 function MobileMarkdownInlineText({
   segments,
   variant = "paragraph",
+  headingLevel = 2,
 }: {
   segments: MobileMarkdownInlineSegment[];
-  variant?: "paragraph" | "table_header" | "table_cell";
+  variant?: "paragraph" | "heading" | "table_header" | "table_cell";
+  headingLevel?: number;
 }) {
-  const textStyle = variant === "table_header"
+  const textStyle = variant === "heading"
+    ? [
+        styles.markdownHeadingText,
+        headingLevel <= 2
+          ? styles.markdownHeadingLargeText
+          : headingLevel <= 4
+            ? styles.markdownHeadingMediumText
+            : styles.markdownHeadingSmallText,
+      ]
+    : variant === "table_header"
     ? styles.markdownTableHeaderText
     : variant === "table_cell"
       ? styles.markdownTableCellText
       : styles.messageText;
   return (
-    <Text style={textStyle} selectable accessibilityRole={variant === "table_header" ? "header" : "text"}>
+    <Text style={textStyle} selectable accessibilityRole={variant === "heading" || variant === "table_header" ? "header" : "text"}>
       {segments.flatMap((markdownSegment, segmentIndex) => {
         if (markdownSegment.kind === "inline_code") {
           return <Text key={`${segmentIndex}-${markdownSegment.text}`} style={styles.inlineCode}>{markdownSegment.text}</Text>;
@@ -9930,6 +9941,8 @@ function MobileMarkdownInlineText({
           const kind = markdownSegment.kind === "bold" ? "bold" : segment.kind;
           const kindStyle = variant === "paragraph"
             ? assistantSegmentRenderStyle(kind)
+            : variant === "heading"
+              ? kind === "bold" ? styles.markdownHeadingBoldText : undefined
             : kind === "bold"
               ? styles.markdownTableBoldText
               : undefined;
@@ -9996,6 +10009,13 @@ function LinkedMessageText({ text }: { text: string }) {
             ))}
           </View>
         </View>
+      ) : block.kind === "heading" ? (
+        <MobileMarkdownInlineText
+          headingLevel={block.level}
+          key={`heading-${blockIndex}`}
+          segments={block.segments}
+          variant="heading"
+        />
       ) : (
         <MobileMarkdownInlineText key={`paragraph-${blockIndex}`} segments={block.segments} />
       ))}
@@ -12952,6 +12972,25 @@ const styles = StyleSheet.create({
   markdownBlocks: {
     gap: 12,
     alignSelf: "stretch",
+  },
+  markdownHeadingText: {
+    color: palette.ink,
+    fontWeight: "700",
+  },
+  markdownHeadingBoldText: {
+    fontWeight: "800",
+  },
+  markdownHeadingLargeText: {
+    fontSize: 21,
+    lineHeight: 28,
+  },
+  markdownHeadingMediumText: {
+    fontSize: 19,
+    lineHeight: 26,
+  },
+  markdownHeadingSmallText: {
+    fontSize: 17,
+    lineHeight: 25,
   },
   markdownTableViewport: {
     alignSelf: "stretch",
