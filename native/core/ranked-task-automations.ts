@@ -103,39 +103,20 @@ const rankerDefaultSnapshot = freezeSnapshot({
   name: "Ranked Tasks ranker",
   schedule: "15 8,17 * * *",
   prompt: [
-    "Rank what matters for the customer now, using this automation's configured sources and tools.",
-    "Read the workspace triage policy once at the start of the run with workspace_triage_policy. When separateBusinessAndPrivate is true, keep business and private apart in the report; otherwise report one stream. The switch changes nothing else, and nothing about the customer is assumed anywhere else.",
-    "Sources: the live Kanban board, the latest email scanner result, open items and deadlines in the Vault, and every memory system through the one generic memory tool. Archive material is context, never work to take in as new.",
-    "First call ranked_tasks_projection_context once; it hands you the exact native tasks, the latest successfully persisted scanner result, and this run's private publicationStage. Never scan email yourself and never start, retry, monitor, or change the scanner. When no scanner result is available, keep email unavailable and rank everything else instead of blocking the whole run.",
-    "The stored ranking is an input, not only a result: identifiers, the customer's own ratings, and the done and dismissed states survive every run. Nothing done or dismissed is opened again without a new event from a source.",
-    // HPD-464: one rule to a sentence. This was one 252-word sentence, and the
-    // run of 2026-08-25 08:55 applied one half of it and not the other: it folded
-    // t_604e11a3 and t_ec870db9 into t_8dd3448c with supersedes, and in the same
-    // answer carried t_93d5c099 and t_6484a327 over untouched - one Google Cloud
-    // suspension standing at ranks 1 and 2. The pilot ranker states its own
-    // de-duplication in one short line and can, because it rewrites its whole file
-    // every run. This contract cannot: `boundedText` rejects every control
-    // character, so a prompt here is one line and can carry no headings or blank
-    // lines. Short single-idea rules are the part of that form this contract has.
-    "Merge and de-duplicate as its own step, before anything is scored: one entry per matter, whatever its source, keeping the identifier it already had.",
-    "A stored finding is handed to you with its sourceId; send that same sourceId back for the same matter and it stays one entry.",
-    "Where two entries are plainly the same matter, send the one that stays with the other named in its supersedes - a Kanban card absorbs a card or a finding, a finding absorbs a finding.",
-    "Two cards worded differently for one matter are one entry, exactly like two findings.",
-    "Name a card in supersedes by its nativeTaskId; a card you have never ranked has no other identity, and that is what a fresh duplicate is.",
-    "The merge step covers the whole list and not only what you were going to send: two entries you carry over unchanged are still two entries.",
-    "A fold is read only on a card you send, so send the survivor even where its own rating is unchanged; one card is the whole cost.",
-    "Leaving a card out of tasks is not how you merge it: it keeps the rating already stored for it and stays on the list, and one never ranked shows as not ranked yet.",
-    "Saying it in the report is not saying it either - only supersedes folds anything.",
-    "Folding changes the list and never the board: both cards stay on the Kanban, nothing there is closed, moved or created, and the customer can undo the fold.",
-    "Never fold one the customer rated by hand, finished or removed, and never name one you are also sending in the same run.",
-    "A finding from email, the Vault or memory may become an entry of the list without a Kanban card. Never create a Kanban card only to have somewhere to put a finding.",
-    "Give an entry a deadline only where a source outside your own reasoning states it, and name that source with the date: the sender, the document, the invoice, the calendar entry. Otherwise either derive a target date and set a review date with it, or set no date at all and only a review date. Never invent a date.",
-    "Rate urgency and importance from 0 to 5 — urgency by how soon it goes wrong if nothing happens, importance by what it costs if it is never done — keep every rating the customer set by hand, and score each entry as 0.6 × urgency + 0.4 × importance.",
-    "Write the report and reminder prose yourself, and emit stable structured reminder states and action IDs for the clients; the reminder states and the four actions stay exactly as they are.",
-    "Build the complete run-bound file only with ranked_tasks_projection_stage. For tasks or candidates send only section, offset and 1-8 items; skip empty sections. Identical retries are safe. Limits are 12 KiB per call, 500 cards and 200 findings.",
-    "Finalize and publish once with ranked_tasks_projection_publish, sending only top-level taskCount, candidateCount, scannerResultId, sources and report; never section, offset, items, tasks or candidates.",
-    "It reads only this run's staged arrays, requires the exact counts, binds completion time, and preserves the previous list on failure.",
-    "Only after publish succeeds, write at most ten customer-language lines from publishedList only: total, then each returned rank and title. Add no reasons, history, completed or folded items from earlier context. Never call it a projection. Never send the full list in chat; the app reads it from the database.",
+    "Rank the customer's normal Kanban cards using this automation's configured sources and tools. Never create a Ranked-only task or a second task source.",
+    "Read the workspace triage policy once at the start of the run with workspace_triage_policy. When separateBusinessAndPrivate is true, keep business and private apart in the optional local report. The switch changes nothing else.",
+    "First call ranked_tasks_projection_context once; it returns live native cards, local ratings, source associations, the latest successfully saved local scanner result and this run's private publicationStage. Never scan email yourself or start, retry, monitor or change the scanner. With no scanner result, mark email unavailable and rank everything else instead of blocking the whole run.",
+    "Use relevant Vault and available memory tools for additional sources. Archive material is context, never new work. Missing sources remain unavailable/incomplete; never fabricate observations.",
+    "The stored ranking is an input, not only a result: the customer's own ratings, and the done and dismissed states survive every run. Never reopen, assign, promote or dispatch cards while ranking. Cards without ratings stay visible as scoring pending; this is not a Kanban workflow state.",
+    "Before scoring, compare all cards for the same concrete action, including manual, pending and unchanged rated cards. Reuse completed findings for ingestion, not as a reason to skip card comparison. With ranked_tasks_local, finding.register takes {source,item_key,version,summary,observed_at}; use stable IDs and content versions, or a canonical locator plus digest, never a changing summary.",
+    "For new or changed findings, compare concrete next actions with existing cards and associations. The same topic alone is not a duplicate. Use finding.decide with {finding_id,decision,card_refs,reason}; decision is linked or no_action, and card_refs contains {board,task_id}. Several findings may link to one card, and one finding may link to several distinct actions.",
+    "For a genuinely new action use create with {title,description,finding_id,actionKey}; keep actionKey stable for that action. The local operation creates an ordinary parked triage card, initially unranked. An unresolved creation needs reconciliation, never a blind second create or a new key. Card creation never triggers another ranker run.",
+    "For confirmed duplicate cards use alias with {sourceId,targetId,confirmed:true} and IDs from context. It preserves source links and archives the duplicate; never delete it. Clarify ambiguous matches. Do not automatically merge away manually rated, done or dismissed cards; manual creation alone is not a manual rating. Omitting a card from ratings does not merge it. Never send supersedes in a ratings projection.",
+    "Give an entry a deadline only where a source outside your own reasoning states it, and name that source with the date. Otherwise derive a target date and set a review date with it, or set no date at all and only a review date. Never invent a date.",
+    "Rate urgency and importance from 0 to 5: urgency measures how soon inaction hurts; importance measures the cost of never acting. Keep manual ratings. Local code computes 0.6 × urgency + 0.4 × importance. New or concurrently changed cards may remain pending; omitted cards are not deleted.",
+    "Build the run-bound ratings file only with ranked_tasks_projection_stage. Send section tasks, offset and 1-8 items per call; skip empty sections. Identical retries are safe. Limits are 12 KiB per call and 500 cards. Do not stage candidates; every rated item references a native Kanban card.",
+    "Publish staged results with ranked_tasks_projection_publish: taskCount, candidateCount:0, scannerResultId, sources, optional report. Only vault and memory source observations may be supplied at publish; Kanban/email freshness is bound locally. Counts match staged items. Never send section, offset, items, tasks or candidates; do not invent a second reminder contract. Optional prose cannot gate the local save.",
+    "Only after publish succeeds, send a brief chat summary in the customer's language by default: Top 3, newly included tasks and material changes. Do not repeat the complete list or invent changes. Honor an ordinary automation edit disabling notifications by returning exactly [SILENT] after saving. The app reads local cards and ratings; chat is not their data source. Failed delivery does not undo saved ratings. A rejected save is not success; follow its concrete correction error without inventing data.",
     "Keep full bank, account and customer numbers out of titles, descriptions and source references.",
   ].join(" "),
   sources: ["kanban", "email_triage", "vault", "memory"],
@@ -225,7 +206,10 @@ export const rankedTaskAutomationTemplates = Object.freeze({
     // unbounded generic write_file step in front of them. The shipped default
     // appends at most eight entries and 12 KiB per server-checked stage call,
     // then finalizes exact totals before the same parameterless publish.
-    officialVersion: 10,
+    // v11 (HPD-657): concise chat confirmation after exact publication.
+    // v12 (HPD-667): native cards only, VPS-local ratings and source decisions.
+    // v13 (HPD-728): compare manual and unchanged cards; alias is the only card fold.
+    officialVersion: 13,
     defaultSnapshot: rankerDefaultSnapshot,
   }),
 }) satisfies Readonly<Record<string, RankedTaskAutomationTemplateContract>>;
