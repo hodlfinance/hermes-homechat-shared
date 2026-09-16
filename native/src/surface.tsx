@@ -135,6 +135,7 @@ import {
   createHomechatPagedState,
   createHomechatVoiceController,
   homechatTranscriptMessages,
+  mergeHomechatMessages,
   HEY_LEGAL_LINKS,
   HEY_SUGGESTION_FILTERS,
   heySuggestionAction,
@@ -336,7 +337,11 @@ import {
 import { mobileLiveRunActivityView } from "./mobile-live-run-status";
 import { createMobileRankedTaskObserver, mobileRankedTaskNoticeAfterRead } from "./mobile-ranked-task-observer";
 import { mobileRankedTaskRead } from "./mobile-ranked-task-read";
-import { delegatedTasksView, mobileDelegatedTaskIsTerminal } from "../core/delegated-tasks-view";
+import {
+  delegatedTasksView,
+  mobileDelegatedTaskIsTerminal,
+  mobileDelegatedTaskResultObservationUntil,
+} from "../core/delegated-tasks-view";
 import {
   subthreadAfterConversationChange,
   subthreadHeader,
@@ -1669,6 +1674,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [chatRunStatusesById, setChatRunStatusesById] = useState<Record<string, ChatRunStatus>>({});
   const [chatApprovalCards, setChatApprovalCards] = useState<ApprovalCard[]>([]);
   const [delegatedTasks, setDelegatedTasks] = useState<HermesDelegatedTask[]>([]);
+  const delegatedTaskResultObservationUntilRef = useRef(0);
   const [subthreadOrigin, setSubthreadOrigin] = useState<SubthreadOrigin | null>(null);
   const [messagesNextBefore, setMessagesNextBefore] = useState<string | null>(null);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
@@ -4273,9 +4279,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   useEffect(() => {
     if (!token || !snapshot) {
       setDelegatedTasks([]);
+      delegatedTaskResultObservationUntilRef.current = 0;
       return;
     }
     let cancelled = false;
+    let messageRefreshActive = false;
     let requestController: AbortController | null = null;
     const poll = () => {
       // HPD-649: deferred and scheduled ranking can finish without navigation.
@@ -4285,8 +4293,45 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       requestController?.abort();
       requestController = new AbortController();
       void hermesApi.delegatedTasks({ signal: requestController.signal })
-        .then((tasks) => {
-          if (!cancelled) setDelegatedTasks(tasks);
+        .then(async (tasks) => {
+          if (cancelled) return;
+          const now = Date.now();
+          delegatedTaskResultObservationUntilRef.current = mobileDelegatedTaskResultObservationUntil(
+            tasks,
+            now,
+            delegatedTaskResultObservationUntilRef.current,
+          );
+          setDelegatedTasks(tasks);
+
+          // HPD-352: the native runtime persists a completed delegation reply
+          // independently of the browser run that started it. While that work
+          // is active (and briefly after its terminal receipt), hydrate the
+          // currently visible transcript directly. This is intentionally
+          // independent of APNs permission or delivery.
+          const visibleConversationId = activeConversationSessionIdRef.current;
+          if (
+            delegatedTaskResultObservationUntilRef.current <= now ||
+            tab !== "chat" ||
+            !visibleConversationId ||
+            messageRefreshActive
+          ) return;
+          messageRefreshActive = true;
+          try {
+            const page = await chatConversationController.refreshMessages(
+              createHomechatPagedState<ChatMessage>(),
+              { conversationId: visibleConversationId, limit: 50 },
+            );
+            if (
+              cancelled ||
+              page.phase !== "ready" ||
+              activeConversationSessionIdRef.current !== visibleConversationId
+            ) return;
+            const merged = mergeHomechatMessages(messagesStateRef.current, page.items);
+            messagesStateRef.current = merged;
+            setMessages(merged);
+          } finally {
+            messageRefreshActive = false;
+          }
         })
         .catch(() => undefined);
     };
@@ -4297,7 +4342,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       requestController?.abort();
       clearInterval(timer);
     };
-  }, [hermesApi, rankedTaskObserver, snapshot?.workspace.id, token]);
+  }, [chatConversationController, hermesApi, rankedTaskObserver, snapshot?.workspace.id, tab, token]);
 
   useEffect(() => {
     if (!snapshot || chatGptAccountConnectionView(snapshot).ready || chatGptConnection) return;
