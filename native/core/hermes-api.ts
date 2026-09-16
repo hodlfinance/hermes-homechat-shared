@@ -432,6 +432,8 @@ export type HermesDelegatedTask = {
   name: string;
   conversationId: string;
   sourceRunId: string;
+  sourceConversationId?: string | null;
+  resultMessageId?: string | null;
   state: HermesDelegatedTaskState;
   startedAt: string;
   updatedAt: string;

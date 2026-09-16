@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type { HermesDelegatedTask } from "../core/hermes-api";
-import { mobileDelegatedTaskResultObservationUntil } from "../core/delegated-tasks-view";
+import { mobileDelegatedTaskResultMessageIds } from "../core/delegated-tasks-view";
 
 function task(state: HermesDelegatedTask["state"]): HermesDelegatedTask {
   return {
@@ -20,23 +20,28 @@ function task(state: HermesDelegatedTask["state"]): HermesDelegatedTask {
   };
 }
 
-test("native chat keeps observing persisted replies while delegated work runs and briefly after it finishes", () => {
-  const now = Date.parse("2026-09-16T04:01:00.000Z");
-  const activeUntil = mobileDelegatedTaskResultObservationUntil([task("running")], now, 0);
-  assert.equal(activeUntil, now + 60_000);
-
-  const completedUntil = mobileDelegatedTaskResultObservationUntil(
-    [task("completed")],
-    now + 2_500,
-    activeUntil,
+test("native chat observes only exact persisted delegation replies for the visible conversation", () => {
+  const delivered = {
+    ...task("completed"),
+    sourceConversationId: "session_home",
+    resultMessageId: "msg_delivery_exact",
+  };
+  assert.deepEqual(
+    mobileDelegatedTaskResultMessageIds([delivered], "session_home", new Set()),
+    ["msg_delivery_exact"],
   );
-  assert.equal(completedUntil, activeUntil);
-
-  assert.equal(
-    mobileDelegatedTaskResultObservationUntil([task("completed")], activeUntil + 1, activeUntil),
-    0,
+  assert.deepEqual(
+    mobileDelegatedTaskResultMessageIds([delivered], "session_other", new Set()),
+    [],
   );
-  assert.equal(mobileDelegatedTaskResultObservationUntil([task("completed")], now, 0), 0);
+  assert.deepEqual(
+    mobileDelegatedTaskResultMessageIds([delivered], "session_home", new Set(["msg_delivery_exact"])),
+    [],
+  );
+  assert.deepEqual(
+    mobileDelegatedTaskResultMessageIds([{ ...delivered, resultMessageId: null }], "session_home", new Set()),
+    [],
+  );
 });
 
 test("native task observer refreshes the visible transcript independently of push permission", () => {
@@ -45,8 +50,9 @@ test("native task observer refreshes the visible transcript independently of pus
     surface.indexOf("const poll = () =>"),
     surface.indexOf("poll();"),
   );
-  assert.match(observer, /mobileDelegatedTaskResultObservationUntil/);
+  assert.match(observer, /mobileDelegatedTaskResultMessageIds/);
   assert.match(observer, /chatConversationController\.refreshMessages/);
   assert.match(observer, /mergeHomechatMessages/);
+  assert.match(observer, /receivedIds\.has\(resultMessageId\)/);
   assert.doesNotMatch(observer, /Notifications|mobilePush/);
 });

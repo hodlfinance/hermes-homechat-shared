@@ -29,23 +29,22 @@ export function mobileDelegatedTaskIsTerminal(state: HermesDelegatedTaskState) {
   return !activeStates.has(state);
 }
 
-const delegatedTaskResultObservationWindowMs = 60_000;
-
-/**
- * Keep the visible transcript under observation while delegated work can still
- * produce its parent-chat answer. Push is an optional attention channel, not a
- * correctness dependency, so the open chat retains a short observation window
- * after the task itself first reports a terminal state.
- */
-export function mobileDelegatedTaskResultObservationUntil(
+export function mobileDelegatedTaskResultMessageIds(
   tasks: readonly HermesDelegatedTask[],
-  nowMs: number,
-  currentUntilMs: number,
+  visibleConversationId: string,
+  seenMessageIds: ReadonlySet<string>,
 ) {
-  if (tasks.some((task) => activeStates.has(task.state))) {
-    return Math.max(currentUntilMs, nowMs + delegatedTaskResultObservationWindowMs);
+  const ids = new Set<string>();
+  for (const task of tasks) {
+    if (
+      task.sourceConversationId === visibleConversationId &&
+      task.resultMessageId &&
+      !seenMessageIds.has(task.resultMessageId)
+    ) {
+      ids.add(task.resultMessageId);
+    }
   }
-  return currentUntilMs > nowMs ? currentUntilMs : 0;
+  return [...ids];
 }
 
 export function mobileDelegatedTaskStatusLabel(state: HermesDelegatedTaskState) {
