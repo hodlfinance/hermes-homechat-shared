@@ -1258,8 +1258,9 @@ interface WorkspaceServerIdentityBase {
   location: string | null;
   inServiceSince: string | null;
   allocatedVcpu: number | null;
-  allocatedMemoryMb: number | null;
-  allocatedPrivateStorageGb: number | null;
+  allocatedMemoryMib: number | null;
+  allocatedPersistentStorageGib: number | null;
+  network: "private_managed" | null;
 }
 
 export type WorkspaceServerIdentity = WorkspaceServerIdentityBase & (
@@ -1273,9 +1274,9 @@ export type WorkspaceServerIdentity = WorkspaceServerIdentityBase & (
   | {
       confirmed: true;
       hostingKind: "firecracker_microvm";
-      provider: null;
+      provider: string | null;
       serverId: null;
-      workspaceMachineId: string;
+      workspaceMachineId: null;
     }
   | {
       confirmed: false;

@@ -8,29 +8,34 @@ test("a valid Firecracker binding is a confirmed isolated workspace machine with
   const identity: WorkspaceServerIdentity = {
     confirmed: true,
     hostingKind: "firecracker_microvm",
-    provider: null,
+    provider: "Hetzner",
     serverId: null,
-    workspaceMachineId: "9a7b6c5d-4e3f-4a2b-9c1d-0e8f7a6b5c44",
+    workspaceMachineId: null,
     hostname: "hey-hermes-ws-test",
     workspaceId: "ws_test",
     publicIpv4: null,
-    serverType: "Private Firecracker microVM",
-    location: null,
-    inServiceSince: "2026-09-14T06:00:00.000Z",
-    allocatedVcpu: null,
-    allocatedMemoryMb: null,
-    allocatedPrivateStorageGb: null,
+    serverType: "Isolated Firecracker microVM",
+    location: "Falkenstein, Germany",
+    inServiceSince: null,
+    allocatedVcpu: 2,
+    allocatedMemoryMib: 4096,
+    allocatedPersistentStorageGib: 40,
+    network: "private_managed",
   };
   const copy = workspacePrivacyCopy("en", identity.hostingKind);
   assert.equal(workspacePrivacyHasServer(identity, "ws_test"), true);
-  assert.match(copy.body, /your own isolated virtual machine/i);
+  assert.equal(copy.body, "Your personal content is protected inside its own isolated virtual machine.");
   assert.deepEqual(workspacePrivacyRows(identity, copy), [
-    ["Environment type", "Private Firecracker microVM"],
-    ["Workspace machine ID", identity.workspaceMachineId],
-    ["In service since", identity.inServiceSince],
+    ["Environment type", "Isolated Firecracker microVM"],
+    ["Hosting provider", "Hetzner"],
+    ["Location", "Falkenstein, Germany"],
+    ["Allocated vCPU", "2"],
+    ["Allocated memory", "4096 MiB"],
+    ["Allocated persistent storage", "40 GiB"],
+    ["Network", "Private, managed"],
   ]);
   const visible = JSON.stringify(workspacePrivacyRows(identity, copy));
-  assert.doesNotMatch(visible, /IP address|Server ID|nodeId|agentUrl|MAC address|management/i);
+  assert.doesNotMatch(visible, /IP address|Server ID|machine ID|nodeId|agentUrl|MAC address|CPU model|total capacity|dedicated server|\bVPM\b/i);
 });
 
 test("the native privacy sheet renders only the rows selected by the safe projection", () => {
