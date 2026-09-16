@@ -74,12 +74,12 @@ export function workspacePrivacyRows(identity: WorkspaceServerIdentity | null, c
   if (identity.hostingKind === "firecracker_microvm") {
     const rows: Array<readonly [string, string | null]> = [
       [copy.serverType, identity.serverType],
+      [copy.workspaceMachineId, identity.workspaceMachineId],
+      [copy.inServiceSince, identity.inServiceSince],
+      [copy.allocatedMemory, identity.allocatedMemoryMib == null ? null : `${identity.allocatedMemoryMib} MiB`],
+      [copy.allocatedStorage, identity.allocatedPersistentStorageGib == null ? null : `${identity.allocatedPersistentStorageGib} GiB`],
       [copy.provider, identity.provider],
       [copy.location, identity.location],
-      [copy.allocatedVcpu, identity.allocatedVcpu === null ? null : String(identity.allocatedVcpu)],
-      [copy.allocatedMemory, identity.allocatedMemoryMib === null ? null : `${identity.allocatedMemoryMib} MiB`],
-      [copy.allocatedStorage, identity.allocatedPersistentStorageGib === null ? null : `${identity.allocatedPersistentStorageGib} GiB`],
-      [copy.network, identity.network === "private_managed" ? copy.privateManagedNetwork : null],
     ];
     return rows.filter((row): row is readonly [string, string] => Boolean(row[1]));
   }

@@ -1276,7 +1276,7 @@ export type WorkspaceServerIdentity = WorkspaceServerIdentityBase & (
       hostingKind: "firecracker_microvm";
       provider: string | null;
       serverId: null;
-      workspaceMachineId: null;
+      workspaceMachineId: string | null;
     }
   | {
       confirmed: false;

@@ -10,13 +10,13 @@ test("a valid Firecracker binding is a confirmed isolated workspace machine with
     hostingKind: "firecracker_microvm",
     provider: "Hetzner",
     serverId: null,
-    workspaceMachineId: null,
+    workspaceMachineId: "9a7b6c5d-4e3f-4a2b-9c1d-0e8f7a6b5c44",
     hostname: "hey-hermes-ws-test",
     workspaceId: "ws_test",
     publicIpv4: null,
     serverType: "Isolated Firecracker microVM",
     location: "Falkenstein, Germany",
-    inServiceSince: null,
+    inServiceSince: "2026-09-13T00:00:00.000Z",
     allocatedVcpu: 2,
     allocatedMemoryMib: 4096,
     allocatedPersistentStorageGib: 40,
@@ -27,15 +27,20 @@ test("a valid Firecracker binding is a confirmed isolated workspace machine with
   assert.equal(copy.body, "Your personal content is protected inside its own isolated virtual machine.");
   assert.deepEqual(workspacePrivacyRows(identity, copy), [
     ["Environment type", "Isolated Firecracker microVM"],
-    ["Hosting provider", "Hetzner"],
-    ["Location", "Falkenstein, Germany"],
-    ["Allocated vCPU", "2"],
+    ["Workspace machine ID", "9a7b6c5d-4e3f-4a2b-9c1d-0e8f7a6b5c44"],
+    ["In service since", "2026-09-13T00:00:00.000Z"],
     ["Allocated memory", "4096 MiB"],
     ["Allocated persistent storage", "40 GiB"],
-    ["Network", "Private, managed"],
+    ["Hosting provider", "Hetzner"],
+    ["Location", "Falkenstein, Germany"],
   ]);
   const visible = JSON.stringify(workspacePrivacyRows(identity, copy));
-  assert.doesNotMatch(visible, /IP address|Server ID|machine ID|nodeId|agentUrl|MAC address|CPU model|total capacity|dedicated server|\bVPM\b/i);
+  assert.doesNotMatch(visible, /IP address|Server ID|nodeId|agentUrl|MAC address|CPU model|total capacity|dedicated server|\bVPM\b/i);
+  assert.deepEqual(workspacePrivacyRows({ ...identity, provider: null, location: null, allocatedMemoryMib: undefined, allocatedPersistentStorageGib: undefined } as unknown as WorkspaceServerIdentity, copy), [
+    ["Environment type", "Isolated Firecracker microVM"],
+    ["Workspace machine ID", "9a7b6c5d-4e3f-4a2b-9c1d-0e8f7a6b5c44"],
+    ["In service since", "2026-09-13T00:00:00.000Z"],
+  ]);
 });
 
 test("the native privacy sheet renders only the rows selected by the safe projection", () => {
