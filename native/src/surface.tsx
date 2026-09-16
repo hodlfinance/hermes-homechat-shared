@@ -135,6 +135,7 @@ import {
   createHomechatPagedState,
   createHomechatVoiceController,
   homechatTranscriptMessages,
+  mergeHomechatMessages,
   HEY_LEGAL_LINKS,
   HEY_SUGGESTION_FILTERS,
   heySuggestionAction,
@@ -336,7 +337,11 @@ import {
 import { mobileLiveRunActivityView } from "./mobile-live-run-status";
 import { createMobileRankedTaskObserver, mobileRankedTaskNoticeAfterRead } from "./mobile-ranked-task-observer";
 import { mobileRankedTaskRead } from "./mobile-ranked-task-read";
-import { delegatedTasksView, mobileDelegatedTaskIsTerminal } from "../core/delegated-tasks-view";
+import {
+  delegatedTasksView,
+  mobileDelegatedTaskIsTerminal,
+  mobileDelegatedTaskResultMessageIds,
+} from "../core/delegated-tasks-view";
 import {
   subthreadAfterConversationChange,
   subthreadHeader,
@@ -1669,6 +1674,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [chatRunStatusesById, setChatRunStatusesById] = useState<Record<string, ChatRunStatus>>({});
   const [chatApprovalCards, setChatApprovalCards] = useState<ApprovalCard[]>([]);
   const [delegatedTasks, setDelegatedTasks] = useState<HermesDelegatedTask[]>([]);
+  const deliveredDelegationResultIdsRef = useRef<Set<string>>(new Set());
   const [subthreadOrigin, setSubthreadOrigin] = useState<SubthreadOrigin | null>(null);
   const [messagesNextBefore, setMessagesNextBefore] = useState<string | null>(null);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
@@ -4273,9 +4279,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   useEffect(() => {
     if (!token || !snapshot) {
       setDelegatedTasks([]);
+      deliveredDelegationResultIdsRef.current.clear();
       return;
     }
     let cancelled = false;
+    let messageRefreshActive = false;
     let requestController: AbortController | null = null;
     const poll = () => {
       // HPD-649: deferred and scheduled ranking can finish without navigation.
@@ -4285,8 +4293,53 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       requestController?.abort();
       requestController = new AbortController();
       void hermesApi.delegatedTasks({ signal: requestController.signal })
-        .then((tasks) => {
-          if (!cancelled) setDelegatedTasks(tasks);
+        .then(async (tasks) => {
+          if (cancelled) return;
+          setDelegatedTasks(tasks);
+
+          // HPD-352: the native runtime persists a completed delegation reply
+          // independently of the browser run that started it. The task read
+          // carries the exact persisted result-message receipt, so hydrate the
+          // currently visible transcript when (and only when) that receipt
+          // exists. This is independent of APNs permission or delivery and has
+          // no blind timeout.
+          const visibleConversationId = activeConversationSessionIdRef.current;
+          const resultMessageIds = visibleConversationId
+            ? mobileDelegatedTaskResultMessageIds(
+                tasks,
+                visibleConversationId,
+                deliveredDelegationResultIdsRef.current,
+              )
+            : [];
+          if (
+            tab !== "chat" ||
+            !visibleConversationId ||
+            !resultMessageIds.length ||
+            messageRefreshActive
+          ) return;
+          messageRefreshActive = true;
+          try {
+            const page = await chatConversationController.refreshMessages(
+              createHomechatPagedState<ChatMessage>(),
+              { conversationId: visibleConversationId, limit: 50 },
+            );
+            if (
+              cancelled ||
+              page.phase !== "ready" ||
+              activeConversationSessionIdRef.current !== visibleConversationId
+            ) return;
+            const merged = mergeHomechatMessages(messagesStateRef.current, page.items);
+            messagesStateRef.current = merged;
+            setMessages(merged);
+            const receivedIds = new Set(page.items.map((message) => message.id));
+            for (const resultMessageId of resultMessageIds) {
+              if (receivedIds.has(resultMessageId)) {
+                deliveredDelegationResultIdsRef.current.add(resultMessageId);
+              }
+            }
+          } finally {
+            messageRefreshActive = false;
+          }
         })
         .catch(() => undefined);
     };
@@ -4297,7 +4350,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       requestController?.abort();
       clearInterval(timer);
     };
-  }, [hermesApi, rankedTaskObserver, snapshot?.workspace.id, token]);
+  }, [chatConversationController, hermesApi, rankedTaskObserver, snapshot?.workspace.id, tab, token]);
 
   useEffect(() => {
     if (!snapshot || chatGptAccountConnectionView(snapshot).ready || chatGptConnection) return;

@@ -29,6 +29,24 @@ export function mobileDelegatedTaskIsTerminal(state: HermesDelegatedTaskState) {
   return !activeStates.has(state);
 }
 
+export function mobileDelegatedTaskResultMessageIds(
+  tasks: readonly HermesDelegatedTask[],
+  visibleConversationId: string,
+  seenMessageIds: ReadonlySet<string>,
+) {
+  const ids = new Set<string>();
+  for (const task of tasks) {
+    if (
+      task.sourceConversationId === visibleConversationId &&
+      task.resultMessageId &&
+      !seenMessageIds.has(task.resultMessageId)
+    ) {
+      ids.add(task.resultMessageId);
+    }
+  }
+  return [...ids];
+}
+
 export function mobileDelegatedTaskStatusLabel(state: HermesDelegatedTaskState) {
   if (state === "running") return "Working";
   if (state === "human_gate") return "Waiting for you";
