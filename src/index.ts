@@ -705,6 +705,21 @@ const activeRunStatuses = new Set<SharedHomechatRunStatus>([
   "waiting_for_approval",
 ]);
 
+// How often a surface re-opens a dropped event stream before it falls back to
+// polling.
+//
+// Re-opening costs one request and loses nothing: the client sends its cursor
+// as `last-event-id` and the server replays every event after it. Giving up
+// early costs an answer the surface never shows, because the fallback only
+// starts after the last attempt. Two attempts were enough while a run was a
+// few seconds long; a Finance research turn spends up to 150 seconds inside a
+// single tool call and holds the stream open across several of them, which is
+// long enough for a phone to change network more than twice.
+//
+// The cap stays finite so a permanently broken stream still hands over to
+// polling instead of retrying forever.
+const DEFAULT_RUN_STREAM_RECONNECT_ATTEMPTS = 8;
+
 function homechatRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
@@ -2029,7 +2044,7 @@ export function createHomechatRunController<
 
   async function stream(runId: string, options: SharedHomechatStreamOptions = {}): Promise<SharedHomechatStreamResult> {
     if (!transport.streamRun) throw new Error("This transport does not support event streams.");
-    const maxReconnectAttempts = options.maxReconnectAttempts ?? 3;
+    const maxReconnectAttempts = options.maxReconnectAttempts ?? DEFAULT_RUN_STREAM_RECONNECT_ATTEMPTS;
     const reconnectDelayMs = options.reconnectDelayMs ?? defaults.intervalMs ?? 1_600;
     let cursor = options.cursor ?? null;
     let attempt = 0;
@@ -2187,7 +2202,7 @@ export function createHomechatClientController<
       try {
         const streamResult = await runs.stream(run.id, {
           cursor: followOptions.cursor,
-          maxReconnectAttempts: followOptions.maxReconnectAttempts ?? 2,
+          maxReconnectAttempts: followOptions.maxReconnectAttempts ?? DEFAULT_RUN_STREAM_RECONNECT_ATTEMPTS,
           onCursor: followOptions.onCursor,
           onEvent: takeEvent,
           onReconnect: async (attempt, cursor, error) => {

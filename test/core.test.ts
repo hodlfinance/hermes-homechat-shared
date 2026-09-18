@@ -1243,3 +1243,44 @@ test("coordinates permission, recording, and transcription adapters", async () =
   assert.deepEqual(phases, ["idle", "requesting_permission", "recording", "stopping", "transcribing", "idle"]);
   unsubscribe();
 });
+
+test("keeps following a research run past four minutes and survives repeated stream drops", async () => {
+  // A client deadline is not evidence that the server-side run failed. The
+  // 245-second default that used to sit here discarded a run that answered
+  // after 244.45 seconds, although the answer was already stored. A Finance
+  // research turn may spend up to 150 seconds inside a single tool call and
+  // make several, so no fixed client deadline can be right; this pins that no
+  // default one comes back.
+  let clock = 0;
+  const controller = createHomechatRunController(
+    {
+      getRun: async (id) => ({ id, status: clock >= 480_000 ? "completed" : "running" }),
+      stopRun: async (id) => ({ id, status: "cancelled" }),
+    },
+    { now: () => clock, sleep: async (milliseconds) => { clock += milliseconds; }, intervalMs: 1_000 },
+  );
+
+  const run = await controller.wait("run-research");
+  assert.equal(run.status, "completed");
+  assert.ok(clock >= 480_000, "the run must still be followed eight minutes in");
+
+  // Re-opening the stream replays from the cursor, so nothing is lost by
+  // trying again; giving up after two drops lost a finished answer instead.
+  let opens = 0;
+  const streamController = createHomechatRunController(
+    {
+      getRun: async (id) => ({ id, status: "running" }),
+      streamRun: async (id, context) => {
+        opens += 1;
+        if (opens <= 5) throw new Error("network changed");
+        await context.onEvent({ id: "cursor-final", runId: id, type: "run.status", payload: { status: "completed" } });
+        return { cursor: "cursor-final", terminal: true };
+      },
+    },
+    { sleep: async () => undefined },
+  );
+
+  const streamed = await streamController.stream("run-research", { reconnectDelayMs: 0 });
+  assert.equal(streamed.terminal, true);
+  assert.equal(opens, 6);
+});
