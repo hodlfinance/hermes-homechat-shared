@@ -4,9 +4,12 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { AppLocale, ChatArtifactReference } from "../core/index";
 import { useMobilePalette } from "./mobile-palette-context";
 import {
+  messageRepeatsAnswer,
+  mobileCitationSegments,
   mobileFinanceArtifactCard,
   mobileFinanceArtifactTimestamp,
   type MobileFinanceArtifactSource,
+  type MobileFinanceCitation,
 } from "./mobile-finance-artifacts";
 import { mobileMarkdownBlocks, type MobileMarkdownInlineSegment } from "./mobile-markdown";
 import { mobileAssistantLinkSegments } from "./mobile-message-links";
@@ -21,12 +24,16 @@ function safeMessageUrl(value: string): string | null {
 }
 
 function MarkdownInlineText({
+  citations = [],
+  onCitationPress,
   onOpenUrl,
   segments,
   styles,
   variant = "paragraph",
   headingLevel = 2,
 }: {
+  citations?: readonly MobileFinanceCitation[];
+  onCitationPress?: (citation: MobileFinanceCitation) => void;
   onOpenUrl: (url: string) => void;
   segments: MobileMarkdownInlineSegment[];
   styles: ReturnType<typeof createStyles>;
@@ -57,7 +64,20 @@ function MarkdownInlineText({
           const href = link.href ? safeMessageUrl(link.href) : null;
           const emphasis = segment.kind === "bold" || link.kind === "bold";
           if (!href) {
-            return <Text key={`${segmentIndex}-${linkIndex}-${link.text}`} style={emphasis ? styles.boldText : undefined}>{link.text}</Text>;
+            const pieces = onCitationPress ? mobileCitationSegments(link.text, citations) : [{ kind: "text" as const, text: link.text }];
+            return pieces.map((piece, pieceIndex) => piece.kind === "citation" ? (
+              <Text
+                accessibilityLabel={`Source ${piece.citation.number}: ${piece.citation.title}`}
+                accessibilityRole="button"
+                key={`${segmentIndex}-${linkIndex}-${pieceIndex}-${piece.text}`}
+                onPress={() => onCitationPress?.(piece.citation)}
+                style={[emphasis ? styles.boldText : undefined, styles.citation]}
+              >
+                {piece.text}
+              </Text>
+            ) : (
+              <Text key={`${segmentIndex}-${linkIndex}-${pieceIndex}-${piece.text}`} style={emphasis ? styles.boldText : undefined}>{piece.text}</Text>
+            ));
           }
           return (
             <Text
@@ -76,10 +96,14 @@ function MarkdownInlineText({
 }
 
 function MarkdownContent({
+  citations,
+  onCitationPress,
   onOpenUrl,
   styles,
   text,
 }: {
+  citations?: readonly MobileFinanceCitation[];
+  onCitationPress?: (citation: MobileFinanceCitation) => void;
   onOpenUrl: (url: string) => void;
   styles: ReturnType<typeof createStyles>;
   text: string;
@@ -101,6 +125,8 @@ function MarkdownContent({
                   style={[styles.markdownTableCell, rowIndex === 0 && styles.markdownTableHeaderCell, cellIndex > 0 && styles.markdownTableColumnBorder]}
                 >
                   <MarkdownInlineText
+                    citations={citations}
+                    onCitationPress={onCitationPress}
                     onOpenUrl={onOpenUrl}
                     segments={cell}
                     styles={styles}
@@ -113,15 +139,24 @@ function MarkdownContent({
         </View>
       ) : block.kind === "heading" ? (
         <MarkdownInlineText
+          citations={citations}
           headingLevel={block.level}
           key={`heading-${blockIndex}`}
+          onCitationPress={onCitationPress}
           onOpenUrl={onOpenUrl}
           segments={block.segments}
           styles={styles}
           variant="heading"
         />
       ) : (
-        <MarkdownInlineText key={`paragraph-${blockIndex}`} onOpenUrl={onOpenUrl} segments={block.segments} styles={styles} />
+        <MarkdownInlineText
+          citations={citations}
+          key={`paragraph-${blockIndex}`}
+          onCitationPress={onCitationPress}
+          onOpenUrl={onOpenUrl}
+          segments={block.segments}
+          styles={styles}
+        />
       ))}
     </View>
   );
@@ -130,19 +165,26 @@ function MarkdownContent({
 export function FinanceArtifactCard({
   reference,
   locale,
+  messageText,
+  onCitationPress,
   onOpenUrl,
 }: {
   reference: ChatArtifactReference;
   locale: AppLocale;
+  // The chat message this card sits under. When it already is the answer, the
+  // card does not print it again (HPD-808).
+  messageText?: string;
+  onCitationPress?: (citation: MobileFinanceCitation) => void;
   onOpenUrl: (url: string) => void;
 }) {
   const palette = useMobilePalette();
   const styles = createStyles(palette);
   const card = mobileFinanceArtifactCard(reference);
-  const [activeContextTab, setActiveContextTab] = useState<string | null>(() =>
-    card?.contextTabs?.find((tab) => tab.available)?.key ?? null,
-  );
+  // Closed until the reader opens a tab: the answer above owns the space, and
+  // its [n] markers are the way to a single source (HPD-808).
+  const [activeContextTab, setActiveContextTab] = useState<string | null>(null);
   if (!card) return null;
+  const showAnswer = Boolean(card.answerMarkdown) && !messageRepeatsAnswer(messageText, card.answerMarkdown);
   const capturedAt = mobileFinanceArtifactTimestamp(card.capturedAt, locale);
   const contextTabs = card.contextTabs ?? [];
   const selectedContextTab = contextTabs.find((tab) => tab.key === activeContextTab) ?? null;
@@ -174,10 +216,10 @@ export function FinanceArtifactCard({
         </View>
       ) : null}
 
-      {card.answerMarkdown ? (
+      {showAnswer && card.answerMarkdown ? (
         <View style={styles.answer}>
           <Text style={styles.answerTitle}>CapChat answer</Text>
-          <MarkdownContent onOpenUrl={onOpenUrl} styles={styles} text={card.answerMarkdown} />
+          <MarkdownContent citations={card.citations} onCitationPress={onCitationPress} onOpenUrl={onOpenUrl} styles={styles} text={card.answerMarkdown} />
         </View>
       ) : null}
 
@@ -352,6 +394,10 @@ function createStyles(palette: ReturnType<typeof useMobilePalette>) {
     markdownLink: {
       color: palette.teal,
       textDecorationLine: "underline",
+    },
+    citation: {
+      color: palette.teal,
+      fontWeight: "600",
     },
     markdownBlocks: {
       alignSelf: "stretch",

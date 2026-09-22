@@ -7,7 +7,13 @@ import { supportAccessCopy, supportAccessOpenCount } from "../core/support-reque
 import { capabilityCopy, capabilityStatusCopy } from "../core/capability-copy";
 import { MobilePrivacySheet } from "./MobilePrivacySheet";
 import { FinanceArtifactCard } from "./FinanceArtifactCard";
-import { uniqueMobileFinanceArtifactReferences } from "./mobile-finance-artifacts";
+import { FinanceCitationSheet } from "./FinanceCitationSheet";
+import {
+  mobileCitationSegments,
+  mobileFinanceCitations,
+  uniqueMobileFinanceArtifactReferences,
+  type MobileFinanceCitation,
+} from "./mobile-finance-artifacts";
 import { MobileFinanceActionApprovalCard } from "./mobile-finance-action-approval";
 import { workspacePrivacyCopy } from "../ui/workspace-privacy-copy";
 import { openPageStarter, consumePageStarter, pageStarterTranscript, pageStarterPayload, pageStarterAfterNavigation, type PageStarterState } from "../ui/page-starter-state";
@@ -9664,6 +9670,14 @@ function MessageBubble({
   const financeReferences = isUser
     ? []
     : uniqueMobileFinanceArtifactReferences(message.artifactReferences);
+  const citations = financeReferences.length ? mobileFinanceCitations(financeReferences) : [];
+  const [openCitation, setOpenCitation] = useState<MobileFinanceCitation | null>(null);
+  // HPD-808: a reference with text opens over the conversation; one without
+  // text, a plain web result, goes straight to its page.
+  const pressCitation = (citation: MobileFinanceCitation) => {
+    if (citation.text) setOpenCitation(citation);
+    else if (citation.url) void Linking.openURL(citation.url);
+  };
 
   return (
     <View
@@ -9689,15 +9703,29 @@ function MessageBubble({
       ) : null}
       {isUser
         ? <Text style={textStyle} selectable>{message.content}</Text>
-        : <View onLayout={onVisibleTextLayout}><LinkedMessageText text={assistantText} /></View>}
+        : (
+          <View onLayout={onVisibleTextLayout}>
+            <LinkedMessageText citations={citations} onCitationPress={pressCitation} text={assistantText} />
+          </View>
+        )}
       {financeReferences.map((reference) => (
         <FinanceArtifactCard
           key={`${reference.id}:${reference.version}`}
           reference={reference}
           locale={locale}
+          messageText={message.content}
+          onCitationPress={pressCitation}
           onOpenUrl={(url) => void Linking.openURL(url)}
         />
       ))}
+      {openCitation ? (
+        <FinanceCitationSheet
+          citation={openCitation}
+          locale={locale}
+          onClose={() => setOpenCitation(null)}
+          onOpenUrl={(url) => void Linking.openURL(url)}
+        />
+      ) : null}
       {messageTime ? (
         <Text style={[styles.messageTime, isUser && styles.userMessageTime]} accessibilityLabel={`${copy.messageTime} ${messageTime}`}>
           {messageTime}
@@ -9995,10 +10023,14 @@ function assistantSegmentRenderStyle(kind: AssistantMessageSegmentKind) {
 }
 
 function MobileMarkdownInlineText({
+  citations = [],
+  onCitationPress,
   segments,
   variant = "paragraph",
   headingLevel = 2,
 }: {
+  citations?: readonly MobileFinanceCitation[];
+  onCitationPress?: (citation: MobileFinanceCitation) => void;
   segments: MobileMarkdownInlineSegment[];
   variant?: "paragraph" | "heading" | "table_header" | "table_cell";
   headingLevel?: number;
@@ -10033,6 +10065,21 @@ function MobileMarkdownInlineText({
               ? styles.markdownTableBoldText
               : undefined;
           const href = segment.href ? mobileMessageUrl(segment.href) : null;
+          if (!href && onCitationPress && citations.length) {
+            return mobileCitationSegments(segment.text, citations).map((piece, pieceIndex) => piece.kind === "citation" ? (
+              <Text
+                key={`${segmentIndex}-${linkIndex}-${pieceIndex}-${piece.text}`}
+                style={[kindStyle, styles.messageCitation]}
+                accessibilityRole="button"
+                accessibilityLabel={`Source ${piece.citation.number}: ${piece.citation.title}`}
+                onPress={() => onCitationPress(piece.citation)}
+              >
+                {piece.text}
+              </Text>
+            ) : (
+              <Text key={`${segmentIndex}-${linkIndex}-${pieceIndex}-${piece.text}`} style={kindStyle}>{piece.text}</Text>
+            ));
+          }
           if (!href) return <Text key={`${segmentIndex}-${linkIndex}-${segment.text}`} style={kindStyle}>{segment.text}</Text>;
           return (
             <Text
@@ -10050,7 +10097,15 @@ function MobileMarkdownInlineText({
   );
 }
 
-function LinkedMessageText({ text }: { text: string }) {
+function LinkedMessageText({
+  text,
+  citations,
+  onCitationPress,
+}: {
+  text: string;
+  citations?: readonly MobileFinanceCitation[];
+  onCitationPress?: (citation: MobileFinanceCitation) => void;
+}) {
   return (
     <View style={styles.markdownBlocks}>
       {mobileMarkdownBlocks(text).map((block, blockIndex) => block.kind === "code" ? (
@@ -10086,6 +10141,8 @@ function LinkedMessageText({ text }: { text: string }) {
                     ]}
                   >
                     <MobileMarkdownInlineText
+                      citations={citations}
+                      onCitationPress={onCitationPress}
                       segments={cell}
                       variant={rowIndex === 0 ? "table_header" : "table_cell"}
                     />
@@ -10097,13 +10154,20 @@ function LinkedMessageText({ text }: { text: string }) {
         </View>
       ) : block.kind === "heading" ? (
         <MobileMarkdownInlineText
+          citations={citations}
           headingLevel={block.level}
           key={`heading-${blockIndex}`}
+          onCitationPress={onCitationPress}
           segments={block.segments}
           variant="heading"
         />
       ) : (
-        <MobileMarkdownInlineText key={`paragraph-${blockIndex}`} segments={block.segments} />
+        <MobileMarkdownInlineText
+          citations={citations}
+          key={`paragraph-${blockIndex}`}
+          onCitationPress={onCitationPress}
+          segments={block.segments}
+        />
       ))}
     </View>
   );
@@ -13195,6 +13259,10 @@ const styles = StyleSheet.create({
     color: palette.teal,
     fontWeight: "600",
     textDecorationLine: "underline",
+  },
+  messageCitation: {
+    color: palette.teal,
+    fontWeight: "600",
   },
   activityTrail: {
     marginTop: 2,

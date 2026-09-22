@@ -5,6 +5,8 @@ import vm from "node:vm";
 import ts from "typescript";
 import type { ChatArtifactReference } from "../core/index";
 import {
+  messageRepeatsAnswer,
+  mobileCitationSegments,
   mobileFinanceArtifactCard,
   mobileFinanceArtifactTimestamp,
   uniqueMobileFinanceArtifactReferences,
@@ -314,7 +316,7 @@ test("the actual native card mounts and its source link calls the host", () => {
         }) };
       }
       if (name.includes("mobile-finance-artifacts")) {
-        return { mobileFinanceArtifactCard, mobileFinanceArtifactTimestamp };
+        return { messageRepeatsAnswer, mobileCitationSegments, mobileFinanceArtifactCard, mobileFinanceArtifactTimestamp };
       }
       if (name.includes("mobile-markdown")) {
         return { mobileMarkdownBlocks: () => [] };

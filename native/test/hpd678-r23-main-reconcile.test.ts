@@ -14,7 +14,7 @@ test("R23 durable approvals coexist with assistant identity and Finance cards", 
   assert.match(surface, /visibleChatApprovalCards\.map\(\(card\) =>/);
   assert.match(surface, /const firstVisibleAssistantMessageId = host\.presentation\?\.showAssistantIdentity/);
   assert.match(surface, /showAssistantIdentity=\{message\.id === firstVisibleAssistantMessageId\}/);
-  assert.match(messageBubble, /<LinkedMessageText text=\{assistantText\} \/>/);
+  assert.match(messageBubble, /<LinkedMessageText citations=\{citations\} onCitationPress=\{pressCitation\} text=\{assistantText\} \/>/);
   assert.match(messageBubble, /uniqueMobileFinanceArtifactReferences\(message\.artifactReferences\)/);
   assert.match(messageBubble, /<FinanceArtifactCard/);
   assert.match(surface, /<MobileFinanceActionApprovalCard/);
