@@ -28,9 +28,21 @@ export type MobileFinanceArtifactContextTab = {
   sources: MobileFinanceArtifactSource[];
 };
 
+// HPD-808: one numbered reference of a delegated CapChat answer, as the reader
+// meets it when tapping [n] in the answer text.
+export type MobileFinanceCitation = {
+  number: number;
+  title: string;
+  publisher: string | null;
+  publishedAt: string | null;
+  text: string | null;
+  url: string | null;
+};
+
 export type MobileFinanceArtifactCard = {
   answerMarkdown?: string | null;
   capturedAt: string | null;
+  citations?: MobileFinanceCitation[];
   contextTabs?: MobileFinanceArtifactContextTab[];
   message: string | null;
   presentation: string;
@@ -435,6 +447,119 @@ function capChatContextTabs(value: unknown): MobileFinanceArtifactContextTab[] |
   return tabs.length === CAPCHAT_CONTEXT_TAB_ORDER.length ? tabs : null;
 }
 
+const CITATION_TEXT_MAX = 8_000;
+
+// CapChat names the same thing under several keys depending on the source. The
+// reader gets the first one present, and the longest available text, because
+// CapChat's full_text is often only the headline.
+function firstText(source: Record<string, unknown>, keys: readonly string[], max: number): string | null {
+  for (const key of keys) {
+    const value = text(source[key], max);
+    if (value) return value;
+  }
+  return null;
+}
+
+function longestText(source: Record<string, unknown>, keys: readonly string[], max: number): string | null {
+  let best: string | null = null;
+  for (const key of keys) {
+    const value = text(source[key], max);
+    if (value && (!best || value.length > best.length)) best = value;
+  }
+  return best;
+}
+
+function capChatCitations(value: unknown): MobileFinanceCitation[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<number>();
+  return value.slice(0, 200).flatMap((item) => {
+    const source = record(item);
+    const number = source?.source_number;
+    if (!source || typeof number !== "number" || !Number.isSafeInteger(number) || number < 1 || seen.has(number)) {
+      return [];
+    }
+    const title = firstText(source, ["title", "preview_title", "source_name", "name"], 300);
+    const url = safeUrl(source.url) ?? safeUrl(source.article_url) ?? safeUrl(source.link) ??
+      safeUrl(source.source_url) ?? safeUrl(source.web_url);
+    const body = longestText(
+      source,
+      ["full_text", "body", "content", "summary", "excerpt", "snippet", "preview_text"],
+      CITATION_TEXT_MAX,
+    );
+    // A reference needs something to show or somewhere to go; otherwise its
+    // marker stays plain text instead of becoming a dead button.
+    if (!title || (!body && !url)) return [];
+    seen.add(number);
+    return [{
+      number,
+      title,
+      publisher: firstText(source, ["publisher", "source_firm", "publication", "publication_name", "source_name", "outlet"], 160),
+      publishedAt: timestamp(source.published_at) ?? timestamp(source.timestamp),
+      text: body && body !== title ? body : null,
+      url,
+    }];
+  });
+}
+
+export type MobileCitationSegment =
+  | { kind: "text"; text: string }
+  | { kind: "citation"; citation: MobileFinanceCitation; text: string };
+
+// Splits answer text at CapChat's markers — [3] or [2, 3] — into plain text and
+// tappable references. The pieces join back to exactly the text that came in:
+// nothing is rewritten, added or dropped. A marker with a number no reference
+// carries stays plain text, and a markdown link [label](url) is never a marker.
+export function mobileCitationSegments(
+  value: string,
+  citations: readonly MobileFinanceCitation[],
+): MobileCitationSegment[] {
+  if (!citations.length || !value.includes("[")) return [{ kind: "text", text: value }];
+  const byNumber = new Map(citations.map((citation) => [citation.number, citation]));
+  const segments: MobileCitationSegment[] = [];
+  const pushText = (text: string) => {
+    if (!text) return;
+    const last = segments[segments.length - 1];
+    if (last?.kind === "text") last.text += text;
+    else segments.push({ kind: "text", text });
+  };
+  const marker = /\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\](?!\()/g;
+  let cursor = 0;
+  for (const match of value.matchAll(marker)) {
+    const inner = match[1] ?? "";
+    const numbers = inner.split(",").map((part) => Number(part.trim()));
+    if (numbers.some((number) => !byNumber.has(number))) continue;
+    const start = match.index ?? 0;
+    pushText(value.slice(cursor, start));
+    if (numbers.length === 1) {
+      // One number: the whole [n] is the tap target, as in CapChat.
+      segments.push({ kind: "citation", citation: byNumber.get(numbers[0]!)!, text: match[0] });
+    } else {
+      pushText("[");
+      let innerCursor = 0;
+      for (const digits of inner.matchAll(/\d{1,3}/g)) {
+        const digitsStart = digits.index ?? 0;
+        pushText(inner.slice(innerCursor, digitsStart));
+        segments.push({ kind: "citation", citation: byNumber.get(Number(digits[0]))!, text: digits[0] });
+        innerCursor = digitsStart + digits[0].length;
+      }
+      pushText(`${inner.slice(innerCursor)}]`);
+    }
+    cursor = start + match[0].length;
+  }
+  pushText(value.slice(cursor));
+  return segments;
+}
+
+// True when the chat message already carries this answer — since HPD-809 the
+// message is CapChat's text word for word — so the card below must not print
+// it a second time.
+export function messageRepeatsAnswer(message: string | null | undefined, answer: string | null | undefined): boolean {
+  if (!message || !answer) return false;
+  const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
+  const normalizedAnswer = normalize(answer);
+  return normalizedAnswer.length > 0 && normalize(message).includes(normalizedAnswer);
+}
+
 function capChatContextCard(
   reference: ChatArtifactReference,
   payload: Record<string, unknown>,
@@ -451,6 +576,7 @@ function capChatContextCard(
   return {
     answerMarkdown,
     capturedAt: timestamp(payload.capturedAt),
+    citations: capChatCitations(payload.references),
     contextTabs: tabs,
     message: null,
     presentation: "capchat_context_card",
@@ -603,6 +729,28 @@ export function mobileFinanceArtifactTimestamp(value: string | null, locale: str
   if (!value) return null;
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? date.toLocaleString(locale) : null;
+}
+
+export function mobileFinanceCitationDate(value: string | null, locale: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? date.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" })
+    : null;
+}
+
+// Every numbered reference the message's Fin Hermes cards carry. A number is
+// taken once, from the first card that has it.
+export function mobileFinanceCitations(
+  references: readonly ChatArtifactReference[] | null | undefined,
+): MobileFinanceCitation[] {
+  const byNumber = new Map<number, MobileFinanceCitation>();
+  for (const reference of references ?? []) {
+    for (const citation of mobileFinanceArtifactCard(reference)?.citations ?? []) {
+      if (!byNumber.has(citation.number)) byNumber.set(citation.number, citation);
+    }
+  }
+  return [...byNumber.values()];
 }
 
 export function mobileFinanceArtifactCard(reference: ChatArtifactReference): MobileFinanceArtifactCard | null {
