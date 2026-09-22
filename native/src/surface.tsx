@@ -6041,9 +6041,27 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
 
   async function submitMobileConfirmation(card: ApprovalCard, decision: "approved" | "denied", typedConfirmation?: string) {
     const runId = card.runId;
-    if (!runId || card.conversationSessionId !== activeConversationSessionIdRef.current) return;
-    if (chatRunStatusesById[runId] !== "waiting_for_approval") return;
-    if (!confirmationDecisionGate.claim(runId)) return;
+    if (!runId || card.conversationSessionId !== activeConversationSessionIdRef.current) {
+      recordDiagnostic("info", "Hermes approval for another conversation", `card ${card.id}`);
+      setChatSessionNotice(userFacingError("This approval belongs to another conversation. Refreshing."));
+      if (activeConversationSessionIdRef.current) {
+        await loadMobileChatSession(activeConversationSessionIdRef.current, { force: true, preserveDraft: true }).catch(() => false);
+      }
+      return;
+    }
+    if (chatRunStatusesById[runId] !== "waiting_for_approval") {
+      recordDiagnostic("info", "Hermes approval not open", `run ${runId} is ${chatRunStatusesById[runId] ?? "unknown"}`);
+      setChatSessionNotice(userFacingError("This approval is no longer open. Refreshing the conversation."));
+      const refreshSessionId = activeConversationSessionIdRef.current || card.conversationSessionId;
+      if (refreshSessionId) {
+        await loadMobileChatSession(refreshSessionId, { force: true, preserveDraft: true }).catch(() => false);
+      }
+      return;
+    }
+    if (!confirmationDecisionGate.claim(runId)) {
+      setChatSessionNotice(userFacingError("Your previous decision is still being sent."));
+      return;
+    }
     setConfirmationDecisionRuns((current) => ({ ...current, [runId]: true }));
     try {
       await api.decideApproval(card.id, { decision, ...(typedConfirmation ? { typedConfirmation } : {}) });
@@ -6073,8 +6091,19 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   }
 
   async function submitMobileClarify(runId: string, clarify: ChatClarifyRequest, response: string) {
-    if (chatRunStatusesById[runId] !== "waiting_for_approval" || !response.trim()) return;
-    if (!confirmationDecisionGate.claim(runId)) return;
+    if (!response.trim()) return;
+    if (chatRunStatusesById[runId] !== "waiting_for_approval") {
+      recordDiagnostic("info", "Hermes clarification not open", `run ${runId} is ${chatRunStatusesById[runId] ?? "unknown"}`);
+      setChatSessionNotice(userFacingError("This question is no longer open. Refreshing the conversation."));
+      if (activeConversationSessionIdRef.current) {
+        await loadMobileChatSession(activeConversationSessionIdRef.current, { force: true, preserveDraft: true }).catch(() => false);
+      }
+      return;
+    }
+    if (!confirmationDecisionGate.claim(runId)) {
+      setChatSessionNotice(userFacingError("Your previous answer is still being sent."));
+      return;
+    }
     setConfirmationDecisionRuns((current) => ({ ...current, [runId]: true }));
     try {
       await api.resolveChatClarify(runId, { clarifyId: clarify.id, response: response.trim() });
@@ -9713,7 +9742,7 @@ function MobileChatApprovalCard({
           autoCapitalize="characters"
           autoCorrect={false}
           editable={!pending && !expired}
-          style={styles.input}
+          style={[styles.input, styles.cardInput]}
           accessibilityLabel={`Type ${card.requiresTypedConfirmation} to approve`}
         />
       ) : null}
@@ -9757,6 +9786,11 @@ function MobileChatClarifyCard({
     <View style={[styles.message, styles.assistantMessage]} accessibilityRole="summary">
       <Text style={styles.rowTitle}>Hermes needs one detail</Text>
       <Text style={styles.muted}>{clarify.question}</Text>
+      {expired ? (
+        <Text style={styles.muted} accessibilityRole="alert">This question has expired. Type your answer in the message field instead.</Text>
+      ) : pending ? (
+        <Text style={styles.muted} accessibilityRole="alert">Sending your answer…</Text>
+      ) : null}
       <View style={styles.confirmationActions} accessibilityLabel="Clarification choices">
         {clarify.choices.map((choice) => (
           <Pressable
@@ -9778,7 +9812,7 @@ function MobileChatClarifyCard({
             onChangeText={setOther}
             placeholder="Other answer"
             editable={!pending && !expired}
-            style={styles.input}
+            style={[styles.input, styles.cardInput]}
             accessibilityLabel="Other answer"
           />
           <Pressable
@@ -9793,7 +9827,6 @@ function MobileChatClarifyCard({
           </Pressable>
         </>
       ) : null}
-      {expired ? <Text style={styles.muted}>This question has expired.</Text> : null}
     </View>
   );
 }
@@ -13593,6 +13626,14 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.45,
+  },
+  // HPD-807: styles.input carries `flex: 1` for a field inside a row (the chat
+  // composer). Inside a card, which is a column, that grows the field over the
+  // whole remaining height and pushes every control below it off screen.
+  cardInput: {
+    flex: 0,
+    flexGrow: 0,
+    alignSelf: "stretch",
   },
   primaryButtonWide: {
     minHeight: 44,
