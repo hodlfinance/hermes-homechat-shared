@@ -11,6 +11,7 @@ import {
   mobileFinanceArtifactTimestamp,
   mobileFinanceCitationDate,
   mobileFinanceCitations,
+  mobileFinanceMessageCarriesAnswer,
   type MobileFinanceCitation,
 } from "../src/mobile-finance-artifacts";
 
@@ -246,6 +247,7 @@ function loadNative(file: string, markdown: boolean) {
           mobileFinanceArtifactCard,
           mobileFinanceArtifactTimestamp,
           mobileFinanceCitationDate,
+          mobileFinanceMessageCarriesAnswer,
         };
       }
       if (name.includes("mobile-markdown")) {
@@ -270,8 +272,10 @@ test("the card does not repeat an answer the message already shows, and starts c
 
   const repeated = nodes(FinanceArtifactCard({ reference, locale: "en", messageText: ANSWER, onOpenUrl: () => {} }));
   assert.equal(repeated.some((node) => node.type === "Text" && textOf(node) === "CapChat answer"), false);
-  // Closed: the tab buttons are there, no tab's details are.
-  assert.equal(repeated.filter((node) => node.type === "Pressable" && node.props.accessibilityRole === "button").length, 3);
+  // Closed: since the 2026-09-23 device finding the card under such a message
+  // is one sources row, no tabs and no tab details (hpd808-card-no-duplicate).
+  const buttons = repeated.filter((node) => node.type === "Pressable" && node.props.accessibilityRole === "button");
+  assert.deepEqual(buttons.map((node) => node.props.accessibilityLabel), [`Sources (${REFERENCES.length})`]);
   assert.equal(repeated.some((node) => String(node.props.accessibilityLabel ?? "").endsWith(" details")), false);
   assert.equal(
     repeated.some((node) => node.type === "Pressable" && (node.props.accessibilityState as { expanded?: boolean })?.expanded),

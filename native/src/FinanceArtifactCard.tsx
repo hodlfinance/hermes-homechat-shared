@@ -8,6 +8,7 @@ import {
   mobileCitationSegments,
   mobileFinanceArtifactCard,
   mobileFinanceArtifactTimestamp,
+  mobileFinanceMessageCarriesAnswer,
   type MobileFinanceArtifactSource,
   type MobileFinanceCitation,
 } from "./mobile-finance-artifacts";
@@ -202,6 +203,48 @@ export function FinanceArtifactCard({
   // its [n] markers are the way to a single source (HPD-808).
   const [activeContextTab, setActiveContextTab] = useState<string | null>(null);
   if (!card) return null;
+  if (mobileFinanceMessageCarriesAnswer(messageText, card)) {
+    // HPD-808: the message above is the answer and carries the references.
+    // What is left is one small row that opens the source titles and links.
+    if (!card.sources.length) return null;
+    const open = activeContextTab === "sources";
+    const label = `${locale === "de" ? "Quellen" : "Sources"} (${card.sources.length})`;
+    return (
+      <View style={styles.compact}>
+        <Pressable
+          accessibilityLabel={label}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: open }}
+          onPress={() => setActiveContextTab(open ? null : "sources")}
+          style={styles.compactToggle}
+        >
+          <FileText size={14} color={palette.muted} />
+          <Text style={styles.compactLabel}>{label}</Text>
+          <ChevronDown color={palette.muted} size={13} style={open ? styles.chevronOpen : undefined} />
+        </Pressable>
+        {open ? (
+          <View style={styles.compactList}>
+            {card.sources.map((source, sourceIndex) => source.url ? (
+              <Pressable
+                accessibilityLabel={`Open source ${source.label}`}
+                accessibilityRole="link"
+                key={`${source.label}:${sourceIndex}`}
+                onPress={() => onOpenUrl(source.url!)}
+                style={styles.sourceLink}
+              >
+                <Text numberOfLines={2} style={styles.sourceLabel}>{source.label}</Text>
+                <ExternalLink color={palette.teal} size={13} />
+              </Pressable>
+            ) : (
+              <Text key={`${source.label}:${sourceIndex}`} numberOfLines={2} style={[styles.sourceLabel, styles.sourceLabelPlain, styles.compactPlain]}>
+                {source.label}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    );
+  }
   const showAnswer = Boolean(card.answerMarkdown) && !messageRepeatsAnswer(messageText, card.answerMarkdown);
   const capturedAt = mobileFinanceArtifactTimestamp(card.capturedAt, locale);
   const contextTabs = card.contextTabs ?? [];
@@ -360,6 +403,33 @@ function createStyles(palette: ReturnType<typeof useMobilePalette>) {
       marginTop: 4,
       overflow: "hidden",
       padding: 12,
+    },
+    compact: {
+      alignSelf: "stretch",
+      marginTop: 2,
+    },
+    compactToggle: {
+      alignItems: "center",
+      alignSelf: "flex-start",
+      flexDirection: "row",
+      gap: 5,
+      minHeight: 32,
+      paddingVertical: 4,
+    },
+    compactLabel: {
+      color: palette.muted,
+      fontSize: 13,
+      fontWeight: "600",
+      lineHeight: 18,
+    },
+    compactList: {
+      borderLeftColor: palette.line,
+      borderLeftWidth: 2,
+      gap: 2,
+      paddingLeft: 9,
+    },
+    compactPlain: {
+      paddingVertical: 5,
     },
     header: {
       alignItems: "flex-start",
