@@ -332,5 +332,5 @@ test("the chat message marks its references and opens text in the sheet, a bare 
   assert.match(inline, /mobileCitationSegments\(segment\.text, citations\)/);
   assert.match(inline, /onPress=\{\(\) => onCitationPress\(piece\.citation\)\}/);
   const linked = surface.slice(surface.indexOf("function LinkedMessageText("), surface.indexOf("function PendingAssistantMessage("));
-  assert.equal(linked.match(/citations=\{citations\}/g)?.length, 3);
+  assert.equal(linked.match(/citations=\{citations\}/g)?.length, 4); // table cell, list item, heading, paragraph
 });

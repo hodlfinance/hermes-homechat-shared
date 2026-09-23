@@ -12,6 +12,9 @@ const routes: ReadonlyArray<readonly [string, RegExp]> = [
   ["DELETE", /^\/bookmarks\/[^/]+$/],
   ["GET", /^\/hermes\/(?:conversations(?:\/[^/]+(?:\/messages)?)?|runs(?:\/[^/]+(?:\/events)?)?|jobs(?:\/[^/]+(?:\/history)?)?|delegated-tasks(?:\/[^/]+)?)$/],
   ["POST", /^\/hermes\/(?:conversations|runs|runs\/[^/]+\/(?:stop|latency)|jobs|jobs\/[^/]+\/(?:pause|resume|run))$/],
+  // HPD-807: the answer to a clarify question. Without it the HODL transport
+  // refused the tap on the phone and the run stayed blocked on its question.
+  ["POST", /^\/chat-runs\/[^/]+\/clarify$/],
   ["PATCH", /^\/hermes\/(?:conversations|jobs)\/[^/]+$/],
   ["DELETE", /^\/hermes\/jobs\/[^/]+$/],
   ["POST", /^\/voice\/(?:transcriptions|speech)$/],
