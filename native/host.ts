@@ -159,6 +159,12 @@ export type NativeR8Host = {
     accountLabel?: string;
     appLocale?: AppLocale;
     centerChatTitle?: boolean;
+    /**
+     * HPD-837: the host's own support glyph. When set, a support button sits in
+     * the chat header left of the privacy lock, drawn in the muted header grey,
+     * and opens the Hermes support screen.
+     */
+    chatHeaderSupportIcon?: ComponentType<{ size: number; color: string }>;
     chatTitle?: string;
     hideChatSubtitle?: boolean;
     hideDrawerPreferences?: boolean;
