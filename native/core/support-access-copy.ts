@@ -263,6 +263,12 @@ export function supportAccessCopy(locale: AppLocale) { return catalog[locale]; }
 const oneOpen: Partial<Record<AppLocale, string>> = { fr: "{count} ouvert", es: "{count} abierto", it: "{count} aperto", "pt-BR": "{count} aberto" };
 export function supportAccessOpenCount(locale: AppLocale, count: number): string {
   const copy = supportAccessCopy(locale);
-  const template = new Intl.PluralRules(locale).select(count) === "one" ? oneOpen[locale] ?? copy.openCount : copy.openCount;
+  // HPD-838: the Hermes engine in React Native 0.77 (HODL) has no
+  // Intl.PluralRules; calling it crashed the app whenever a support grant was
+  // open. Every caller passes a count of 1 or more, so "one" is count === 1.
+  const one = typeof Intl.PluralRules === "function"
+    ? new Intl.PluralRules(locale).select(count) === "one"
+    : count === 1;
+  const template = one ? oneOpen[locale] ?? copy.openCount : copy.openCount;
   return template.replace("{count}", count.toLocaleString(locale));
 }
