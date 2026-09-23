@@ -185,3 +185,43 @@ test("the surface shows Fin suggestions only when the host asks for them", () =>
   assert.match(surface, /if \(!finSuggestionsLoaded\) return;/);
   assert.match(surface, /updateFinSuggestionsState\(markFinSuggestionCardShown\(finSuggestionsState, picked, now\)\)/);
 });
+
+test("the card's automation count reaches the Fin server through the HODL allow-list (GET /hermes/jobs)", async () => {
+  const { permitsHodlNativeR8Request } = await import("../policy");
+  const { createNativeR8Transport } = await import("../transport");
+  const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  // The surface reads the count from the canonical client, not from the
+  // account API's /workspace/automations, which HODL does not permit.
+  assert.match(surface, /const hermesApi = useMemo\(\s+\(\) => createMobileHermesCanonicalClient\(/);
+  assert.match(surface, /void hermesApi\.automations\(\)/);
+  assert.equal(permitsHodlNativeR8Request("GET", "/workspace/automations"), false);
+
+  const baseUrl = "https://finhermes.test/api";
+  const requests: string[] = [];
+  const transport = createNativeR8Transport({
+    baseUrl,
+    identity: { surface: "finhermes", channel: "hodl_mobile", allowedSurfaces: ["finhermes"] },
+    // The same gate HODL's nativeR8Transport applies before any network call.
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      const path = url.pathname.slice(new URL(baseUrl).pathname.length);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (!permitsHodlNativeR8Request(method, path)) throw new Error(`refused ${method} ${path}`);
+      requests.push(`${method} ${path}`);
+      const job = (id: string) => ({
+        id, name: `Job ${id}`, prompt: "Daily report", schedule: { kind: "cron", expression: "0 7 * * *", display: "0 7 * * *" },
+        enabled: true, state: "scheduled", deliver: "home", nextRunAt: null, lastRunAt: null, lastStatus: null,
+        createdAt: "2026-09-23T07:00:00.000Z", updatedAt: "2026-09-23T07:00:00.000Z",
+      });
+      return new Response(JSON.stringify({ contractVersion: 1, jobs: [job("a1"), job("b2")] }), {
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const hermes = transport.createCanonicalClient({ baseUrl, token: "test-session" });
+
+  const view = await hermes.automations();
+
+  assert.deepEqual(requests, ["GET /hermes/jobs"]);
+  assert.equal(view.jobs.length, 2);
+});
