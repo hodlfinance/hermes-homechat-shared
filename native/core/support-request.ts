@@ -159,6 +159,17 @@ function isContextFailureReason(value: unknown): value is SupportContextFailureR
   return typeof value === "string" && supportContextFailureReasons.has(value as SupportContextFailureReason);
 }
 
+/**
+ * HPD-837: accounts created by social or magic-link sign-in, and managed
+ * product runtimes, carry an internal placeholder address on a reserved domain
+ * until a real contact address is known. Such an address is never a reply
+ * channel; the form asks the customer instead.
+ */
+export function supportReplyDisplayIsPlaceholder(display: string) {
+  const domain = display.trim().toLowerCase().split("@").pop() ?? "";
+  return /(?:^|\.)(?:local|localhost|invalid|test|example)$/u.test(domain) || /(?:^|\.)hey-hermes\.local$/u.test(domain);
+}
+
 export function normalizeSupportSignedInProjection(value: unknown): SupportSignedInProjection | null {
   if (!isRecord(value) || !hasOnlyKeys(value, ["accountDisplay", "replyChannel"])) return null;
 
@@ -175,7 +186,10 @@ export function normalizeSupportSignedInProjection(value: unknown): SupportSigne
   if (replyChannel.kind === "verified_product_email") {
     if (!hasOnlyKeys(replyChannel, ["kind", "display"])) return null;
     const display = normalizedDisplay(replyChannel.display, 160);
-    return display ? { accountDisplay, replyChannel: { kind: "verified_product_email", display } } : null;
+    if (!display) return null;
+    return supportReplyDisplayIsPlaceholder(display)
+      ? { accountDisplay, replyChannel: { kind: "reply_email_required" } }
+      : { accountDisplay, replyChannel: { kind: "verified_product_email", display } };
   }
   return null;
 }

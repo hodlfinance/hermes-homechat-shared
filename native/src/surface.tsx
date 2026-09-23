@@ -2160,26 +2160,31 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       if (pluginCatalogRequestRef.current === requestId) setPluginCatalogBusy(false);
     }
   }, [api, systemPageCopy.plugins.loadError]);
+  // HPD-837: support mail names version and build, e.g. "9.37 (47)".
+  const supportAppVersion = [
+    Constants.nativeAppVersion || Constants.expoConfig?.version || "unknown",
+    Constants.nativeBuildVersion ? `(${Constants.nativeBuildVersion})` : null,
+  ].filter(Boolean).join(" ");
   const supportRequestClient = useMemo(
     () => createSupportRequestClient({
-      appVersion: Constants.nativeAppVersion || Constants.expoConfig?.version || "unknown",
+      appVersion: supportAppVersion,
       baseUrl: API_BASE,
       createIdempotencyKey: () => `hhsr_${Crypto.randomUUID().replace(/-/g, "")}`,
       locale: appLocale,
       platform: Platform.OS === "android" ? "android" : Platform.OS === "web" ? "web" : "ios",
       token: token || "missing",
     }),
-    [appLocale, token],
+    [appLocale, supportAppVersion, token],
   );
   const anonymousSupportRequestClient = useMemo(
     () => createAnonymousSupportRequestClient({
-      appVersion: Constants.nativeAppVersion || Constants.expoConfig?.version || "unknown",
+      appVersion: supportAppVersion,
       baseUrl: API_BASE,
       createIdempotencyKey: () => `hhsr_${Crypto.randomUUID().replace(/-/g, "")}`,
       locale: appLocale,
       platform: Platform.OS === "android" ? "android" : Platform.OS === "web" ? "web" : "ios",
     }),
-    [appLocale],
+    [appLocale, supportAppVersion],
   );
   const googleClientId = nativeAuthConfig?.providers.google?.clientId;
   const googleAuthHookClientId = googleClientId ?? GOOGLE_AUTH_CONFIG_PENDING_CLIENT_ID;
@@ -7219,6 +7224,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   }, [token, snapshot?.workspace.id, navigationRequest?.requestId]);
 
   const presentedChatTitle = host.presentation?.chatTitle || mobileScreenTitle(tab, settingsSection, t);
+  const ChatHeaderSupportIcon = host.presentation?.chatHeaderSupportIcon;
   const presentedAccountLabel = host.presentation?.accountLabel?.trim()
     || snapshot?.me.email
     || snapshot?.me.name
@@ -7843,6 +7849,17 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
             </Text>
           ) : null}
         </View>
+        {tab === "chat" && ChatHeaderSupportIcon && activeSubthreadHeader.kind !== "subthread" ? (
+          // HPD-837: the host's support glyph, grey like the lock, left of it.
+          <Pressable
+            style={({ pressed }) => [styles.mobilePrivacyButton, pressed && styles.systemRowPressed]}
+            onPress={() => selectMobileScreen("support")}
+            accessibilityRole="button"
+            accessibilityLabel={t.nav.support}
+          >
+            <ChatHeaderSupportIcon size={24} color={palette.muted} />
+          </Pressable>
+        ) : null}
         {tab === "chat" ? (
           <Pressable
             style={({ pressed }) => [styles.mobilePrivacyButton, pressed && styles.systemRowPressed]}
