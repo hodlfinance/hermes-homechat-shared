@@ -291,7 +291,7 @@ export function FinanceArtifactCard({
                       <Text style={styles.sourceLabel}>{source.label}</Text>
                       <ExternalLink color={palette.teal} size={14} />
                     </Pressable>
-                  ) : <Text style={styles.sourceLabel}>{source.label}</Text>}
+                  ) : <Text style={[styles.sourceLabel, styles.sourceLabelPlain]}>{source.label}</Text>}
                   {source.detail ? <Text style={styles.sourceDetail}>{source.detail}</Text> : null}
                   {source.warnings.map((warning, warningIndex) => (
                     <Text key={`${warning}:${warningIndex}`} style={styles.warningText}>{warning}</Text>
@@ -334,7 +334,7 @@ export function FinanceArtifactCard({
                   <ExternalLink size={14} color={palette.teal} />
                 </Pressable>
               ) : (
-                <Text style={styles.sourceLabel}>{source.label}</Text>
+                <Text style={[styles.sourceLabel, styles.sourceLabelPlain]}>{source.label}</Text>
               )}
               {source.detail ? <Text style={styles.sourceDetail}>{source.detail}</Text> : null}
               {source.warnings.map((warning, warningIndex) => (
@@ -653,6 +653,8 @@ function createStyles(palette: ReturnType<typeof useMobilePalette>) {
       gap: 6,
       minHeight: 28,
     },
+    // HPD-808: a source without a link must not look like one.
+    sourceLabelPlain: { color: palette.ink },
     sourceLabel: {
       color: palette.teal,
       flexShrink: 1,
