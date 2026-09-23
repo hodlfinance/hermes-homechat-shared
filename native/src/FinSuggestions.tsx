@@ -10,7 +10,7 @@ import {
   type FinSuggestionsDeviceState,
 } from "./fin-suggestions-state";
 
-// HPD-606, visible part: the Suggestions page and the chat carousel for Fin
+// HPD-606, visible part: the Suggestions page and the Home Chat card for Fin
 // Hermes inside HODL. English only, like the rest of Fin Hermes.
 
 const FORM_LABEL: Record<FinHermesSuggestionForm, string> = {
@@ -78,16 +78,23 @@ export function FinSuggestionsPage({
   );
 }
 
-export function FinSuggestionCarousel({
+/**
+ * The Home Chat card, pinned under the chat header and outside the transcript.
+ * X closes it for today; "Later" and "Don't show again" are the customer's
+ * standing choices; "All suggestions" opens the full page.
+ */
+export function FinSuggestionCard({
   suggestions,
   onOpen,
-  onRemove,
+  onClose,
+  onSeeAll,
   onLater,
   onNever,
 }: {
   suggestions: readonly FinHermesSuggestion[];
   onOpen: (suggestion: FinHermesSuggestion) => void;
-  onRemove: (suggestion: FinHermesSuggestion) => void;
+  onClose: () => void;
+  onSeeAll: () => void;
   onLater: () => void;
   onNever: () => void;
 }) {
@@ -104,15 +111,18 @@ export function FinSuggestionCarousel({
         {suggestions.length > 1 ? (
           <Text style={styles.carouselCount}>{`${position + 1} of ${suggestions.length}`}</Text>
         ) : null}
-        <Pressable accessibilityRole="button" accessibilityLabel="Remove this suggestion" onPress={() => onRemove(current)} style={styles.iconButton}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close suggestions" onPress={onClose} style={styles.iconButton}>
           <X size={16} color={palette.muted} />
         </Pressable>
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel={`Start: ${current.title}`} onPress={() => onOpen(current)} style={styles.carouselBody}>
         <Text style={styles.cardTitle}>{current.title}</Text>
-        <Text numberOfLines={3} style={styles.cardPromise}>{current.promise}</Text>
+        <Text numberOfLines={2} style={styles.cardPromise}>{current.promise}</Text>
       </Pressable>
       <View style={styles.carouselFooter}>
+        <Pressable accessibilityRole="button" onPress={onSeeAll} style={styles.linkButton}>
+          <Text style={styles.linkAccent}>All suggestions</Text>
+        </Pressable>
         <Pressable accessibilityRole="button" onPress={onLater} style={styles.linkButton}>
           <Text style={styles.linkText}>Later</Text>
         </Pressable>
@@ -180,8 +190,9 @@ function createStyles(palette: MobilePalette) {
       borderColor: palette.line,
       borderRadius: 14,
       borderWidth: 1,
-      gap: 6,
-      marginBottom: 12,
+      gap: 4,
+      marginHorizontal: 12,
+      marginTop: 8,
       padding: 12,
     },
     carouselHeader: { alignItems: "center", flexDirection: "row", gap: 8 },
@@ -191,6 +202,7 @@ function createStyles(palette: MobilePalette) {
     carouselFooter: { alignItems: "center", flexDirection: "row", gap: 12 },
     linkButton: { minHeight: 32, justifyContent: "center" },
     linkText: { color: palette.muted, fontSize: 13 },
+    linkAccent: { color: palette.teal, fontSize: 13, fontWeight: "600" },
     iconButton: { alignItems: "center", justifyContent: "center", minHeight: 32, minWidth: 32 },
     flexOne: { flex: 1 },
   });
