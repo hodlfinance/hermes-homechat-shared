@@ -227,7 +227,8 @@ function safeUrl(value: unknown): string | null {
   const candidate = text(value, 2_048)?.trim();
   if (!candidate) return null;
   const match = SAFE_HTTPS_URL.exec(candidate);
-  if (!match || match[1].startsWith(".") || match[1].includes("..")) return null;
+  const host = match?.[1];
+  if (!match || !host || host.startsWith(".") || host.includes("..")) return null;
   const rest = match[2] ?? "/";
   const queryAt = rest.indexOf("?");
   const path = queryAt < 0 ? rest : rest.slice(0, queryAt);
@@ -235,7 +236,7 @@ function safeUrl(value: unknown): string | null {
     const name = pair.split("=")[0] ?? "";
     return name.length > 0 && !SENSITIVE_QUERY_NAME.test(name);
   });
-  return `https://${match[1].toLowerCase()}${path || "/"}${kept.length ? `?${kept.join("&")}` : ""}`;
+  return `https://${host.toLowerCase()}${path || "/"}${kept.length ? `?${kept.join("&")}` : ""}`;
 }
 
 function normalizedKey(value: string): string {

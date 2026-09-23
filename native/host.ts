@@ -1,5 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
-import type { ImageSourcePropType, StyleProp, ViewStyle } from "react-native";
+import type { ColorValue, ImageSourcePropType, StyleProp, ViewStyle } from "react-native";
 import type { createApiClient, ApiClientOptions, AppLocale, ChatLatencySummary, FirstConversationSnapshot } from "./core/index";
 import type { GuidedSetupState, GuidedSetupConnectionId, GuidedSetupConnectionChoice } from "./core/guided-setup";
 import type { createSupportRequestClient, createAnonymousSupportRequestClient } from "./core/support-request";
@@ -164,7 +164,8 @@ export type NativeR8Host = {
      * the chat header left of the privacy lock, drawn in the muted header grey,
      * and opens the Hermes support screen.
      */
-    chatHeaderSupportIcon?: ComponentType<{ size: number; color: string }>;
+    // The palette's grey is a dynamic iOS colour, not a plain string.
+    chatHeaderSupportIcon?: ComponentType<{ size: number; color: ColorValue }>;
     chatTitle?: string;
     hideChatSubtitle?: boolean;
     hideDrawerPreferences?: boolean;

@@ -48,7 +48,7 @@ test("the host can put a grey support button left of the chat-header lock that o
   assert.match(supportButton, /color=\{palette\.muted\}/);
   assert.match(supportButton, /accessibilityLabel=\{t\.nav\.support\}/);
   assert.match(surface, /const ChatHeaderSupportIcon = host\.presentation\?\.chatHeaderSupportIcon/);
-  assert.match(host, /chatHeaderSupportIcon\?: ComponentType<\{ size: number; color: string \}>/);
+  assert.match(host, /chatHeaderSupportIcon\?: ComponentType<\{ size: number; color: ColorValue \}>/);
 });
 
 test("support requests carry the build number next to the app version", () => {
