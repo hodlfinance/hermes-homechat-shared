@@ -21,6 +21,7 @@ import { pageStarterCopy } from "../ui/page-starter-copy";
 import { MobilePageMenuRow } from "./mobile-page-menu-row";
 import { emailMagicLinkTokenFromUrl, solveEmailMagicLinkAbuseChallenge } from "./mobile-email-magic-link";
 import { pageMenuRemovalCopy } from "../ui/page-menu-copy";
+import { subscribeKeyboardInsetRelease } from "./mobile-keyboard-inset";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AccessibilityInfo,
@@ -1533,6 +1534,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const keyboardVerticalOffset = Number.isFinite(host.presentation?.keyboardVerticalOffset)
     ? Math.max(0, host.presentation?.keyboardVerticalOffset ?? 0)
     : 8;
+  // HPD-846: the chat composer returns to the tab bar when the keyboard hides.
+  const chatKeyboardAvoidingRef = useRef<KeyboardAvoidingView | null>(null);
+  useEffect(() => subscribeKeyboardInsetRelease(
+    { os: Platform.OS, keyboard: Keyboard, appState: AppState },
+    () => chatKeyboardAvoidingRef.current,
+  ), []);
   const [token, setToken] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null);
   const [productAccessRefreshing, setProductAccessRefreshing] = useState(false);
@@ -7969,6 +7976,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
 
       {tab === "chat" ? (
         <KeyboardAvoidingView
+          ref={chatKeyboardAvoidingRef}
           style={styles.chatKeyboard}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           keyboardVerticalOffset={keyboardVerticalOffset}
