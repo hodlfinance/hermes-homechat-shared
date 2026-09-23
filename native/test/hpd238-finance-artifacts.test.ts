@@ -6,6 +6,7 @@ import ts from "typescript";
 import type { ChatArtifactReference } from "../core/index";
 import {
   messageRepeatsAnswer,
+  mobileFinanceMessageCarriesAnswer,
   mobileCitationSegments,
   mobileFinanceArtifactCard,
   mobileFinanceArtifactTimestamp,
@@ -316,7 +317,7 @@ test("the actual native card mounts and its source link calls the host", () => {
         }) };
       }
       if (name.includes("mobile-finance-artifacts")) {
-        return { messageRepeatsAnswer, mobileCitationSegments, mobileFinanceArtifactCard, mobileFinanceArtifactTimestamp };
+        return { messageRepeatsAnswer, mobileCitationSegments, mobileFinanceArtifactCard, mobileFinanceArtifactTimestamp, mobileFinanceMessageCarriesAnswer };
       }
       if (name.includes("mobile-markdown")) {
         return { mobileMarkdownBlocks: () => [] };

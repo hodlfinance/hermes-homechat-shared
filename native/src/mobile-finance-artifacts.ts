@@ -570,6 +570,23 @@ export function messageRepeatsAnswer(message: string | null | undefined, answer:
   return normalizedAnswer.length > 0 && normalize(message).includes(normalizedAnswer);
 }
 
+// True when the chat message above a CapChat card already is the answer: either
+// CapChat's text word for word (HPD-809), or a message that carries at least one
+// [n] reference this card can resolve. The second case is a background research
+// the main agent wrote up in its own words (HPD-808, 2026-09-23 13:39): the
+// reader already has the answer and its tappable references, so the card only
+// offers the source list and never prints the answer a second time.
+export function mobileFinanceMessageCarriesAnswer(
+  message: string | null | undefined,
+  card: MobileFinanceArtifactCard | null | undefined,
+): boolean {
+  if (!message || !card?.answerMarkdown) return false;
+  if (messageRepeatsAnswer(message, card.answerMarkdown)) return true;
+  const citations = card.citations ?? [];
+  return citations.length > 0 &&
+    mobileCitationSegments(message, citations).some((segment) => segment.kind === "citation");
+}
+
 function capChatContextCard(
   reference: ChatArtifactReference,
   payload: Record<string, unknown>,
