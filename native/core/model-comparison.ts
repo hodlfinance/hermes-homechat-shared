@@ -19,14 +19,16 @@ export function modelComparisonCopy(locale: AppLocale) {
 export function modelComparisonPresentation(model: CuratedModelTruthItem, locale: AppLocale) {
   const c = modelComparisonCopy(locale);
   const comparison = model.defaultComparison;
-  const number = (value: ModelFactValue | undefined, digits: number) =>
+  // HPD-836: a price factor always shows two decimals, as Justus' decision
+  // writes it ("1,00×", "38,10×"); percentages stay whole.
+  const number = (value: ModelFactValue | undefined, digits: number, minimumDigits = 0) =>
     typeof value === "number" && Number.isFinite(value) && value >= 0
-      ? new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value) : null;
+      ? new Intl.NumberFormat(locale, { minimumFractionDigits: minimumDigits, maximumFractionDigits: digits }).format(value) : null;
   const percent = (value: ModelFactValue | undefined) => {
     const formatted = number(value, 0);
     return formatted === null ? c.unknown : `${formatted}%`;
   };
-  const factor = number(comparison?.estimatedPriceFactor, 2);
+  const factor = number(comparison?.estimatedPriceFactor, 2, 2);
   return {
     summary: `${c.intelligence}${comparison?.intelligenceEstimated ? "*" : ""} ${percent(comparison?.intelligencePercent)} · ${c.speed} ${percent(comparison?.speedPercent)} · ${c.price} ${factor === null ? c.unknown : `${c.approximate} ${factor}×`}`,
     details: `${model.quality.sourceName} ${model.quality.retrievedAt} · ${model.cost.sourceName} ${model.cost.retrievedAt}${model.slot === "gemini" ? `\n${c.versionChange} ${model.modelName}` : ""}`,
