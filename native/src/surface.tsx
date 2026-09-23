@@ -313,13 +313,15 @@ import { mobileAssistantLinkSegments } from "./mobile-message-links";
 import { mobileMarkdownBlocks, type MobileMarkdownInlineSegment } from "./mobile-markdown";
 import { mobileBlockingRunId } from "./mobile-stop-target";
 import { FinSuggestionCarousel, FinSuggestionsPage } from "./FinSuggestions";
-import { FINHERMES_SUGGESTIONS, finHermesSuggestionDraft, type FinHermesSuggestion } from "../core/finhermes-suggestions";
+import { FINHERMES_SUGGESTIONS, finHermesSuggestionDraft, finHermesSuggestionWasSent, type FinHermesSuggestion } from "../core/finhermes-suggestions";
 import {
   applyFinCarouselPreference,
   applyFinSuggestionAction,
   emptyFinSuggestionsState,
   finCarouselQualification,
   finCarouselSuggestions,
+  finLockedCarouselSuggestions,
+  markFinSuggestionsShown,
   parseFinSuggestionsState,
   serializeFinSuggestionsState,
   type FinSuggestionAction,
@@ -1564,6 +1566,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [input, setInput] = useState(initialDraft);
   const finSuggestionsEnabled = host.presentation?.finSuggestions === true;
   const [finSuggestionsState, setFinSuggestionsState] = useState<FinSuggestionsDeviceState>(emptyFinSuggestionsState);
+  // Nothing is written before the stored states are read, so an early write
+  // can never replace them with an empty set.
+  const [finSuggestionsLoaded, setFinSuggestionsLoaded] = useState(false);
+  // The carousel picks its suggestions once per app session and keeps them;
+  // all of them get the cooldown when it first shows (HPD-606).
+  const [finCarouselIds, setFinCarouselIds] = useState<string[] | null>(null);
+  // Set by a tap; "tried" is recorded only when that opener is actually sent.
+  const pendingFinSuggestionRef = useRef<FinHermesSuggestion | null>(null);
   const inputRef = useRef(input);
   inputRef.current = input;
   const [accountName, setAccountName] = useState("");
@@ -4231,7 +4241,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     if (finSuggestionsEnabled) {
       void readStoredString(finSuggestionsStorageKey).then((stored) => {
         if (active) setFinSuggestionsState(parseFinSuggestionsState(stored));
-      }).catch(() => undefined);
+      }).catch(() => undefined).finally(() => {
+        if (active) setFinSuggestionsLoaded(true);
+      });
     }
 
     readStoredToken()
@@ -5950,6 +5962,17 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     setInput("");
     setPendingAttachments([]);
     const result = await runSend(outboundMessage, "text", undefined, attachments);
+    const pendingSuggestion = pendingFinSuggestionRef.current;
+    if (pendingSuggestion && result !== "ignored") {
+      pendingFinSuggestionRef.current = null;
+      if (finHermesSuggestionWasSent(pendingSuggestion, message)) {
+        setFinSuggestionsState((current) => {
+          const next = applyFinSuggestionAction(current, pendingSuggestion.id, "tried");
+          if (finSuggestionsLoaded) void persistStoredString(finSuggestionsStorageKey, serializeFinSuggestionsState(next)).catch(() => undefined);
+          return next;
+        });
+      }
+    }
     if (result === "ignored") {
       if (pageWorkspaceRef.current === snapshot.workspace.id && pageEntryTokenRef.current === token && pageTabRef.current === "chat" && activeConversationSessionIdRef.current === activeConversationSessionId) {
         pageStarterRef.current = consumedPageStarter;
@@ -6395,10 +6418,28 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     return { productId: "hey", accountId: snapshot.me.id, workspaceId: snapshot.workspace.id } as const;
   }
 
+  // HPD-606: the first time the Home Chat is idle and the customer qualifies,
+  // the carousel picks its suggestions for this app session and records all of
+  // them as shown, which starts their cooldown.
+  useEffect(() => {
+    if (!finSuggestionsEnabled || !finSuggestionsLoaded || finCarouselIds !== null) return;
+    if (tab !== "chat" || activeChatRunId || busy) return;
+    if (chatSessions.find((session) => session.id === activeConversationSessionId)?.role !== "home") return;
+    const now = new Date();
+    const lastAnswerAt = [...messages].reverse().find((message) => message.role === "assistant")?.createdAt ?? null;
+    const qualification = finCarouselQualification(finSuggestionsState, { now, lastCompletedAnswerAt: lastAnswerAt });
+    if (!(qualification === "new_user" && messages.length === 0 || qualification === "rare_user")) return;
+    const picked = finCarouselSuggestions(finSuggestionsState, FINHERMES_SUGGESTIONS, now).map((suggestion) => suggestion.id);
+    if (!picked.length) return;
+    setFinCarouselIds(picked);
+    updateFinSuggestionsState(markFinSuggestionsShown(finSuggestionsState, picked, now));
+  }, [finSuggestionsEnabled, finSuggestionsLoaded, finCarouselIds, tab, activeChatRunId, busy, chatSessions, activeConversationSessionId, messages, finSuggestionsState]);
+
   // HPD-606: every change is kept on the device right away; a failed write keeps
   // the change for this session.
   function updateFinSuggestionsState(next: FinSuggestionsDeviceState) {
     setFinSuggestionsState(next);
+    if (!finSuggestionsLoaded) return;
     void persistStoredString(finSuggestionsStorageKey, serializeFinSuggestionsState(next)).catch(() => undefined);
   }
 
@@ -6407,7 +6448,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   }
 
   function startFinSuggestion(suggestion: FinHermesSuggestion) {
-    updateFinSuggestionsState(applyFinSuggestionAction(finSuggestionsState, suggestion.id, "tried"));
+    pendingFinSuggestionRef.current = suggestion;
     setInput(finHermesSuggestionDraft(suggestion));
     selectMobileScreen("chat");
   }
@@ -7691,9 +7732,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const finCarouselQualified = finSuggestionsEnabled && isHomeChatActive && !activeChatRunId && !busy
     ? finCarouselQualification(finSuggestionsState, { now: new Date(), lastCompletedAnswerAt })
     : "active_user";
-  const finCarousel = finCarouselQualified === "new_user" && messages.length === 0
-    || finCarouselQualified === "rare_user"
-    ? finCarouselSuggestions(finSuggestionsState, FINHERMES_SUGGESTIONS)
+  const finCarouselEligible = finSuggestionsLoaded && (finCarouselQualified === "new_user" && messages.length === 0
+    || finCarouselQualified === "rare_user");
+  const finCarousel = finCarouselEligible && finCarouselIds
+    ? finLockedCarouselSuggestions(finSuggestionsState, FINHERMES_SUGGESTIONS, finCarouselIds)
     : [];
   const recommendedConnection = guidedSetupState?.recommendedConnection ?? null;
   const showGmailRecommendationCard = Boolean(
