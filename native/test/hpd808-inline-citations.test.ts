@@ -118,9 +118,11 @@ test("each numbered CapChat reference becomes a citation with what the reader ne
     publisher: "nvidia.com",
     publishedAt: null,
     text: null,
-    url: "https://investor.nvidia.com/news",
+    // Justus, 2026-09-23: keep the query; article pages often need it.
+    url: "https://investor.nvidia.com/news?utm_source=capchat",
   });
-  assert.doesNotMatch(JSON.stringify(card.citations), /hidden|utm_source/);
+  // Credential-like parameters are dropped; ordinary ones such as utm_source stay.
+  assert.doesNotMatch(JSON.stringify(card.citations), /hidden/);
 });
 
 test("the longest text a reference carries is the one shown", () => {

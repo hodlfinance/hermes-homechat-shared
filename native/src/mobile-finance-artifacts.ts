@@ -212,20 +212,30 @@ function timestamp(value: unknown): string | null {
   return candidate && Number.isFinite(Date.parse(candidate)) ? candidate : null;
 }
 
+// HPD-808 (Build 45, Justus 2026-09-23): source headlines in the CapChat card
+// looked like links and did nothing. React Native's URL class (HODL host,
+// RN 0.77, no URL polyfill) throws "URL.protocol is not implemented", so the
+// old `new URL()` check returned null for every source and the card drew plain
+// text without a press target. This parses without URL: https only, userinfo
+// and fragment dropped, path and query kept (article pages often need them).
+const SAFE_HTTPS_URL = /^https:\/\/(?:[^\s/?#@]*@)?([A-Za-z0-9.-]+(?::\d{1,5})?)([/?][^\s#]*)?(?:#[^\s]*)?$/i;
+
+// A query parameter whose name suggests a credential never leaves the card.
+const SENSITIVE_QUERY_NAME = /token|key|secret|sig|auth|pass|session|sid|code|credential/i;
+
 function safeUrl(value: unknown): string | null {
-  const candidate = text(value, 2_048);
+  const candidate = text(value, 2_048)?.trim();
   if (!candidate) return null;
-  try {
-    const parsed = new URL(candidate);
-    if (parsed.protocol !== "https:") return null;
-    parsed.username = "";
-    parsed.password = "";
-    parsed.search = "";
-    parsed.hash = "";
-    return parsed.toString();
-  } catch {
-    return null;
-  }
+  const match = SAFE_HTTPS_URL.exec(candidate);
+  if (!match || match[1].startsWith(".") || match[1].includes("..")) return null;
+  const rest = match[2] ?? "/";
+  const queryAt = rest.indexOf("?");
+  const path = queryAt < 0 ? rest : rest.slice(0, queryAt);
+  const kept = queryAt < 0 ? [] : rest.slice(queryAt + 1).split("&").filter((pair) => {
+    const name = pair.split("=")[0] ?? "";
+    return name.length > 0 && !SENSITIVE_QUERY_NAME.test(name);
+  });
+  return `https://${match[1].toLowerCase()}${path || "/"}${kept.length ? `?${kept.join("&")}` : ""}`;
 }
 
 function normalizedKey(value: string): string {
