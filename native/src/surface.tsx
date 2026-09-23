@@ -70,6 +70,7 @@ import {
   LogOut,
   Lock,
   LockKeyhole,
+  Lightbulb,
   Mail,
   Menu,
   MessageSquare,
@@ -311,6 +312,19 @@ import {
 import { mobileAssistantLinkSegments } from "./mobile-message-links";
 import { mobileMarkdownBlocks, type MobileMarkdownInlineSegment } from "./mobile-markdown";
 import { mobileBlockingRunId } from "./mobile-stop-target";
+import { FinSuggestionCarousel, FinSuggestionsPage } from "./FinSuggestions";
+import { FINHERMES_SUGGESTIONS, finHermesSuggestionDraft, type FinHermesSuggestion } from "../core/finhermes-suggestions";
+import {
+  applyFinCarouselPreference,
+  applyFinSuggestionAction,
+  emptyFinSuggestionsState,
+  finCarouselQualification,
+  finCarouselSuggestions,
+  parseFinSuggestionsState,
+  serializeFinSuggestionsState,
+  type FinSuggestionAction,
+  type FinSuggestionsDeviceState,
+} from "./fin-suggestions-state";
 import {
   mobileMessagesForFailedRunNotice,
   mobileRunOwnsEvent,
@@ -681,6 +695,8 @@ const tokenStorageKey = "hey_hermes_alpha_token";
 const legacyTokenStorageKey = "hermes_alpha_token";
 const chatGptConnectionStorageKey = `${host.storageNamespace}_chatgpt_connection`;
 const appearancePreferenceStorageKey = `${host.storageNamespace}_appearance`;
+// HPD-606: Fin suggestion states stay on the device until Release 35.
+const finSuggestionsStorageKey = `${host.storageNamespace}_fin_suggestions_v1`;
 // Comfortably inside the server's native-auth challenge lifetime, so an open
 // sign-in screen always holds a challenge the server will still accept.
 const nativeAuthChallengeRefreshMs = 5 * 60_000;
@@ -1546,6 +1562,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   const [googleDeletionChallenge, setGoogleDeletionChallenge] = useState<{ expiresAt: string; id: string; nonce: string } | null>(null);
   const [googleDeletionChallengeVersion, setGoogleDeletionChallengeVersion] = useState(0);
   const [input, setInput] = useState(initialDraft);
+  const finSuggestionsEnabled = host.presentation?.finSuggestions === true;
+  const [finSuggestionsState, setFinSuggestionsState] = useState<FinSuggestionsDeviceState>(emptyFinSuggestionsState);
   const inputRef = useRef(input);
   inputRef.current = input;
   const [accountName, setAccountName] = useState("");
@@ -4210,6 +4228,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       if (!active || (stored !== "system" && stored !== "light" && stored !== "dark")) return;
       setAppearancePreference(stored);
     });
+    if (finSuggestionsEnabled) {
+      void readStoredString(finSuggestionsStorageKey).then((stored) => {
+        if (active) setFinSuggestionsState(parseFinSuggestionsState(stored));
+      }).catch(() => undefined);
+    }
 
     readStoredToken()
       .then(({ token: savedToken }) => {
@@ -6372,6 +6395,27 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     return { productId: "hey", accountId: snapshot.me.id, workspaceId: snapshot.workspace.id } as const;
   }
 
+  // HPD-606: every change is kept on the device right away; a failed write keeps
+  // the change for this session.
+  function updateFinSuggestionsState(next: FinSuggestionsDeviceState) {
+    setFinSuggestionsState(next);
+    void persistStoredString(finSuggestionsStorageKey, serializeFinSuggestionsState(next)).catch(() => undefined);
+  }
+
+  function changeFinSuggestion(suggestion: FinHermesSuggestion, action: FinSuggestionAction) {
+    updateFinSuggestionsState(applyFinSuggestionAction(finSuggestionsState, suggestion.id, action));
+  }
+
+  function startFinSuggestion(suggestion: FinHermesSuggestion) {
+    updateFinSuggestionsState(applyFinSuggestionAction(finSuggestionsState, suggestion.id, "tried"));
+    setInput(finHermesSuggestionDraft(suggestion));
+    selectMobileScreen("chat");
+  }
+
+  function changeFinCarouselPreference(preference: "later" | "never") {
+    updateFinSuggestionsState(applyFinCarouselPreference(finSuggestionsState, preference, new Date()));
+  }
+
   async function openHeySuggestion(suggestion: HeySuggestionView) {
     setHeySuggestionBusyId(suggestion.id);
     setHeySuggestionNotice(null);
@@ -7186,6 +7230,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           appearancePreference={appearancePreference}
           onAppearanceChange={updateAppearancePreference}
           onOpenTasks={() => selectMobileScreen("tasks")}
+          onOpenSuggestions={finSuggestionsEnabled ? () => selectMobileScreen("suggestions") : undefined}
           showConnectGmail={false}
           onConnectGmail={() => undefined}
           onOpenAutomations={() => selectMobileScreen("automations")}
@@ -7638,6 +7683,18 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   });
   const activeChatSession = chatSessions.find((session) => session.id === activeConversationSessionId) ?? null;
   const isHomeChatActive = tab === "chat" && activeChatSession?.role === "home";
+  // HPD-606: the carousel shows only in the Home Chat, never while a run is
+  // active, to a new customer in an empty chat or to a rare one (no answer for
+  // 72 hours). Fin has one Home Chat and no "new chat", so the rare customer
+  // sees it at the top of that chat.
+  const lastCompletedAnswerAt = [...messages].reverse().find((message) => message.role === "assistant")?.createdAt ?? null;
+  const finCarouselQualified = finSuggestionsEnabled && isHomeChatActive && !activeChatRunId && !busy
+    ? finCarouselQualification(finSuggestionsState, { now: new Date(), lastCompletedAnswerAt })
+    : "active_user";
+  const finCarousel = finCarouselQualified === "new_user" && messages.length === 0
+    || finCarouselQualified === "rare_user"
+    ? finCarouselSuggestions(finSuggestionsState, FINHERMES_SUGGESTIONS)
+    : [];
   const recommendedConnection = guidedSetupState?.recommendedConnection ?? null;
   const showGmailRecommendationCard = Boolean(
     host.policy.preinstalledEmailScanner &&
@@ -7846,6 +7903,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           appearancePreference={appearancePreference}
           onAppearanceChange={updateAppearancePreference}
           onOpenTasks={() => selectMobileScreen("tasks")}
+          onOpenSuggestions={finSuggestionsEnabled ? () => selectMobileScreen("suggestions") : undefined}
           showConnectGmail={showConnectGmailMenuEntry}
           onConnectGmail={openGmailRecommendation}
           onOpenAutomations={() => selectMobileScreen("automations")}
@@ -8061,6 +8119,17 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                   }
                 />
               ))}
+              {/* HPD-606: after the newest message, where the Home Chat opens, so
+                  a returning customer sees it without scrolling up. */}
+              {finCarousel.length ? (
+                <FinSuggestionCarousel
+                  suggestions={finCarousel}
+                  onOpen={startFinSuggestion}
+                  onRemove={(suggestion) => changeFinSuggestion(suggestion, "removed")}
+                  onLater={() => changeFinCarouselPreference("later")}
+                  onNever={() => changeFinCarouselPreference("never")}
+                />
+              ) : null}
               {visibleChatApprovalCards.map((card) => (
                 <MobileChatApprovalCard
                   key={card.id}
@@ -8376,7 +8445,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           </View>
         )}
 
-        {tab === "suggestions" && (
+        {tab === "suggestions" && finSuggestionsEnabled ? (
+          <FinSuggestionsPage
+            catalog={FINHERMES_SUGGESTIONS}
+            state={finSuggestionsState}
+            onStart={startFinSuggestion}
+            onAction={changeFinSuggestion}
+          />
+        ) : null}
+        {tab === "suggestions" && !finSuggestionsEnabled && (
           <View style={styles.stack}>
             <View style={styles.panel}>
               <Text style={styles.title}>{staticUiCopy(appLocale)["Suggestions"]}</Text>
@@ -9247,6 +9324,7 @@ function MobileNavigationDrawer({
   onRemoveBookmark,
   onNewPage,
   onOpenTasks,
+  onOpenSuggestions,
   showConnectGmail,
   onConnectGmail,
   onOpenAutomations,
@@ -9283,6 +9361,7 @@ function MobileNavigationDrawer({
   onRemoveBookmark: (entry: MobileRemovableNavigationEntry) => Promise<void>;
   onNewPage: () => void;
   onOpenTasks: () => void;
+  onOpenSuggestions?: () => void;
   showConnectGmail: boolean;
   onConnectGmail: () => void;
   onOpenAutomations: () => void;
@@ -9343,6 +9422,16 @@ function MobileNavigationDrawer({
               />
             );
           })}
+          {onOpenSuggestions ? (
+            <MobileSystemRow
+              accessibilityState={{ selected: tab === "suggestions" }}
+              icon={<Lightbulb size={18} color={tab === "suggestions" ? palette.teal : palette.text} />}
+              label="Suggestions"
+              onPress={onOpenSuggestions}
+              selectedIndicator
+              separator={false}
+            />
+          ) : null}
           {showConnectGmail ? (
             <MobileSystemRow
               icon={<Mail size={18} color={palette.teal} />}

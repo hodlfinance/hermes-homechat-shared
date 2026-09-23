@@ -162,6 +162,8 @@ export type NativeR8Host = {
     chatTitle?: string;
     hideChatSubtitle?: boolean;
     hideDrawerPreferences?: boolean;
+    /** HPD-606: Fin Hermes suggestions page, drawer entry and chat carousel. */
+    finSuggestions?: boolean;
     keyboardVerticalOffset?: number;
     openingMode?: "brand" | "chat";
     openingStatus?: string;
