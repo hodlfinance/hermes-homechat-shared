@@ -11,12 +11,14 @@ import {
   applyFinCarouselPreference,
   applyFinSuggestionAction,
   emptyFinSuggestionsState,
-  finCarouselQualification,
   finCarouselSuggestions,
   finLockedCarouselSuggestions,
+  finSuggestionCardQualification,
   finSuggestionEntryState,
+  finSuggestionLocalDay,
   FIN_CAROUSEL_COOLDOWN_MS,
   FIN_CAROUSEL_SNOOZE_MS,
+  markFinSuggestionCardShown,
   markFinSuggestionsShown,
   parseFinSuggestionsState,
   serializeFinSuggestionsState,
@@ -88,22 +90,32 @@ test("tried, running, removed and restored follow the spec", () => {
   assert.deepEqual(core(finSuggestionEntryState(state, "signal_lab")), { progress: "untouched", removed: false });
 });
 
-test("the carousel target rule: never, later, new, rare, active — in that order", () => {
-  const now = new Date("2026-09-25T08:00:00.000Z");
+test("the Home Chat card rule (Justus, 23.09.): never, later, once a day, fewer than two automations", () => {
+  const now = new Date(2026, 8, 25, 8, 0, 0);
   const fresh = emptyFinSuggestionsState();
-  assert.equal(finCarouselQualification(fresh, { now, lastCompletedAnswerAt: null }), "new_user");
-  const triedOnce = applyFinSuggestionAction(fresh, "war_room", "tried");
-  assert.equal(finCarouselQualification(triedOnce, { now, lastCompletedAnswerAt: "2026-09-25T07:00:00.000Z" }), "active_user");
-  assert.equal(finCarouselQualification(triedOnce, { now, lastCompletedAnswerAt: "2026-09-22T08:00:00.000Z" }), "rare_user");
-  assert.equal(finCarouselQualification(triedOnce, { now, lastCompletedAnswerAt: null }), "rare_user");
-  const later = applyFinCarouselPreference(triedOnce, "later", now);
-  assert.equal(finCarouselQualification(later, { now, lastCompletedAnswerAt: null }), "carousel_snoozed");
+  assert.equal(finSuggestionCardQualification(fresh, { now, automationCount: null }), "automations_unknown");
+  assert.equal(finSuggestionCardQualification(fresh, { now, automationCount: 0 }), "show");
+  assert.equal(finSuggestionCardQualification(fresh, { now, automationCount: 1 }), "show");
+  assert.equal(finSuggestionCardQualification(fresh, { now, automationCount: 2 }), "enough_automations");
+  // Once a day: shown this morning, not again tonight; again tomorrow.
+  const shown = markFinSuggestionCardShown(fresh, ["second_opinion"], now);
+  assert.equal(shown.cardShownOn, finSuggestionLocalDay(now));
+  assert.equal(finSuggestionCardQualification(shown, { now: new Date(2026, 8, 25, 23, 30), automationCount: 0 }), "shown_today");
+  assert.equal(finSuggestionCardQualification(shown, { now: new Date(2026, 8, 26, 7, 0), automationCount: 0 }), "show");
+  assert.equal(finSuggestionEntryState(shown, "second_opinion").shownAt, now.toISOString());
+  // Later: seven days; Never: for good; both win over the automation count.
+  const later = applyFinCarouselPreference(fresh, "later", now);
+  assert.equal(finSuggestionCardQualification(later, { now: new Date(2026, 9, 1, 8, 0), automationCount: 0 }), "card_snoozed");
   const afterSnooze = new Date(now.getTime() + FIN_CAROUSEL_SNOOZE_MS + 1);
-  assert.equal(finCarouselQualification(later, { now: afterSnooze, lastCompletedAnswerAt: null }), "rare_user");
+  assert.equal(finSuggestionCardQualification(later, { now: afterSnooze, automationCount: 0 }), "show");
   const never = applyFinCarouselPreference(later, "never", now);
-  assert.equal(finCarouselQualification(never, { now: afterSnooze, lastCompletedAnswerAt: null }), "carousel_disabled");
-  const enabled = applyFinCarouselPreference(never, "enable", now);
-  assert.equal(finCarouselQualification(enabled, { now, lastCompletedAnswerAt: null }), "rare_user");
+  assert.equal(finSuggestionCardQualification(never, { now: afterSnooze, automationCount: 0 }), "card_disabled");
+  // The day survives a restart; a malformed day is ignored.
+  assert.equal(parseFinSuggestionsState(serializeFinSuggestionsState(shown)).cardShownOn, shown.cardShownOn);
+  assert.equal(parseFinSuggestionsState(JSON.stringify({ ...shown, cardShownOn: "yesterday" })).cardShownOn, null);
+  // A Build 46 state without the field reads as never shown.
+  const { cardShownOn: _dropped, ...build46 } = shown;
+  assert.equal(parseFinSuggestionsState(JSON.stringify(build46)).cardShownOn, null);
 });
 
 test("the carousel shows up to three untouched, not removed suggestions in pool order", () => {
@@ -148,8 +160,17 @@ test("the surface shows Fin suggestions only when the host asks for them", () =>
   assert.match(surface, /onOpenSuggestions=\{finSuggestionsEnabled \? \(\) => selectMobileScreen\("suggestions"\) : undefined\}/);
   assert.match(surface, /\{tab === "suggestions" && finSuggestionsEnabled \? \(\s+<FinSuggestionsPage/);
   assert.match(surface, /\{tab === "suggestions" && !finSuggestionsEnabled && \(/);
-  // The carousel: Home Chat only, never while a run is active.
-  assert.match(surface, /finSuggestionsEnabled && isHomeChatActive && !activeChatRunId && !busy/);
+  // The card: Home Chat only, first shown while idle, pinned under the header
+  // and outside the transcript; the transcript carries no suggestions.
+  assert.match(surface, /if \(tab !== "chat" \|\| activeChatRunId \|\| busy\) return;/);
+  assert.match(surface, /finSuggestionsEnabled && finSuggestionsLoaded && isHomeChatActive && !finCardClosed && finCarouselIds/);
+  assert.match(surface, /<View style=\{styles\.chatScreen\}>\s+\{\/\* HPD-606: pinned under the header, not part of the transcript\. \*\/\}\s+\{finCard\.length \? \(\s+<FinSuggestionCard/);
+  assert.doesNotMatch(surface, /FinSuggestionCarousel/);
+  const transcript = surface.slice(surface.indexOf("{visibleMobileMessages.map((message) => ("), surface.indexOf("{showScrollDown ? ("));
+  assert.doesNotMatch(transcript, /FinSuggestion|finCard/);
+  // The automation count is read, never guessed; the card opens the full page.
+  assert.match(surface, /hermesApi\.automations\(\)\s+\.then\(\(view\) => setFinAutomationCount\(view\.jobs\.length\)\)/);
+  assert.match(surface, /onSeeAll=\{\(\) => selectMobileScreen\("suggestions"\)\}/);
   // A tap fills the composer and opens the chat; it sends nothing and marks nothing.
   const start = surface.slice(surface.indexOf("function startFinSuggestion("), surface.indexOf("function changeFinCarouselPreference("));
   assert.match(start, /pendingFinSuggestionRef\.current = suggestion/);
@@ -162,5 +183,5 @@ test("the surface shows Fin suggestions only when the host asks for them", () =>
   assert.match(send, /applyFinSuggestionAction\(current, pendingSuggestion\.id, "tried"\)/);
   // Nothing is written before the stored states are read.
   assert.match(surface, /if \(!finSuggestionsLoaded\) return;/);
-  assert.match(surface, /updateFinSuggestionsState\(markFinSuggestionsShown\(finSuggestionsState, picked, now\)\)/);
+  assert.match(surface, /updateFinSuggestionsState\(markFinSuggestionCardShown\(finSuggestionsState, picked, now\)\)/);
 });

@@ -7,6 +7,12 @@ import type { FinHermesSuggestion } from "../core/finhermes-suggestions";
 // off as running), "removed", and a cooldown for every suggestion the carousel
 // showed; per customer "Later" (seven days) and "Don't show again". Nothing
 // here creates anything; a tap only fills the composer.
+//
+// Placement, Justus 2026-09-23 after Build 46: the left menu's Suggestions page
+// is the main path. The Home Chat shows a dismissible card pinned under its
+// header, outside the transcript, only while the customer has fewer than two
+// automations and at most once a day. "Later" hides it for seven days, "Don't
+// show again" for good. The earlier carousel inside the transcript is gone.
 
 export type FinSuggestionProgress = "untouched" | "tried" | "completed";
 
@@ -22,21 +28,24 @@ export type FinSuggestionsDeviceState = Readonly<{
   entries: Readonly<Record<string, FinSuggestionEntryState>>;
   carouselSnoozedUntil: string | null;
   carouselDisabled: boolean;
+  /** The device-local day (YYYY-MM-DD) the Home Chat card was last shown. */
+  cardShownOn: string | null;
 }>;
 
 export type FinSuggestionAction = "tried" | "completed" | "removed" | "restored";
 
-export type FinCarouselQualification =
-  | "new_user"
-  | "rare_user"
-  | "active_user"
-  | "carousel_snoozed"
-  | "carousel_disabled";
+export type FinSuggestionCardQualification =
+  | "card_disabled"
+  | "card_snoozed"
+  | "shown_today"
+  | "automations_unknown"
+  | "enough_automations"
+  | "show";
 
 export const FIN_SUGGESTIONS_STORAGE_VERSION = 1;
 export const FIN_CAROUSEL_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
-/** No successful Fin Hermes answer for 72 hours or more counts as a rare user. */
-export const FIN_RARE_USER_THRESHOLD_MS = 72 * 60 * 60 * 1000;
+/** The Home Chat card is for customers with fewer automations than this. */
+export const FIN_CARD_AUTOMATION_LIMIT = 2;
 export const FIN_CAROUSEL_SIZE = 3;
 /** A suggestion the carousel showed does not come back to it for 14 days. */
 export const FIN_CAROUSEL_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
@@ -44,7 +53,9 @@ export const FIN_CAROUSEL_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
 const UNTOUCHED: FinSuggestionEntryState = Object.freeze({ progress: "untouched", removed: false });
 
 export function emptyFinSuggestionsState(): FinSuggestionsDeviceState {
-  return Object.freeze({ version: 1, entries: Object.freeze({}), carouselSnoozedUntil: null, carouselDisabled: false });
+  return Object.freeze({
+    version: 1, entries: Object.freeze({}), carouselSnoozedUntil: null, carouselDisabled: false, cardShownOn: null,
+  });
 }
 
 /** Reads what the device stored; anything malformed counts as a fresh start, never as an error. */
@@ -78,6 +89,9 @@ export function parseFinSuggestionsState(raw: string | null | undefined): FinSug
     entries: Object.freeze(entries),
     carouselSnoozedUntil: snoozed,
     carouselDisabled: record.carouselDisabled === true,
+    cardShownOn: typeof record.cardShownOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(record.cardShownOn)
+      ? record.cardShownOn
+      : null,
   });
 }
 
@@ -116,22 +130,36 @@ export function applyFinCarouselPreference(
   return Object.freeze({ ...state, carouselDisabled: false, carouselSnoozedUntil: null });
 }
 
+/** The device-local calendar day, so "once a day" follows the customer's clock. */
+export function finSuggestionLocalDay(now: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 /**
- * The spec's target rule, in its order: "Don't show again", then "Later", then
- * a customer who never tried a suggestion is new, then one without a
- * successful answer for 72 hours (or ever) is rare; everyone else is active.
+ * Whether the Home Chat card may appear, in this order: "Don't show again",
+ * "Later" (seven days), already shown today, then the automation count, which
+ * must be known and below two.
  */
-export function finCarouselQualification(
+export function finSuggestionCardQualification(
   state: FinSuggestionsDeviceState,
-  input: { now: Date; lastCompletedAnswerAt: string | null },
-): FinCarouselQualification {
-  if (state.carouselDisabled) return "carousel_disabled";
-  if (state.carouselSnoozedUntil && Date.parse(state.carouselSnoozedUntil) > input.now.getTime()) return "carousel_snoozed";
-  const everTried = Object.values(state.entries).some((entry) => entry.progress !== "untouched");
-  if (!everTried) return "new_user";
-  const last = input.lastCompletedAnswerAt ? Date.parse(input.lastCompletedAnswerAt) : NaN;
-  if (!Number.isFinite(last) || input.now.getTime() - last >= FIN_RARE_USER_THRESHOLD_MS) return "rare_user";
-  return "active_user";
+  input: { now: Date; automationCount: number | null },
+): FinSuggestionCardQualification {
+  if (state.carouselDisabled) return "card_disabled";
+  if (state.carouselSnoozedUntil && Date.parse(state.carouselSnoozedUntil) > input.now.getTime()) return "card_snoozed";
+  if (state.cardShownOn === finSuggestionLocalDay(input.now)) return "shown_today";
+  if (input.automationCount === null || !Number.isFinite(input.automationCount)) return "automations_unknown";
+  if (input.automationCount >= FIN_CARD_AUTOMATION_LIMIT) return "enough_automations";
+  return "show";
+}
+
+/** Records today's card: its suggestions get the cooldown and the day is used up. */
+export function markFinSuggestionCardShown(
+  state: FinSuggestionsDeviceState,
+  ids: readonly string[],
+  now: Date,
+): FinSuggestionsDeviceState {
+  return Object.freeze({ ...markFinSuggestionsShown(state, ids, now), cardShownOn: finSuggestionLocalDay(now) });
 }
 
 /** Records that the carousel showed these suggestions now; all of them get the cooldown. */

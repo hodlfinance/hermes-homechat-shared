@@ -313,16 +313,16 @@ import {
 import { mobileAssistantLinkSegments } from "./mobile-message-links";
 import { mobileMarkdownBlocks, type MobileMarkdownInlineSegment } from "./mobile-markdown";
 import { mobileBlockingRunId } from "./mobile-stop-target";
-import { FinSuggestionCarousel, FinSuggestionsPage } from "./FinSuggestions";
+import { FinSuggestionCard, FinSuggestionsPage } from "./FinSuggestions";
 import { FINHERMES_SUGGESTIONS, finHermesSuggestionDraft, finHermesSuggestionWasSent, type FinHermesSuggestion } from "../core/finhermes-suggestions";
 import {
   applyFinCarouselPreference,
   applyFinSuggestionAction,
   emptyFinSuggestionsState,
-  finCarouselQualification,
   finCarouselSuggestions,
   finLockedCarouselSuggestions,
-  markFinSuggestionsShown,
+  finSuggestionCardQualification,
+  markFinSuggestionCardShown,
   parseFinSuggestionsState,
   serializeFinSuggestionsState,
   type FinSuggestionAction,
@@ -1576,9 +1576,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   // Nothing is written before the stored states are read, so an early write
   // can never replace them with an empty set.
   const [finSuggestionsLoaded, setFinSuggestionsLoaded] = useState(false);
-  // The carousel picks its suggestions once per app session and keeps them;
-  // all of them get the cooldown when it first shows (HPD-606).
+  // The Home Chat card picks its suggestions once per app session and keeps
+  // them; all of them get the cooldown when it first shows (HPD-606).
   const [finCarouselIds, setFinCarouselIds] = useState<string[] | null>(null);
+  // X closes today's card for this session; the day is already used up.
+  const [finCardClosed, setFinCardClosed] = useState(false);
+  // The card is for customers with fewer than two automations; read once per session.
+  const [finAutomationCount, setFinAutomationCount] = useState<number | null>(null);
+  const finAutomationCountRequestedRef = useRef(false);
   // Set by a tap; "tried" is recorded only when that opener is actually sent.
   const pendingFinSuggestionRef = useRef<FinHermesSuggestion | null>(null);
   const inputRef = useRef(input);
@@ -6426,21 +6431,29 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   }
 
   // HPD-606: the first time the Home Chat is idle and the customer qualifies,
-  // the carousel picks its suggestions for this app session and records all of
-  // them as shown, which starts their cooldown.
+  // the card picks its suggestions for this app session and records all of
+  // them as shown, which starts their cooldown and uses up the day.
   useEffect(() => {
-    if (!finSuggestionsEnabled || !finSuggestionsLoaded || finCarouselIds !== null) return;
+    if (!finSuggestionsEnabled || !finSuggestionsLoaded || finCarouselIds !== null || finCardClosed) return;
     if (tab !== "chat" || activeChatRunId || busy) return;
     if (chatSessions.find((session) => session.id === activeConversationSessionId)?.role !== "home") return;
     const now = new Date();
-    const lastAnswerAt = [...messages].reverse().find((message) => message.role === "assistant")?.createdAt ?? null;
-    const qualification = finCarouselQualification(finSuggestionsState, { now, lastCompletedAnswerAt: lastAnswerAt });
-    if (!(qualification === "new_user" && messages.length === 0 || qualification === "rare_user")) return;
+    const qualification = finSuggestionCardQualification(finSuggestionsState, { now, automationCount: finAutomationCount });
+    if (qualification === "automations_unknown") {
+      if (finAutomationCountRequestedRef.current) return;
+      finAutomationCountRequestedRef.current = true;
+      // A failed read shows no card; it never guesses a count.
+      void hermesApi.automations()
+        .then((view) => setFinAutomationCount(view.jobs.length))
+        .catch(() => undefined);
+      return;
+    }
+    if (qualification !== "show") return;
     const picked = finCarouselSuggestions(finSuggestionsState, FINHERMES_SUGGESTIONS, now).map((suggestion) => suggestion.id);
     if (!picked.length) return;
     setFinCarouselIds(picked);
-    updateFinSuggestionsState(markFinSuggestionsShown(finSuggestionsState, picked, now));
-  }, [finSuggestionsEnabled, finSuggestionsLoaded, finCarouselIds, tab, activeChatRunId, busy, chatSessions, activeConversationSessionId, messages, finSuggestionsState]);
+    updateFinSuggestionsState(markFinSuggestionCardShown(finSuggestionsState, picked, now));
+  }, [finSuggestionsEnabled, finSuggestionsLoaded, finCarouselIds, finCardClosed, finAutomationCount, hermesApi, tab, activeChatRunId, busy, chatSessions, activeConversationSessionId, finSuggestionsState]);
 
   // HPD-606: every change is kept on the device right away; a failed write keeps
   // the change for this session.
@@ -6462,6 +6475,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
 
   function changeFinCarouselPreference(preference: "later" | "never") {
     updateFinSuggestionsState(applyFinCarouselPreference(finSuggestionsState, preference, new Date()));
+    setFinCardClosed(true);
   }
 
   async function openHeySuggestion(suggestion: HeySuggestionView) {
@@ -7731,17 +7745,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   });
   const activeChatSession = chatSessions.find((session) => session.id === activeConversationSessionId) ?? null;
   const isHomeChatActive = tab === "chat" && activeChatSession?.role === "home";
-  // HPD-606: the carousel shows only in the Home Chat, never while a run is
-  // active, to a new customer in an empty chat or to a rare one (no answer for
-  // 72 hours). Fin has one Home Chat and no "new chat", so the rare customer
-  // sees it at the top of that chat.
-  const lastCompletedAnswerAt = [...messages].reverse().find((message) => message.role === "assistant")?.createdAt ?? null;
-  const finCarouselQualified = finSuggestionsEnabled && isHomeChatActive && !activeChatRunId && !busy
-    ? finCarouselQualification(finSuggestionsState, { now: new Date(), lastCompletedAnswerAt })
-    : "active_user";
-  const finCarouselEligible = finSuggestionsLoaded && (finCarouselQualified === "new_user" && messages.length === 0
-    || finCarouselQualified === "rare_user");
-  const finCarousel = finCarouselEligible && finCarouselIds
+  // HPD-606: the card stays pinned under the header of the Home Chat, outside
+  // the transcript, until the customer closes it or chooses Later or Never.
+  const finCard = finSuggestionsEnabled && finSuggestionsLoaded && isHomeChatActive && !finCardClosed && finCarouselIds
     ? finLockedCarouselSuggestions(finSuggestionsState, FINHERMES_SUGGESTIONS, finCarouselIds)
     : [];
   const recommendedConnection = guidedSetupState?.recommendedConnection ?? null;
@@ -7982,6 +7988,17 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           keyboardVerticalOffset={keyboardVerticalOffset}
         >
           <View style={styles.chatScreen}>
+            {/* HPD-606: pinned under the header, not part of the transcript. */}
+            {finCard.length ? (
+              <FinSuggestionCard
+                suggestions={finCard}
+                onOpen={startFinSuggestion}
+                onClose={() => setFinCardClosed(true)}
+                onSeeAll={() => selectMobileScreen("suggestions")}
+                onLater={() => changeFinCarouselPreference("later")}
+                onNever={() => changeFinCarouselPreference("never")}
+              />
+            ) : null}
             <View style={styles.chatNoticeStack}>
               {error ? <Notice locale={appLocale} tone="error" text={error} onDismiss={dismissAppError} /> : null}
               {visibleSessionNotice ? <Notice locale={appLocale} tone="info" text={visibleSessionNotice} onDismiss={dismissSessionNotice} /> : null}
@@ -8169,17 +8186,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                   }
                 />
               ))}
-              {/* HPD-606: after the newest message, where the Home Chat opens, so
-                  a returning customer sees it without scrolling up. */}
-              {finCarousel.length ? (
-                <FinSuggestionCarousel
-                  suggestions={finCarousel}
-                  onOpen={startFinSuggestion}
-                  onRemove={(suggestion) => changeFinSuggestion(suggestion, "removed")}
-                  onLater={() => changeFinCarouselPreference("later")}
-                  onNever={() => changeFinCarouselPreference("never")}
-                />
-              ) : null}
               {visibleChatApprovalCards.map((card) => (
                 <MobileChatApprovalCard
                   key={card.id}
