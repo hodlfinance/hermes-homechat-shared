@@ -310,6 +310,7 @@ import {
 } from "./mobile-chat-user-decision";
 import { mobileAssistantLinkSegments } from "./mobile-message-links";
 import { mobileMarkdownBlocks, type MobileMarkdownInlineSegment } from "./mobile-markdown";
+import { mobileBlockingRunId } from "./mobile-stop-target";
 import {
   mobileMessagesForFailedRunNotice,
   mobileRunOwnsEvent,
@@ -6493,6 +6494,21 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   }
 
   async function stopReply() {
+    // HPD-807: a run waiting on a clarify or an approval holds every run queued
+    // behind it. After a restart the newest queued run became the active one,
+    // and Stop went there while the blocking run stayed open: no way out.
+    const blockingRunId = mobileBlockingRunId(chatRunStatusesById, Object.keys(chatEventsByRunId), activeChatRunId);
+    if (blockingRunId) {
+      setChatPendingText("Stopping the reply...");
+      setBusyLabel("Stopping the reply...");
+      try {
+        await hermesApi.stopRun(blockingRunId, {});
+        commitChatRunStatus(blockingRunId, "cancelled");
+      } catch (err) {
+        setAppError(displayError(err, "Could not stop that reply."));
+      }
+      return;
+    }
     if (!activeChatRunId) {
       const queued = [...queuedFollowUpRef.current.values()].find((item) => item.conversationSessionId === activeConversationSessionId && mobileQueuedFollowUpHasStarted(item.status));
       if (queued) await cancelQueuedFollowUp(queued.ownershipToken);
@@ -8254,7 +8270,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                       >
                         {activeDelegatedTask && stoppingDelegatedTaskIds.includes(activeDelegatedTask.taskId)
                           ? <ActivityIndicator color={palette.accentText} />
-                          : <Square size={18} color={palette.accentText} />}
+                          : <Square size={14} color={palette.ink} fill={palette.ink} />}
                       </Pressable>
                     ) : null}
                     {input.trim() || attachmentVoiceComposer.showAttachmentSend ? (
@@ -9839,6 +9855,7 @@ function MobileChatClarifyCard({
             value={other}
             onChangeText={setOther}
             placeholder="Other answer"
+            placeholderTextColor={palette.muted}
             editable={!pending && !expired}
             style={[styles.input, styles.cardInput]}
             accessibilityLabel="Other answer"
@@ -10065,6 +10082,7 @@ function MobileMarkdownInlineText({
               ? styles.markdownTableBoldText
               : undefined;
           const href = segment.href ? mobileMessageUrl(segment.href) : null;
+          const emphasisStyle = markdownSegment.kind === "italic" ? [kindStyle, styles.messageTextItalic] : kindStyle;
           if (!href && onCitationPress && citations.length) {
             return mobileCitationSegments(segment.text, citations).map((piece, pieceIndex) => piece.kind === "citation" ? (
               <Text
@@ -10077,10 +10095,10 @@ function MobileMarkdownInlineText({
                 {piece.text}
               </Text>
             ) : (
-              <Text key={`${segmentIndex}-${linkIndex}-${pieceIndex}-${piece.text}`} style={kindStyle}>{piece.text}</Text>
+              <Text key={`${segmentIndex}-${linkIndex}-${pieceIndex}-${piece.text}`} style={emphasisStyle}>{piece.text}</Text>
             ));
           }
-          if (!href) return <Text key={`${segmentIndex}-${linkIndex}-${segment.text}`} style={kindStyle}>{segment.text}</Text>;
+          if (!href) return <Text key={`${segmentIndex}-${linkIndex}-${segment.text}`} style={emphasisStyle}>{segment.text}</Text>;
           return (
             <Text
               key={`${segmentIndex}-${linkIndex}-${segment.text}`}
@@ -10151,6 +10169,17 @@ function LinkedMessageText({
               </View>
             ))}
           </View>
+        </View>
+      ) : block.kind === "list" ? (
+        <View key={`list-${blockIndex}`} style={styles.markdownList} accessibilityRole="list">
+          {block.items.map((item, itemIndex) => (
+            <View key={`list-${blockIndex}-item-${itemIndex}`} style={styles.markdownListItem}>
+              <Text style={[styles.messageText, styles.markdownListMarker]}>{block.ordered ? `${itemIndex + 1}.` : "•"}</Text>
+              <View style={styles.markdownListBody}>
+                <MobileMarkdownInlineText citations={citations} onCitationPress={onCitationPress} segments={item} />
+              </View>
+            </View>
+          ))}
         </View>
       ) : block.kind === "heading" ? (
         <MobileMarkdownInlineText
@@ -13264,6 +13293,23 @@ const styles = StyleSheet.create({
     color: palette.teal,
     fontWeight: "600",
   },
+  messageTextItalic: {
+    fontStyle: "italic",
+  },
+  markdownList: {
+    gap: 4,
+  },
+  markdownListItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+  },
+  markdownListMarker: {
+    minWidth: 14,
+  },
+  markdownListBody: {
+    flex: 1,
+  },
   activityTrail: {
     marginTop: 2,
     borderLeftWidth: StyleSheet.hairlineWidth,
@@ -13689,8 +13735,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
+  // HPD-822: no red. An outline circle with a filled square, both in the
+  // surface's text colour: white on Fin's dark palette, and following light and
+  // dark mode in Hey.
   stopButton: {
-    backgroundColor: "#dc2626",
+    backgroundColor: "transparent",
+    borderColor: palette.ink,
+    borderWidth: 2,
   },
   disabledButton: {
     opacity: 0.45,

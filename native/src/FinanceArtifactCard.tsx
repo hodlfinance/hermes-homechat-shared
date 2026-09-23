@@ -63,6 +63,7 @@ function MarkdownInlineText({
         return mobileAssistantLinkSegments(segment.text).map((link, linkIndex) => {
           const href = link.href ? safeMessageUrl(link.href) : null;
           const emphasis = segment.kind === "bold" || link.kind === "bold";
+          const italic = segment.kind === "italic";
           if (!href) {
             const pieces = onCitationPress ? mobileCitationSegments(link.text, citations) : [{ kind: "text" as const, text: link.text }];
             return pieces.map((piece, pieceIndex) => piece.kind === "citation" ? (
@@ -76,7 +77,7 @@ function MarkdownInlineText({
                 {piece.text}
               </Text>
             ) : (
-              <Text key={`${segmentIndex}-${linkIndex}-${pieceIndex}-${piece.text}`} style={emphasis ? styles.boldText : undefined}>{piece.text}</Text>
+              <Text key={`${segmentIndex}-${linkIndex}-${pieceIndex}-${piece.text}`} style={[emphasis ? styles.boldText : undefined, italic ? styles.italicText : undefined]}>{piece.text}</Text>
             ));
           }
           return (
@@ -134,6 +135,23 @@ function MarkdownContent({
                   />
                 </View>
               ))}
+            </View>
+          ))}
+        </View>
+      ) : block.kind === "list" ? (
+        <View key={`list-${blockIndex}`} style={styles.markdownList}>
+          {block.items.map((item, itemIndex) => (
+            <View key={`list-${blockIndex}-item-${itemIndex}`} style={styles.markdownListItem}>
+              <Text style={[styles.answerText, styles.markdownListMarker]}>{block.ordered ? `${itemIndex + 1}.` : "•"}</Text>
+              <View style={styles.markdownListBody}>
+                <MarkdownInlineText
+                  citations={citations}
+                  onCitationPress={onCitationPress}
+                  onOpenUrl={onOpenUrl}
+                  segments={item}
+                  styles={styles}
+                />
+              </View>
             </View>
           ))}
         </View>
@@ -398,6 +416,23 @@ function createStyles(palette: ReturnType<typeof useMobilePalette>) {
     citation: {
       color: palette.teal,
       fontWeight: "600",
+    },
+    italicText: {
+      fontStyle: "italic",
+    },
+    markdownList: {
+      gap: 4,
+    },
+    markdownListItem: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 6,
+    },
+    markdownListMarker: {
+      minWidth: 14,
+    },
+    markdownListBody: {
+      flex: 1,
     },
     markdownBlocks: {
       alignSelf: "stretch",
