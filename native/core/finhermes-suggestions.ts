@@ -1037,7 +1037,18 @@ export const FINHERMES_SUGGESTIONS: readonly FinHermesSuggestion[] = Object.free
   }
 ]);
 
-/** The editable sentence a tap puts into the composer. */
-export function finHermesSuggestionDraft(suggestion: Pick<FinHermesSuggestion, "id" | "opener">): string {
-  return `${suggestion.opener} ${FINHERMES_SUGGESTION_DRAFT_GUARD} (suggestion: ${suggestion.id})`;
+/**
+ * The editable sentence a tap puts into the composer: the opener and the guard
+ * sentence. HPD-606 (Linear) keeps the suggestion id out of the visible text;
+ * it travels as request metadata once the Release 35 loader exists.
+ */
+export function finHermesSuggestionDraft(suggestion: Pick<FinHermesSuggestion, "opener">): string {
+  return `${suggestion.opener} ${FINHERMES_SUGGESTION_DRAFT_GUARD}`;
+}
+
+/** True when a sent message still carries the suggestion's opening words. */
+export function finHermesSuggestionWasSent(suggestion: Pick<FinHermesSuggestion, "opener">, sent: string): boolean {
+  const normalize = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCase();
+  const head = normalize(suggestion.opener).slice(0, 32);
+  return head.length > 0 && normalize(sent).includes(head);
 }
