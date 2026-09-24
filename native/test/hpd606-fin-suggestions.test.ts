@@ -183,7 +183,7 @@ test("the surface shows Fin suggestions only when the host asks for them", () =>
   assert.match(send, /applyFinSuggestionAction\(current, pendingSuggestion\.id, "tried"\)/);
   // Nothing is written before the stored states are read.
   assert.match(surface, /if \(!finSuggestionsLoaded\) return;/);
-  assert.match(surface, /updateFinSuggestionsState\(markFinSuggestionCardShown\(finSuggestionsState, picked, now\)\)/);
+  assert.match(surface, /void claimFinSuggestionCard\(\{\s+storage: \{\s+read: \(\) => readStoredStringStrict\(finSuggestionsStorageKey\),\s+write: \(value\) => persistStoredStringStrict\(finSuggestionsStorageKey, value\),/);
 });
 
 test("the card's automation count reaches the Fin server through the HODL allow-list (GET /hermes/jobs)", async () => {

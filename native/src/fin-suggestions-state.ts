@@ -30,6 +30,9 @@ export type FinSuggestionsDeviceState = Readonly<{
   carouselDisabled: boolean;
   /** The device-local day (YYYY-MM-DD) the Home Chat card was last shown. */
   cardShownOn: string | null;
+  /** When the card was last shown and last closed (ISO timestamps). */
+  cardShownAt?: string | null;
+  cardDismissedAt?: string | null;
 }>;
 
 export type FinSuggestionAction = "tried" | "completed" | "removed" | "restored";
@@ -92,7 +95,13 @@ export function parseFinSuggestionsState(raw: string | null | undefined): FinSug
     cardShownOn: typeof record.cardShownOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(record.cardShownOn)
       ? record.cardShownOn
       : null,
+    cardShownAt: isoOrNull(record.cardShownAt),
+    cardDismissedAt: isoOrNull(record.cardDismissedAt),
   });
+}
+
+function isoOrNull(value: unknown): string | null {
+  return typeof value === "string" && Number.isFinite(Date.parse(value)) ? value : null;
 }
 
 export function serializeFinSuggestionsState(state: FinSuggestionsDeviceState): string {
@@ -159,7 +168,57 @@ export function markFinSuggestionCardShown(
   ids: readonly string[],
   now: Date,
 ): FinSuggestionsDeviceState {
-  return Object.freeze({ ...markFinSuggestionsShown(state, ids, now), cardShownOn: finSuggestionLocalDay(now) });
+  return Object.freeze({
+    ...markFinSuggestionsShown(state, ids, now),
+    cardShownOn: finSuggestionLocalDay(now),
+    cardShownAt: now.toISOString(),
+  });
+}
+
+/** X on the card: kept on the device like the showing, so today stays used up. */
+export function markFinSuggestionCardDismissed(state: FinSuggestionsDeviceState, now: Date): FinSuggestionsDeviceState {
+  return Object.freeze({ ...state, cardShownOn: finSuggestionLocalDay(now), cardDismissedAt: now.toISOString() });
+}
+
+export type FinSuggestionCardStorage = {
+  /** Resolves the stored text or null when nothing is stored; rejects when the store cannot be read. */
+  read: () => Promise<string | null>;
+  /** Resolves only once the text is stored; rejects otherwise. */
+  write: (value: string) => Promise<void>;
+};
+
+/**
+ * HPD-606, Justus 24.09.: the card appeared twice within an hour. Deciding
+ * from the copy read when the chat mounted let a second mount, or a stale
+ * copy, show it again, and a failed read looked like a first visit. The card
+ * is therefore claimed against the stored state at the moment it would show:
+ * read it fresh, apply the once-a-day rule, and store the showing before the
+ * card appears. Any read or write failure shows nothing.
+ */
+export async function claimFinSuggestionCard(input: {
+  storage: FinSuggestionCardStorage;
+  now: Date;
+  automationCount: number | null;
+  catalog: readonly FinHermesSuggestion[];
+}): Promise<{ state: FinSuggestionsDeviceState | null; ids: string[] | null }> {
+  let state: FinSuggestionsDeviceState;
+  try {
+    state = parseFinSuggestionsState(await input.storage.read());
+  } catch {
+    return { state: null, ids: null };
+  }
+  if (finSuggestionCardQualification(state, { now: input.now, automationCount: input.automationCount }) !== "show") {
+    return { state, ids: null };
+  }
+  const ids = finCarouselSuggestions(state, input.catalog, input.now).map((suggestion) => suggestion.id);
+  if (!ids.length) return { state, ids: null };
+  const next = markFinSuggestionCardShown(state, ids, input.now);
+  try {
+    await input.storage.write(serializeFinSuggestionsState(next));
+  } catch {
+    return { state, ids: null };
+  }
+  return { state: next, ids };
 }
 
 /** Records that the carousel showed these suggestions now; all of them get the cooldown. */
