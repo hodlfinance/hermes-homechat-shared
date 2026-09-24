@@ -16,6 +16,8 @@ import {
   type HermesAutomationsView,
   type HermesRunEventsOptions,
 } from "../core/index";
+import { mobileHomeChatActiveRunRecovery, mobileRunIsForeground } from "./mobile-home-chat-startup";
+import { mobileStopRunUnlessFinished } from "./mobile-stop-target";
 
 export type NativeR8ChannelIdentity = {
   surface: "hey_hermes" | "finhermes";
@@ -192,6 +194,27 @@ export function createNativeR8CanonicalController(
     return mobileChatRunFromCanonical(run);
   }
 
+  async function activeRuns(context: MobileHermesRequestContext = {}) {
+    const response = await client.listRuns({
+      active: true,
+      channel: heyHermesMobileChannel,
+      limit: 20,
+      surface: heyHermesMobileSurface,
+    }, context);
+    return response.runs.map((run) => {
+      if (
+        run.surface !== heyHermesMobileSurface ||
+        run.channel !== heyHermesMobileChannel
+      ) {
+        throw new Error("Canonical Hermes run did not retain the mobile surface binding.");
+      }
+      if (run.messages.some((message) => message.conversationId !== run.conversationId)) {
+        throw new Error("Canonical Hermes active run crossed the active conversation boundary.");
+      }
+      return rememberRun(run, run.conversationId);
+    });
+  }
+
   async function canonicalConversations(
     query: { limit?: number } = {},
     context: MobileHermesRequestContext = {},
@@ -277,26 +300,7 @@ export function createNativeR8CanonicalController(
       const response = await client.run(runId, context);
       return rememberRun(response.run);
     },
-    activeRuns: async (context: MobileHermesRequestContext = {}) => {
-      const response = await client.listRuns({
-        active: true,
-        channel: heyHermesMobileChannel,
-        limit: 20,
-        surface: heyHermesMobileSurface,
-      }, context);
-      return response.runs.map((run) => {
-        if (
-          run.surface !== heyHermesMobileSurface ||
-          run.channel !== heyHermesMobileChannel
-        ) {
-          throw new Error("Canonical Hermes run did not retain the mobile surface binding.");
-        }
-        if (run.messages.some((message) => message.conversationId !== run.conversationId)) {
-          throw new Error("Canonical Hermes active run crossed the active conversation boundary.");
-        }
-        return rememberRun(run, run.conversationId);
-      });
-    },
+    activeRuns: (context: MobileHermesRequestContext = {}) => activeRuns(context),
     activeRun: async (
       query: { conversationId?: string } = {},
       context: MobileHermesRequestContext = {},
@@ -317,7 +321,16 @@ export function createNativeR8CanonicalController(
       ) {
         throw new Error("Canonical Hermes active run crossed the active conversation boundary.");
       }
-      return rememberRun(runResponse.run, activeConversation.id);
+      const run = rememberRun(runResponse.run, activeConversation.id);
+      // A helper run is the foreground of its own sub-chat, so opening that
+      // sub-chat names it; with no chat named it stays background work.
+      if (mobileRunIsForeground(run, query.conversationId ?? null)) return run;
+      // HPD-871: the conversation's active run is the oldest running one on the
+      // plane, a scheduled job or a background delivery included. That run is
+      // not the customer's reply; his own run, if any, is found among the
+      // active runs of the same conversation.
+      const recovery = mobileHomeChatActiveRunRecovery(await activeRuns(context), activeConversation.id);
+      return recovery.primaryRun;
     },
     delegatedTasks: async (context: MobileHermesRequestContext = {}): Promise<HermesDelegatedTask[]> => {
       const response = await client.delegatedTasks({ surface: heyHermesMobileSurface }, context);
@@ -335,9 +348,14 @@ export function createNativeR8CanonicalController(
       }
       return response.task;
     },
+    // HPD-871: every stop from the chat passes here. A run that has already
+    // finished is returned as read, and no stop is sent to it.
     stopRun: async (runId: string, context: MobileHermesRequestContext = {}) => {
-      const response = await client.stopRun(runId, context);
-      return rememberRun(response.run);
+      const outcome = await mobileStopRunUnlessFinished(runId, {
+        readRun: async (id) => (await client.run(id, context)).run,
+        stopRun: async (id) => (await client.stopRun(id, context)).run,
+      });
+      return rememberRun(outcome.run);
     },
     runEventsResponse: (runId: string, options: HermesRunEventsOptions = {}) =>
       client.runEventsResponse(runId, options),
