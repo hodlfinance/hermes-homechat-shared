@@ -434,6 +434,12 @@ export type HermesDelegatedTask = {
   sourceRunId: string;
   sourceConversationId?: string | null;
   resultMessageId?: string | null;
+  /**
+   * HPD-874. The run the child's steps are posted to (`run_delegated_…`). The
+   * sub thread reads its step timeline from it, live and after a reload. An
+   * older plane does not send it; the sub thread then shows no timeline.
+   */
+  runId?: string | null;
   state: HermesDelegatedTaskState;
   startedAt: string;
   updatedAt: string;

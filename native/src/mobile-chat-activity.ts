@@ -5,6 +5,8 @@ import {
   type ChatRunStatus,
   type HeyAssistantContentView,
   type HeyRunActivityDetail,
+  type HeyActivityStep,
+  type HeyActivityVerbKey,
   type HeyRunActivityStateKey,
 } from "../core/index";
 
@@ -39,6 +41,8 @@ export type MobileActivityStateKey = HeyRunActivityStateKey;
 export type MobileActivitySummary = {
   label: string;
   labelKey?: MobileActivityStateKey;
+  /** HPD-876. The headline as a verb from the shared, localized table. */
+  verbKey?: HeyActivityVerbKey;
   detail: string;
   tone: MobileActivityTone;
 };
@@ -50,6 +54,8 @@ export type MobileAssistantContentView = HeyAssistantContentView;
 export type MobileRunActivityView = {
   summary: MobileActivitySummary | null;
   details: MobileActivityDetail[];
+  /** HPD-876. The newest tool step, for the live line under the headline. */
+  step?: HeyActivityStep | null;
 };
 
 export function mobileChatRunStatusAfter(

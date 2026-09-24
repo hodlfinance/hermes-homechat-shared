@@ -1,4 +1,4 @@
-import { heyLiveRunActivity, heyLiveRunActivityHistory, type ChatRunEvent, type ChatRunStatus } from "../core/index";
+import { heyLiveRunActivityHistory, heyLiveRunPresentation, type ChatRunEvent, type ChatRunStatus } from "../core/index";
 import type { MobileRunActivityView } from "./mobile-chat-activity";
 
 /**
@@ -19,16 +19,19 @@ export function mobileLiveRunActivityView(input: {
   events: ChatRunEvent[];
   runStatus: ChatRunStatus | null;
 }): MobileRunActivityView | null {
-  const activity = heyLiveRunActivity(input);
-  if (!activity) return null;
+  const presentation = heyLiveRunPresentation(input);
+  if (!presentation) return null;
+  const { activity, verbKey, step } = presentation;
 
   return {
     details: heyLiveRunActivityHistory(input.events),
     summary: {
       label: activity.label,
       ...(activity.labelKey ? { labelKey: activity.labelKey } : {}),
+      ...(verbKey ? { verbKey } : {}),
       detail: "Hermes is working on your request.",
       tone: "working",
     },
+    step,
   };
 }
