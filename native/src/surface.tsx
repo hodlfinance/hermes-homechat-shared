@@ -319,10 +319,10 @@ import {
   applyFinCarouselPreference,
   applyFinSuggestionAction,
   emptyFinSuggestionsState,
-  finCarouselSuggestions,
   finLockedCarouselSuggestions,
   finSuggestionCardQualification,
-  markFinSuggestionCardShown,
+  claimFinSuggestionCard,
+  markFinSuggestionCardDismissed,
   parseFinSuggestionsState,
   serializeFinSuggestionsState,
   type FinSuggestionAction,
@@ -910,6 +910,25 @@ async function readStoredString(key: string) {
     }
   }
   return getLocalStorage()?.getItem(key) ?? null;
+}
+
+// HPD-606: reads and writes that report failure instead of falling back to
+// "nothing stored", for state that must never look like a first visit.
+async function readStoredStringStrict(key: string): Promise<string | null> {
+  if (await canUseSecureStore()) return SecureStore.getItemAsync(key);
+  const storage = getLocalStorage();
+  if (!storage) throw new Error("No device storage is available.");
+  return storage.getItem(key);
+}
+
+async function persistStoredStringStrict(key: string, value: string): Promise<void> {
+  if (await canUseSecureStore()) {
+    await SecureStore.setItemAsync(key, value);
+    return;
+  }
+  const storage = getLocalStorage();
+  if (!storage) throw new Error("No device storage is available.");
+  storage.setItem(key, value);
 }
 
 async function persistStoredString(key: string, value: string) {
@@ -1584,6 +1603,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   // The card is for customers with fewer than two automations; read once per session.
   const [finAutomationCount, setFinAutomationCount] = useState<number | null>(null);
   const finAutomationCountRequestedRef = useRef(false);
+  // One claim at a time; a claim that showed nothing is not retried this session.
+  const finCardClaimRef = useRef<"idle" | "claiming" | "done">("idle");
   // Set by a tap; "tried" is recorded only when that opener is actually sent.
   const pendingFinSuggestionRef = useRef<FinHermesSuggestion | null>(null);
   const inputRef = useRef(input);
@@ -4256,11 +4277,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       setAppearancePreference(stored);
     });
     if (finSuggestionsEnabled) {
-      void readStoredString(finSuggestionsStorageKey).then((stored) => {
-        if (active) setFinSuggestionsState(parseFinSuggestionsState(stored));
-      }).catch(() => undefined).finally(() => {
-        if (active) setFinSuggestionsLoaded(true);
-      });
+      // A failed read leaves the states unloaded: nothing is written over the
+      // stored ones and the card does not show (HPD-606).
+      void readStoredStringStrict(finSuggestionsStorageKey).then((stored) => {
+        if (!active) return;
+        setFinSuggestionsState(parseFinSuggestionsState(stored));
+        setFinSuggestionsLoaded(true);
+      }).catch(() => undefined);
     }
 
     readStoredToken()
@@ -6453,11 +6476,23 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
         .catch(() => undefined);
       return;
     }
-    if (qualification !== "show") return;
-    const picked = finCarouselSuggestions(finSuggestionsState, FINHERMES_SUGGESTIONS, now).map((suggestion) => suggestion.id);
-    if (!picked.length) return;
-    setFinCarouselIds(picked);
-    updateFinSuggestionsState(markFinSuggestionCardShown(finSuggestionsState, picked, now));
+    if (qualification !== "show" || finCardClaimRef.current !== "idle") return;
+    // HPD-606: the decision is taken against the stored state, read fresh, and
+    // the showing is stored before the card appears (at most once a day).
+    finCardClaimRef.current = "claiming";
+    void claimFinSuggestionCard({
+      storage: {
+        read: () => readStoredStringStrict(finSuggestionsStorageKey),
+        write: (value) => persistStoredStringStrict(finSuggestionsStorageKey, value),
+      },
+      now,
+      automationCount: finAutomationCount,
+      catalog: FINHERMES_SUGGESTIONS,
+    }).then(({ state, ids }) => {
+      finCardClaimRef.current = "done";
+      if (state) setFinSuggestionsState(state);
+      if (ids) setFinCarouselIds(ids);
+    });
   }, [finSuggestionsEnabled, finSuggestionsLoaded, finCarouselIds, finCardClosed, finAutomationCount, hermesApi, tab, activeChatRunId, busy, chatSessions, activeConversationSessionId, finSuggestionsState]);
 
   // HPD-606: every change is kept on the device right away; a failed write keeps
@@ -8017,7 +8052,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
               <FinSuggestionCard
                 suggestions={finCard}
                 onOpen={startFinSuggestion}
-                onClose={() => setFinCardClosed(true)}
+                onClose={() => {
+                  setFinCardClosed(true);
+                  updateFinSuggestionsState(markFinSuggestionCardDismissed(finSuggestionsState, new Date()));
+                }}
                 onSeeAll={() => selectMobileScreen("suggestions")}
                 onLater={() => changeFinCarouselPreference("later")}
                 onNever={() => changeFinCarouselPreference("never")}
