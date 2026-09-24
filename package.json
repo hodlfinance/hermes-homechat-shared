@@ -129,6 +129,8 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.28.1",
+    "react-test-renderer": "^19.2.7",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"
   }
