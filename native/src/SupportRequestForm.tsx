@@ -40,10 +40,16 @@ const ANONYMOUS_SUPPORT_CONTEXT: SupportContextResult = {
 
 import type { AppLocale } from "../core/index";
 
-/** Opens a mailto URL; false when no mail app can take it. */
+/**
+ * Opens a mailto URL; false when no mail app can take it.
+ *
+ * HPD-889: no canOpenURL first. iOS answers it with false for any scheme the
+ * host app does not list in LSApplicationQueriesSchemes, and HODL lists no
+ * mailto, so every request ended in "No mail app". openURL itself needs no
+ * listing and rejects when nothing can open the URL.
+ */
 export async function openSupportMailUrl(url: string): Promise<boolean> {
   try {
-    if (!(await Linking.canOpenURL(url))) return false;
     await Linking.openURL(url);
     return true;
   } catch {
