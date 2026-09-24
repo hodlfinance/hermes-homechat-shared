@@ -33,6 +33,39 @@ export type MobileRunOriginReference = {
   sourceJobId?: string | null;
 };
 
+// HPD-871 hotfix: #71 dropped these four declarations while rewriting the
+// block above. surface.tsx still imports mobileHomeChatSnapshotSessionId and
+// calls it right after GET /snapshot/startup, before the snapshot is published.
+// Without it every startup refresh threw, the snapshot stayed empty, and the
+// app retried status-truth and snapshot/startup every 2.5 s without ever
+// opening the chat (HODL Builds 56/57, 2026-09-24).
+export type MobileHomeChatActiveRunRecovery<Run extends MobileHomeChatActiveRunReference> = {
+  primaryRun: Run | null;
+  queuedFollowUps: Run[];
+};
+
+export type MobileHomeChatTimingSummary = {
+  averageMs: number;
+  count: number;
+  maximumMs: number;
+  medianMs: number;
+  minimumMs: number;
+};
+
+export type MobileHomeChatSingleFlight = {
+  clear(): void;
+  run(task: () => Promise<void>): Promise<void>;
+  runAfterCurrent(task: () => Promise<void>): Promise<void>;
+};
+
+export function mobileHomeChatSnapshotSessionId(messages: MobileHomeChatMessageReference[]) {
+  for (const message of messages) {
+    const sessionId = message.conversationSessionId?.trim();
+    if (sessionId) return sessionId;
+  }
+  return null;
+}
+
 // HPD-871: runs the customer did not start in the chat he is looking at. The
 // plane (hey-hermes apps/api/src/store.ts) opens them as:
 //   run_job_<hash>        a scheduled job execution, carries sourceJobId and
