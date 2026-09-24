@@ -56,6 +56,8 @@ export type MobileRunActivityView = {
   details: MobileActivityDetail[];
   /** HPD-876. The newest tool step, for the live line under the headline. */
   step?: HeyActivityStep | null;
+  /** HPD-874/876 phase 2. The newest filtered thinking line or step target. */
+  detail?: string | null;
 };
 
 export function mobileChatRunStatusAfter(

@@ -21,7 +21,7 @@ export function mobileLiveRunActivityView(input: {
 }): MobileRunActivityView | null {
   const presentation = heyLiveRunPresentation(input);
   if (!presentation) return null;
-  const { activity, verbKey, step } = presentation;
+  const { activity, verbKey, step, detail } = presentation;
 
   return {
     details: heyLiveRunActivityHistory(input.events),
@@ -33,5 +33,6 @@ export function mobileLiveRunActivityView(input: {
       tone: "working",
     },
     step,
+    detail,
   };
 }
