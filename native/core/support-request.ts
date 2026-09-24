@@ -257,7 +257,8 @@ export function normalizeSupportSubmissionResult(value: unknown): SupportSubmiss
   return { status: "failure", reason: "invalid_response", reference: null };
 }
 
-function looksLikeReplyEmail(value: string) {
+/** A plausible reply address: one @, a dot in the domain, no spaces. */
+export function looksLikeReplyEmail(value: string) {
   return value.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value);
 }
 
