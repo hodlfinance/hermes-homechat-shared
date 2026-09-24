@@ -312,7 +312,7 @@ import {
 } from "./mobile-chat-user-decision";
 import { mobileAssistantLinkSegments } from "./mobile-message-links";
 import { mobileMarkdownBlocks, type MobileMarkdownInlineSegment } from "./mobile-markdown";
-import { mobileBlockingRunId } from "./mobile-stop-target";
+import { mobileBlockingRunId, mobileRunStatusIsFinished, mobileStoppedRunStatus } from "./mobile-stop-target";
 import { FinSuggestionCard, FinSuggestionsPage } from "./FinSuggestions";
 import { FINHERMES_SUGGESTIONS, finHermesSuggestionDraft, finHermesSuggestionWasSent, type FinHermesSuggestion } from "../core/finhermes-suggestions";
 import {
@@ -6657,8 +6657,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
       removeQueuedFollowUpView(ownershipToken);
       if (queued.runId) {
         try {
-          await queued.session.stop(queued.runId);
-          commitChatRunStatus(queued.runId, "cancelled");
+          const stopped = await queued.session.stop(queued.runId);
+          const endedAs = mobileStoppedRunStatus(stopped.status);
+          commitChatRunStatus(queued.runId, endedAs);
+          // HPD-871: it had already been answered; show that answer again.
+          if (endedAs !== "cancelled") void refresh(true);
         } catch (err) {
           if (!isChatRunCancelledError(err) && !isSharedHomechatRunControllerError(err, "aborted")) {
             updateQueuedFollowUp(queued, { content: queued.content, runId: queued.runId, status: "failed" });
@@ -6671,10 +6674,17 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
     }
     updateQueuedFollowUp(queued, { content: queued.content, runId: queued.runId, status: "cancelling" });
     try {
-      await queued.session.stop(queued.runId as string);
+      const stopped = await queued.session.stop(queued.runId as string);
       queued.abortController.abort();
-      commitChatRunStatus(queued.runId as string, "cancelled");
-      updateQueuedFollowUp(queued, { content: queued.content, runId: queued.runId, status: "cancelled" });
+      const endedAs = mobileStoppedRunStatus(stopped.status);
+      commitChatRunStatus(queued.runId as string, endedAs);
+      if (endedAs === "cancelled") {
+        updateQueuedFollowUp(queued, { content: queued.content, runId: queued.runId, status: "cancelled" });
+      } else {
+        // HPD-871: the run had already finished, so no stop was sent. The
+        // status above closes its card; the answer comes with the refresh.
+        void refresh(true);
+      }
     } catch (err) {
       const message = displayError(err, "Could not cancel the queued follow-up.");
       recordDiagnostic("error", "Queued follow-up cancel failed", message);
@@ -6701,8 +6711,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
       setChatPendingText("Stopping the reply...");
       setBusyLabel("Stopping the reply...");
       try {
-        await hermesApi.stopRun(blockingRunId, {});
-        commitChatRunStatus(blockingRunId, "cancelled");
+        const stopped = await hermesApi.stopRun(blockingRunId, {});
+        commitChatRunStatus(blockingRunId, mobileStoppedRunStatus(stopped.status));
+        if (mobileRunStatusIsFinished(stopped.status) && stopped.status !== "cancelled") void refresh(true);
       } catch (err) {
         setAppError(displayError(err, "Could not stop that reply."));
       }
@@ -6721,9 +6732,21 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
         initialMessages: messagesStateRef.current,
         runId: activeChatRunId,
       });
-      await session.stop(activeChatRunId);
-      commitChatRunStatus(activeChatRunId, "cancelled");
+      const stoppedRunId = activeChatRunId;
+      const stopped = await session.stop(stoppedRunId);
+      const endedAs = mobileStoppedRunStatus(stopped.status);
+      commitChatRunStatus(stoppedRunId, endedAs);
       activeChatAbortRef.current?.abort();
+      if (endedAs !== "cancelled") {
+        // HPD-871: the reply had already finished, so no stop was sent. Clear
+        // the working state here and fetch the finished answer.
+        setChatPendingText(null);
+        setChatStreamingText("");
+        setActiveChatRunId(null);
+        setBusy(false);
+        setBusyLabel(null);
+        void refresh(true);
+      }
     } catch (err) {
       setAppError(displayError(err, "Could not stop that reply."));
     }

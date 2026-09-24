@@ -20,9 +20,49 @@ export type MobileHomeChatActiveRunReference = {
   conversationSessionId?: string | null;
   createdAt: string;
   id: string;
+  sourceExecutionId?: string | null;
+  sourceJobId?: string | null;
   startedAt?: string | null;
   status: "queued" | "running" | "waiting_for_approval" | "completed" | "cancelled" | "failed";
 };
+
+export type MobileRunOriginReference = {
+  id: string;
+  sourceExecutionId?: string | null;
+  sourceJobId?: string | null;
+};
+
+// HPD-871: runs the customer did not start. The plane (hey-hermes
+// apps/api/src/store.ts) opens them in the customer's conversation:
+//   run_job_<hash>        a scheduled job execution, carries sourceJobId and
+//                         sourceExecutionId;
+//   run_delivery_<hash>   a background result posted into the chat, carries
+//                         no source field;
+//   run_delegated_<hash>  a helper Hermes started for a sub order, carries no
+//                         source field.
+// The run payload of GET /hermes/runs has no kind or initiator field, so the
+// job's source fields decide first and the id prefix covers the two kinds that
+// carry nothing else.
+const backgroundRunIdPrefixes = ["run_job_", "run_delivery_", "run_delegated_"] as const;
+
+function presentText(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+export function mobileRunIdIsBackground(runId: string | null | undefined) {
+  return Boolean(runId && backgroundRunIdPrefixes.some((prefix) => runId.startsWith(prefix)));
+}
+
+/**
+ * Whether the customer started this run from the composer. Only such a run may
+ * own the chat's Working state, its stop button and the queue behind it.
+ */
+export function mobileRunIsForeground(run: MobileRunOriginReference) {
+  const raw = run as MobileRunOriginReference & { source_job_id?: unknown; source_execution_id?: unknown };
+  if (presentText(run.sourceJobId) || presentText(raw.source_job_id)) return false;
+  if (presentText(run.sourceExecutionId) || presentText(raw.source_execution_id)) return false;
+  return !mobileRunIdIsBackground(run.id);
+}
 
 export type MobileHomeChatActiveRunRecovery<Run extends MobileHomeChatActiveRunReference> = {
   primaryRun: Run | null;
@@ -56,13 +96,17 @@ export function mobileHomeChatActiveRunRecovery<Run extends MobileHomeChatActive
   preferredConversationSessionId?: string | null,
 ): MobileHomeChatActiveRunRecovery<Run> {
   const preferredConversationId = preferredConversationSessionId?.trim() || null;
+  // HPD-871: a job, delivery or helper run in the open chat is not the reply
+  // the customer is waiting for. Recovering it kept Working and Stop on after
+  // his own reply had finished, and labelled his next question queued.
+  const foregroundRuns = runs.filter(mobileRunIsForeground);
   const preferredRuns = preferredConversationId
-    ? runs.filter((run) => run.conversationSessionId === preferredConversationId)
+    ? foregroundRuns.filter((run) => run.conversationSessionId === preferredConversationId)
     : [];
   // Once the customer has a selected conversation, an active run elsewhere is
   // background work. Falling back to it changes foreground ownership and makes
   // an immediately executable message look queued behind the wrong run.
-  const candidates = [...(preferredConversationId ? preferredRuns : runs)].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
+  const candidates = [...(preferredConversationId ? preferredRuns : foregroundRuns)].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
   const primaryRun = candidates.find((run) =>
     run.status === "running" || run.status === "waiting_for_approval"
   ) ?? candidates.find((run) => run.status === "queued") ?? null;
