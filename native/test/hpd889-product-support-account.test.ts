@@ -38,3 +38,14 @@ test("the reply address goes into the email and must look like an address", () =
   assert.equal(looksLikeReplyEmail("reply@example.com"), true);
   assert.equal(looksLikeReplyEmail("not an address"), false);
 });
+
+test("the note under the form names only what goes into the email", () => {
+  const en = supportMailCopy("en", "HODL");
+  assert.match(en.boundary, /account ID, the account email and any reply email/);
+  assert.match(en.boundaryNoEmail, /account ID and any reply email/);
+  assert.doesNotMatch(en.boundaryNoEmail, /account email/);
+  assert.doesNotMatch(en.boundarySignedOut, /account ID|account email/);
+  assert.match(en.boundarySignedOut, /reply email/);
+  assert.match(supportMailCopy("de", "HODL").boundarySignedOut, /kein Konto/);
+  assert.match(mail, /mailAccount\?\.email \? mailCopyText\.boundary : mailAccount \? mailCopyText\.boundaryNoEmail : mailCopyText\.boundarySignedOut/);
+});
