@@ -22,7 +22,7 @@ import { MobilePageMenuRow } from "./mobile-page-menu-row";
 import { emailMagicLinkTokenFromUrl, solveEmailMagicLinkAbuseChallenge } from "./mobile-email-magic-link";
 import { pageMenuRemovalCopy } from "../ui/page-menu-copy";
 import { subscribeKeyboardInsetRelease } from "./mobile-keyboard-inset";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -383,6 +383,7 @@ import {
   isPrivateMobileBrowserHref,
   mobileBrowserUrl,
   openMobileBrowserHref,
+  privateMobileBrowserHrefFromUrl,
 } from "./mobile-browser-session";
 import {
   backupJobDownloadHref,
@@ -1338,6 +1339,16 @@ function alphaNeedsAttention(snapshot: AppSnapshot) {
 function bookmarkUrlForMobile(href: string) {
   return mobileBrowserUrl(API_BASE, href);
 }
+
+/**
+ * How a link in a chat message opens. A private page takes the same
+ * authenticated handoff as a Pages entry and opens in the host's in-app
+ * browser; before, a chat link to /api/workspace/preview/<port> went straight
+ * to the system browser, which holds no session for it (HODL Build 51).
+ */
+const MessageLinkOpenerContext = createContext<(url: string) => void>((url) => {
+  void Linking.openURL(url);
+});
 
 function mobileMessageUrl(href: string) {
   const value = href.trim();
@@ -6957,6 +6968,21 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
     });
   }
 
+  const openMessageLink = useCallback((url: string) => {
+    const privateHref = privateMobileBrowserHrefFromUrl(API_BASE, url);
+    if (!privateHref) {
+      void Linking.openURL(url);
+      return;
+    }
+    void openMobileBrowserHref({
+      api,
+      apiBase: API_BASE,
+      href: privateHref,
+      openUrl: (target) => Linking.openURL(target),
+      openPrivateUrl: (target) => WebBrowser.openBrowserAsync(target),
+    }).catch(() => setAppError("Could not open that page."));
+  }, [api]);
+
   async function openBookmark(href: string) {
     if (href === HEY_TASKS_PAGE_HREF) {
       selectMobileScreen("tasks");
@@ -8180,6 +8206,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
                 />
               ) : null}
             </View>
+            <MessageLinkOpenerContext.Provider value={openMessageLink}>
             <ScrollView
               ref={messagesScrollRef}
               style={styles.chatMessages}
@@ -8336,6 +8363,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
                 />
               ))}
             </ScrollView>
+            </MessageLinkOpenerContext.Provider>
             {showScrollDown ? (
               <Pressable
                 style={styles.scrollDownButton}
@@ -10301,6 +10329,7 @@ function MobileMarkdownInlineText({
   variant?: "paragraph" | "heading" | "table_header" | "table_cell";
   headingLevel?: number;
 }) {
+  const openMessageLink = useContext(MessageLinkOpenerContext);
   const textStyle = variant === "heading"
     ? [
         styles.markdownHeadingText,
@@ -10353,7 +10382,7 @@ function MobileMarkdownInlineText({
               key={`${segmentIndex}-${linkIndex}-${segment.text}`}
               style={[kindStyle, styles.messageLink]}
               accessibilityRole="link"
-              onPress={() => void Linking.openURL(href)}
+              onPress={() => openMessageLink(href)}
             >
               {segment.text}
             </Text>
