@@ -1,7 +1,7 @@
 export { supportAccessCopy, supportAccessOpenCount } from "./support-access-copy";
 import { supportRequestCopy } from "./support-request-copy";
 import type { AppLocale } from "./types";
-export { supportRequestCopy } from "./support-request-copy";
+export { supportMailCopy, supportRequestCopy } from "./support-request-copy";
 import { HEY_SUPPORT_EMAIL, HEY_SUPPORT_MAILTO } from "./legal";
 
 export const HEY_SUPPORT_FALLBACK_EMAIL = HEY_SUPPORT_EMAIL;

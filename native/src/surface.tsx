@@ -7248,15 +7248,20 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           <Text style={styles.chatHeaderTitle}>{presentedChatTitle}</Text>
           {showPresentedChatSubtitle ? <Text style={styles.chatHeaderSubtitle} numberOfLines={1}>{appCopy.productName}</Text> : null}
         </View>
-        <View
-          style={[styles.mobilePrivacyButton, styles.disabledButton]}
-          accessible
-          accessibilityLabel={t.settings.privacy}
-          accessibilityRole="image"
-          accessibilityState={{ disabled: true }}
-        >
-          <Lock size={27} strokeWidth={1.4} color={palette.muted} />
-        </View>
+        {ChatHeaderSupportIcon ? (
+          // HPD-837: a host with its own support button shows no lock.
+          <View style={styles.mobileAppBarSpacer} />
+        ) : (
+          <View
+            style={[styles.mobilePrivacyButton, styles.disabledButton]}
+            accessible
+            accessibilityLabel={t.settings.privacy}
+            accessibilityRole="image"
+            accessibilityState={{ disabled: true }}
+          >
+            <Lock size={27} strokeWidth={1.4} color={palette.muted} />
+          </View>
+        )}
       </View>
       {menuOpen ? (
         <MobileNavigationDrawer
@@ -7850,17 +7855,19 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           ) : null}
         </View>
         {tab === "chat" && ChatHeaderSupportIcon && activeSubthreadHeader.kind !== "subthread" ? (
-          // HPD-837: the host's support glyph, grey like the lock, left of it.
+          // HPD-837: the host's support glyph in the colour of the other header
+          // icon (the menu). With it the header shows no lock; Privacy stays
+          // in the left menu.
           <Pressable
             style={({ pressed }) => [styles.mobilePrivacyButton, pressed && styles.systemRowPressed]}
             onPress={() => selectMobileScreen("support")}
             accessibilityRole="button"
             accessibilityLabel={t.nav.support}
           >
-            <ChatHeaderSupportIcon size={24} color={palette.muted} />
+            <ChatHeaderSupportIcon size={24} color={palette.ink} />
           </Pressable>
         ) : null}
-        {tab === "chat" ? (
+        {tab === "chat" && !ChatHeaderSupportIcon ? (
           <Pressable
             style={({ pressed }) => [styles.mobilePrivacyButton, pressed && styles.systemRowPressed]}
             onPress={() => setPrivacyWorkspace(snapshot.workspace.id)}
@@ -7869,7 +7876,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           >
             <Lock size={27} strokeWidth={1.4} color={palette.muted} />
           </Pressable>
-        ) : (
+        ) : tab === "chat" && ChatHeaderSupportIcon && activeSubthreadHeader.kind !== "subthread" ? null : (
           <View style={styles.mobileAppBarSpacer} />
         )}
       </View>

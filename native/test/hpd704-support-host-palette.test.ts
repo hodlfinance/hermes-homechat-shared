@@ -80,7 +80,13 @@ function renderSignedInForm(): Node[] {
     },
   });
   const component = exports.MobileSupportRequestForm as (props: Record<string, unknown>) => unknown;
-  return allNodes(component({ mode: "signed_in", locale: "en" }));
+  // HPD-837: the exported form picks the Hermes or the product mail form; render
+  // the element it returns.
+  const picked = component({ mode: "signed_in", locale: "en" }) as { type: unknown; props: Record<string, unknown> };
+  const rendered = typeof picked.type === "function"
+    ? (picked.type as (props: Record<string, unknown>) => unknown)(picked.props)
+    : picked;
+  return allNodes(rendered);
 }
 
 test("the signed-in Support form keeps HODL host colours when iOS reports Light", () => {

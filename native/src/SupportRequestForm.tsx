@@ -15,6 +15,7 @@ import {
   buildSupportRequestUserInput,
   normalizeSupportContextResult,
   normalizeSupportSubmissionResult,
+  supportMailCopy,
   supportRequestCopy,
   supportRequestFailureMessage,
   supportRequestProblemErrorMessage,
@@ -38,7 +39,194 @@ const ANONYMOUS_SUPPORT_CONTEXT: SupportContextResult = {
 
 import type { AppLocale } from "../core/index";
 
-export function MobileSupportRequestForm({
+/** Opens a mailto URL; false when no mail app can take it. */
+export async function openSupportMailUrl(url: string): Promise<boolean> {
+  try {
+    if (!(await Linking.canOpenURL(url))) return false;
+    await Linking.openURL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The mailto URL of a product support email: the text, a blank line, then the context lines. */
+export function productSupportMailto(input: {
+  supportEmail: string;
+  subject: string;
+  problem: string;
+  context: readonly string[];
+}): string {
+  const body = [input.problem.trim(), "", "—", ...input.context].join("\n");
+  return `mailto:${input.supportEmail}?subject=${encodeURIComponent(input.subject)}&body=${encodeURIComponent(body)}`;
+}
+
+export function MobileSupportRequestForm(props: {
+  client?: SupportRequestClient;
+  mode?: "signed_in" | "anonymous" | "mail";
+  locale?: AppLocale;
+  onOpenFallback?: (mailto: string) => void | Promise<void>;
+  /** mode "mail": the product's support address, name and context lines. */
+  supportEmail?: string;
+  productName?: string;
+  mailContext?: readonly string[];
+  openMail?: (mailto: string) => Promise<boolean>;
+}) {
+  if (props.mode === "mail") {
+    return (
+      <ProductSupportMailForm
+        locale={props.locale ?? "en"}
+        supportEmail={props.supportEmail ?? ""}
+        productName={props.productName ?? ""}
+        mailContext={props.mailContext ?? []}
+        openMail={props.openMail ?? openSupportMailUrl}
+      />
+    );
+  }
+  return <HermesSupportRequestForm {...props} mode={props.mode ?? "signed_in"} />;
+}
+
+// HPD-837: the product help screen outside Hermes. Same page shape as the
+// Hermes form, but it composes an email to the product's own support address:
+// no Hey account, no Hermes session, no reference number.
+function ProductSupportMailForm({
+  locale,
+  supportEmail,
+  productName,
+  mailContext,
+  openMail,
+}: {
+  locale: AppLocale;
+  supportEmail: string;
+  productName: string;
+  mailContext: readonly string[];
+  openMail: (mailto: string) => Promise<boolean>;
+}) {
+  const copy = supportRequestCopy(locale);
+  const mailCopyText = supportMailCopy(locale, productName);
+  const [problem, setProblem] = useState("");
+  const [problemMissing, setProblemMissing] = useState(false);
+  const [outcome, setOutcome] = useState<"opened" | "unavailable" | null>(null);
+  const [opening, setOpening] = useState(false);
+  const [supportEmailCopied, setSupportEmailCopied] = useState(false);
+  const palette = useMobilePalette();
+  const plainMailto = `mailto:${supportEmail}?subject=${encodeURIComponent(mailCopyText.subject)}`;
+
+  async function compose() {
+    if (opening) return;
+    if (!problem.trim()) {
+      setProblemMissing(true);
+      return;
+    }
+    setProblemMissing(false);
+    setOpening(true);
+    try {
+      const composed = await openMail(productSupportMailto({
+        supportEmail,
+        subject: mailCopyText.subject,
+        problem,
+        context: mailContext,
+      }));
+      // Some mail apps refuse a long body; the plain address still opens.
+      const opened = composed || await openMail(plainMailto);
+      setOutcome(opened ? "opened" : "unavailable");
+    } finally {
+      setOpening(false);
+    }
+  }
+
+  return (
+    <MobileSystemSection title={copy.title}>
+      <View style={styles.insetBlock}>
+        <Text style={[styles.muted, { color: palette.secondary }]} allowFontScaling>{mailCopyText.subtitle}</Text>
+      </View>
+
+      <View style={styles.field}>
+        <Text style={[styles.label, { color: palette.ink }]} allowFontScaling>{copy.problem}</Text>
+        <TextInput
+          style={[
+            styles.input,
+            styles.problemInput,
+            { backgroundColor: palette.userTint, borderColor: problemMissing ? palette.coral : palette.lineStrong, color: palette.ink },
+          ]}
+          value={problem}
+          onChangeText={setProblem}
+          maxLength={4_000}
+          multiline
+          textAlignVertical="top"
+          editable={!opening}
+          accessibilityLabel={copy.problemLabel}
+          accessibilityHint={copy.problemHint}
+          allowFontScaling
+        />
+        {problemMissing ? (
+          <Text style={[styles.error, { color: palette.coral }]} accessibilityRole="alert" accessibilityLiveRegion="polite" allowFontScaling>
+            {copy.problemRequired}
+          </Text>
+        ) : null}
+      </View>
+
+      <Text style={[styles.boundary, { color: palette.secondary }]} allowFontScaling>{mailCopyText.boundary}</Text>
+
+      <View style={styles.primaryButtonInset}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={mailCopyText.compose}
+          accessibilityState={{ busy: opening, disabled: opening }}
+          disabled={opening}
+          onPress={() => void compose()}
+          style={({ pressed }) => [
+            styles.primaryButton,
+            { backgroundColor: palette.accent },
+            pressed && styles.primaryButtonPressed,
+            opening && styles.primaryButtonDisabled,
+          ]}
+        >
+          {opening ? <ActivityIndicator color={palette.accentText} /> : null}
+          <Text style={[styles.primaryButtonText, { color: palette.accentText }]} allowFontScaling>{mailCopyText.compose}</Text>
+        </Pressable>
+        {outcome ? (
+          <Text
+            style={[outcome === "opened" ? styles.muted : styles.error, { color: outcome === "opened" ? palette.secondary : palette.coral }]}
+            accessibilityRole={outcome === "opened" ? undefined : "alert"}
+            accessibilityLiveRegion="polite"
+            allowFontScaling
+          >
+            {outcome === "opened" ? mailCopyText.opened : mailCopyText.unavailable}
+          </Text>
+        ) : null}
+      </View>
+
+      <MobileSystemRow
+        label={`${copy.email} ${supportEmail}`}
+        accessibilityRole="link"
+        onPress={() => void openMail(plainMailto).then((opened) => { if (!opened) setOutcome("unavailable"); })}
+        separator={false}
+      />
+      <View style={styles.copyEmailRow}>
+        <Text style={[styles.muted, styles.copyEmailAddress, { color: palette.secondary }]} selectable allowFontScaling>
+          {supportEmail}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={copy.copyEmail}
+          onPress={() => {
+            Clipboard.setString(supportEmail);
+            setSupportEmailCopied(true);
+          }}
+          style={({ pressed }) => [styles.smallAction, pressed && styles.smallActionPressed]}
+        >
+          <Text style={[styles.smallActionText, { color: palette.accent }]} allowFontScaling>{supportEmailCopied ? copy.copied : copy.copy}</Text>
+        </Pressable>
+      </View>
+      {supportEmailCopied ? (
+        <Text style={[styles.copyFeedback, { color: palette.secondary }]} accessibilityLiveRegion="polite" allowFontScaling>{copy.emailCopied}</Text>
+      ) : null}
+    </MobileSystemSection>
+  );
+}
+
+function HermesSupportRequestForm({
   client = UNAVAILABLE_SUPPORT_REQUEST_CLIENT,
   mode = "signed_in",
   locale = "en",
