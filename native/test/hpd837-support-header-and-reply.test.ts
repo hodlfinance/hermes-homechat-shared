@@ -46,7 +46,9 @@ test("a host support button replaces the chat-header lock; Hey keeps the lock (H
   assert.ok(supportAt > 0);
   const supportButton = live.slice(supportAt, live.indexOf("</Pressable>", supportAt));
   assert.match(supportButton, /selectMobileScreen\("support"\)/);
-  assert.match(supportButton, /<ChatHeaderSupportIcon size=\{24\} color=\{palette\.muted\} \/>/);
+  // Same colour as the menu icon, the header's other icon; not the accent.
+  assert.match(supportButton, /<ChatHeaderSupportIcon size=\{24\} color=\{palette\.ink\} \/>/);
+  assert.match(header, /<Menu size=\{22\} color=\{palette\.ink\} \/>/);
   assert.match(supportButton, /accessibilityLabel=\{t\.nav\.support\}/);
   // The lock renders only when the host brings no support button.
   assert.match(live, /\{tab === "chat" && !ChatHeaderSupportIcon \? \(\s+<Pressable[\s\S]*?setPrivacyWorkspace[\s\S]*?<Lock size=\{27\}/);

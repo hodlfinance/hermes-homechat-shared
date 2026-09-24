@@ -7855,15 +7855,16 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
           ) : null}
         </View>
         {tab === "chat" && ChatHeaderSupportIcon && activeSubthreadHeader.kind !== "subthread" ? (
-          // HPD-837: the host's support glyph in the header icon colour. With
-          // it the header shows no lock; Privacy stays in the left menu.
+          // HPD-837: the host's support glyph in the colour of the other header
+          // icon (the menu). With it the header shows no lock; Privacy stays
+          // in the left menu.
           <Pressable
             style={({ pressed }) => [styles.mobilePrivacyButton, pressed && styles.systemRowPressed]}
             onPress={() => selectMobileScreen("support")}
             accessibilityRole="button"
             accessibilityLabel={t.nav.support}
           >
-            <ChatHeaderSupportIcon size={24} color={palette.muted} />
+            <ChatHeaderSupportIcon size={24} color={palette.ink} />
           </Pressable>
         ) : null}
         {tab === "chat" && !ChatHeaderSupportIcon ? (
