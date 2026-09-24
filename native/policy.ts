@@ -44,6 +44,15 @@ const routes: ReadonlyArray<readonly [string, RegExp]> = [
   ["POST", /^\/chat\/suggestions\/[^/]+\/use$/],
   ["GET", /^\/workspace\/preview\/\d+(?:\/.*)?$/],
   ["HEAD", /^\/workspace\/preview\/\d+(?:\/.*)?$/],
+  // A private page opens like in Hey: the shared surface asks for a handoff,
+  // and the host shows the returned page-session URL in its in-app browser.
+  // The Finance BFF answers the handoff itself and never forwards it.
+  ["POST", /^\/auth\/browser-session-handoff$/],
+  // The plane answers /workspace/preview/<port> of a registered app with a 302
+  // to its signed page session; the BFF's forward follows it, so the plane
+  // must accept that exact token shape for a HODL-bound request.
+  ["GET", /^\/workspace\/page-sessions\/hhp_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}(?:\/.*)?$/],
+  ["HEAD", /^\/workspace\/page-sessions\/hhp_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}(?:\/.*)?$/],
 ];
 
 export function permitsHodlNativeR8Request(method: string, path: string): boolean {

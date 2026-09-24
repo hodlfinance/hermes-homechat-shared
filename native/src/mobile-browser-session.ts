@@ -19,6 +19,20 @@ export function isPrivateMobileBrowserHref(href: string) {
   );
 }
 
+/**
+ * A chat link to a private page arrives as an absolute URL on the product's own
+ * API origin. Returns its API-relative href when it is a private page, so it can
+ * take the authenticated handoff instead of the system browser.
+ */
+export function privateMobileBrowserHrefFromUrl(apiBase: string, url: string) {
+  // String arithmetic, the inverse of mobileBrowserUrl: React Native's URL
+  // class throws on several getters (HPD-808).
+  const appBase = apiBase.replace(/\/api\/?$/i, "").replace(/\/+$/, "");
+  if (!/^https?:\/\/[^/?#]+$/i.test(appBase) || !url.startsWith(`${appBase}/`)) return null;
+  const href = url.slice(appBase.length);
+  return /^\/api\/workspace\/preview\/\d+(?:[/?#]|$)/i.test(href) ? href : null;
+}
+
 export async function openMobileBrowserHref(input: {
   api: BrowserSessionHandoffApi;
   apiBase: string;
