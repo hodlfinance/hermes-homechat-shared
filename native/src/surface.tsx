@@ -8154,10 +8154,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
           chatSessionsBusy={chatSessionsBusy}
           chatSessionNotice={chatSessionNotice}
           onClose={() => setMenuOpen(false)}
-          onOpenHome={() => void openMobileHomeChat()}
+          // HPD-890: Home Chat in the menu is deliberate navigation. A plain
+          // load is refused while a reply streams, so from an automation
+          // thread with a running answer the tap did nothing. The running
+          // reply keeps its native run and is there on the way back.
+          onOpenHome={() => void openMobileHomeChat({ force: true })}
           onStartNew={() => void startNewMobileChat()}
           onToggleRecents={() => setChatSessionsOpen((current) => !current)}
-          onOpenSession={loadMobileChatSession}
+          onOpenSession={(sessionId) => void loadMobileChatSession(sessionId, { force: true })}
           onOpenBookmark={(href) => {
             setMenuOpen(false);
             void openBookmark(href);
