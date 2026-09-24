@@ -105,12 +105,13 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "ci": "npm run typecheck && npm test && npm run build && npm run test:packed-consumer && npm run test:native",
+    "ci": "npm run typecheck && npm run typecheck:native && npm test && npm run build && npm run test:packed-consumer && npm run test:native",
     "prepare": "npm run build",
     "prepack": "npm run build",
     "test": "node --test --import tsx test/*.test.ts test/*.test.tsx",
     "test:packed-consumer": "node scripts/test-packed-consumers.mjs",
     "typecheck": "tsc --noEmit",
+    "typecheck:native": "tsc -p tsconfig.native.json",
     "test:native": "node --test --import tsx native/test/*.test.ts"
   },
   "peerDependencies": {
