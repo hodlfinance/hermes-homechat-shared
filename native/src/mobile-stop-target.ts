@@ -1,5 +1,5 @@
 import type { ChatRunStatus } from "../core/index";
-import { mobileRunIdIsBackground } from "./mobile-home-chat-startup";
+import { mobileRunIdIsBackground, mobileRunIdIsHelper } from "./mobile-home-chat-startup";
 
 // HPD-807: the run that holds the conversation — one waiting on the customer
 // (a clarify question or an approval) or still running — when it is not the run
@@ -7,16 +7,28 @@ import { mobileRunIdIsBackground } from "./mobile-home-chat-startup";
 // run, so without this Stop reached "Bist Du da?" and the run blocking it
 // stayed open. `conversationRunIds` are the runs of the open conversation only.
 //
-// HPD-871: a scheduled job, a background delivery or a helper run never holds
-// the customer's reply, so Stop never reaches one of them.
+// HPD-871: a scheduled job or a background delivery never holds the
+// customer's reply, so Stop never reaches one. A helper run holds only its own
+// sub-chat: Stop reaches it there and nowhere else. `runConversationId` names
+// the conversation a run belongs to; a helper run whose conversation is not
+// known to be the open one is left alone.
 export function mobileBlockingRunId(
   statuses: Readonly<Record<string, ChatRunStatus>>,
   conversationRunIds: readonly string[],
   activeRunId: string | null,
+  scope: {
+    openConversationId: string | null;
+    runConversationId: (runId: string) => string | null | undefined;
+  } = { openConversationId: null, runConversationId: () => null },
 ): string | null {
   const holding = (status: ChatRunStatus | undefined) => status === "waiting_for_approval" || status === "running";
+  const mayHold = (runId: string) => {
+    if (mobileRunIdIsBackground(runId)) return false;
+    if (!mobileRunIdIsHelper(runId)) return true;
+    return Boolean(scope.openConversationId && scope.runConversationId(runId) === scope.openConversationId);
+  };
   return conversationRunIds.find((runId) =>
-    runId !== activeRunId && !mobileRunIdIsBackground(runId) && holding(statuses[runId])
+    runId !== activeRunId && mayHold(runId) && holding(statuses[runId])
   ) ?? null;
 }
 

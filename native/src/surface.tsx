@@ -6706,7 +6706,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
     // HPD-807: a run waiting on a clarify or an approval holds every run queued
     // behind it. After a restart the newest queued run became the active one,
     // and Stop went there while the blocking run stayed open: no way out.
-    const blockingRunId = mobileBlockingRunId(chatRunStatusesById, Object.keys(chatEventsByRunId), activeChatRunId);
+    const blockingRunId = mobileBlockingRunId(chatRunStatusesById, Object.keys(chatEventsByRunId), activeChatRunId, {
+      openConversationId: activeConversationSessionIdRef.current,
+      runConversationId: (runId) =>
+        messagesStateRef.current.find((message) => message.runId === runId)?.conversationSessionId ?? null,
+    });
     if (blockingRunId) {
       setChatPendingText("Stopping the reply...");
       setBusyLabel("Stopping the reply...");

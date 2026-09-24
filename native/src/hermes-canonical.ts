@@ -322,7 +322,9 @@ export function createNativeR8CanonicalController(
         throw new Error("Canonical Hermes active run crossed the active conversation boundary.");
       }
       const run = rememberRun(runResponse.run, activeConversation.id);
-      if (mobileRunIsForeground(run)) return run;
+      // A helper run is the foreground of its own sub-chat, so opening that
+      // sub-chat names it; with no chat named it stays background work.
+      if (mobileRunIsForeground(run, query.conversationId ?? null)) return run;
       // HPD-871: the conversation's active run is the oldest running one on the
       // plane, a scheduled job or a background delivery included. That run is
       // not the customer's reply; his own run, if any, is found among the

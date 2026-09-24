@@ -64,10 +64,9 @@ test("HPD-871: the customer's running reply is still recovered, ahead of an olde
   assert.deepEqual(recovery.queuedFollowUps.map((item) => item.id), [followUp.id]);
 });
 
-test("HPD-871: delivery and helper runs are ignored", () => {
+test("HPD-871: delivery runs are ignored everywhere", () => {
   const recovery = mobileHomeChatActiveRunRecovery([
     run("run_delivery_9d2e11", "running", "2026-09-24T06:00:00.000Z"),
-    run("run_delegated_77aa01", "running", "2026-09-24T06:01:00.000Z"),
     run("run_delivery_9d2e12", "queued", "2026-09-24T06:02:00.000Z", { startedAt: null }),
   ], home);
   assert.equal(recovery.primaryRun, null);
@@ -76,24 +75,53 @@ test("HPD-871: delivery and helper runs are ignored", () => {
     run("run_delivery_9d2e11", "running", "2026-09-24T06:00:00.000Z"),
   ]);
   assert.equal(withoutPreference.primaryRun, null);
+  assert.equal(mobileRunIsForeground({ id: "run_delivery_9d2e11", conversationSessionId: home }, home), false);
+  assert.equal(mobileRunIsForeground({ id: "run_job_3f9a0c", conversationSessionId: home }, home), false);
   assert.equal(mobileRunIsForeground({ id: "run_Llia8JeTURv9rP", sourceJobId: null }), true);
 });
 
-test("HPD-871: Stop never picks a job, delivery or helper run as the blocking run", () => {
+// The plane creates the helper's sub-chat and opens the helper run inside it,
+// so the run's conversation is the sub-chat, never the parent or Home chat.
+const subChat = "session_helper_sap";
+const helperRunId = "run_delegated_77aa01";
+
+test("HPD-871: a helper run is the foreground of its own sub-chat and background in the parent and Home chat", () => {
+  const helper = run(helperRunId, "running", "2026-09-24T06:01:00.000Z", { conversationSessionId: subChat });
+
+  assert.equal(mobileHomeChatActiveRunRecovery([helper], subChat).primaryRun?.id, helperRunId);
+  assert.equal(mobileHomeChatActiveRunRecovery([helper], home).primaryRun, null);
+  assert.equal(mobileHomeChatActiveRunRecovery([helper]).primaryRun, null);
+  assert.equal(mobileRunIsForeground(helper, subChat), true);
+  assert.equal(mobileRunIsForeground(helper, home), false);
+  assert.equal(mobileRunIsForeground(helper), false);
+});
+
+test("HPD-871: Stop never picks a job or delivery run, and a helper run only in its own sub-chat", () => {
   const statuses = {
     run_job_3f9a0c: "running",
     run_delivery_9d2e11: "running",
-    run_delegated_77aa01: "waiting_for_approval",
+    [helperRunId]: "running",
     run_clarify: "waiting_for_approval",
   } as const;
+  const runConversationId = (runId: string) => (runId === helperRunId ? subChat : home);
+
   assert.equal(
-    mobileBlockingRunId(statuses, ["run_job_3f9a0c", "run_delivery_9d2e11", "run_delegated_77aa01"], null),
+    mobileBlockingRunId(statuses, ["run_job_3f9a0c", "run_delivery_9d2e11", helperRunId], null, {
+      openConversationId: home,
+      runConversationId,
+    }),
     null,
   );
   assert.equal(
-    mobileBlockingRunId(statuses, ["run_job_3f9a0c", "run_clarify"], null),
+    mobileBlockingRunId(statuses, ["run_job_3f9a0c", "run_clarify"], null, { openConversationId: home, runConversationId }),
     "run_clarify",
   );
+  assert.equal(
+    mobileBlockingRunId(statuses, [helperRunId], null, { openConversationId: subChat, runConversationId }),
+    helperRunId,
+  );
+  // Without knowing where the helper run belongs, Stop leaves it alone.
+  assert.equal(mobileBlockingRunId(statuses, [helperRunId], null), null);
 });
 
 test("HPD-871: Stop reads the run first and sends nothing to a run that has already finished", async () => {
@@ -169,7 +197,12 @@ function conversation(activeRunId: string | null): HermesApiConversation {
   };
 }
 
-function canonical(runs: Record<string, HermesApiRun>, activeRunId: string | null, calls: string[]) {
+function canonical(
+  runs: Record<string, HermesApiRun>,
+  activeRunId: string | null,
+  calls: string[],
+  conversations: HermesApiConversation[] = [conversation(activeRunId)],
+) {
   const client = {
     run: async (runId: string) => { calls.push(`GET /hermes/runs/${runId}`); return { contractVersion: 1, run: runs[runId]! }; },
     stopRun: async (runId: string) => {
@@ -178,10 +211,12 @@ function canonical(runs: Record<string, HermesApiRun>, activeRunId: string | nul
     },
     listRuns: async () => {
       calls.push("GET /hermes/runs?active=true");
-      const active = Object.values(runs).filter((item) => item.status === "running" || item.status === "queued");
+      // Like the plane's activeChatRuns, the list leaves helper runs out.
+      const active = Object.values(runs).filter((item) =>
+        (item.status === "running" || item.status === "queued") && !item.id.startsWith("run_delegated_"));
       return { contractVersion: 1, run: active[0] ?? null, runs: active };
     },
-    listConversations: async () => ({ contractVersion: 1, conversations: [conversation(activeRunId)] }),
+    listConversations: async () => ({ contractVersion: 1, conversations }),
   };
   return createNativeR8CanonicalController(
     client as unknown as Parameters<typeof createNativeR8CanonicalController>[0],
@@ -224,4 +259,28 @@ test("HPD-871: opening a chat whose plane-side active run is a job returns the c
 
   const own = canonical({ run_live: apiRun("run_live", "running") }, "run_live", []);
   assert.equal((await own.activeRun({ conversationId: home }))?.id, "run_live");
+});
+
+test("HPD-871: opening a helper's sub-chat while it runs shows Working and Stop reaches it; the parent chat ignores it", async () => {
+  const helper = apiRun(helperRunId, "running", { conversationId: subChat, runtimeRunId: "20260924_060100_000001" });
+  const subChatConversation = { ...conversation(helperRunId), id: subChat, role: "chat" as const, title: "SAP research" };
+  const homeConversation = conversation(null);
+  const calls: string[] = [];
+  const hermes = canonical({ [helperRunId]: helper }, helperRunId, calls, [homeConversation, subChatConversation]);
+
+  // The sub-chat resumes the helper run: that is what shows Working there.
+  const inSubChat = await hermes.activeRun({ conversationId: subChat });
+  assert.equal(inSubChat?.id, helperRunId);
+  assert.equal(inSubChat?.status, "running");
+
+  // Stop in the sub-chat targets the helper run and reaches it.
+  calls.length = 0;
+  const stopped = await hermes.stopRun(inSubChat!.id);
+  assert.equal(stopped.status, "cancelled");
+  assert.deepEqual(calls, [`GET /hermes/runs/${helperRunId}`, `POST /hermes/runs/${helperRunId}/stop`]);
+
+  // The parent Home chat has no active run of its own: the helper stays out.
+  assert.equal(await hermes.activeRun({ conversationId: home }), null);
+  // Asked without a chat, the helper run is background work.
+  assert.equal(await hermes.activeRun(), null);
 });

@@ -38,7 +38,7 @@ test("HPD-807: Stop goes to the run holding the conversation, not the newest que
 test("HPD-807: the Stop control reaches the blocking run through the API before the active-run path", () => {
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   const stop = surface.slice(surface.indexOf("async function stopReply()"), surface.indexOf("async function resumeChatRun("));
-  const blocking = stop.indexOf("mobileBlockingRunId(chatRunStatusesById, Object.keys(chatEventsByRunId), activeChatRunId)");
+  const blocking = stop.indexOf("mobileBlockingRunId(chatRunStatusesById, Object.keys(chatEventsByRunId), activeChatRunId,");
   const apiStop = stop.indexOf("await hermesApi.stopRun(blockingRunId, {})");
   const activePath = stop.indexOf("if (!activeChatRunId) {");
   assert.ok(blocking > 0 && apiStop > blocking && activePath > apiStop);
