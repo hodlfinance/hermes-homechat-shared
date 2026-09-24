@@ -361,6 +361,28 @@ export function mobileQueuedFollowUpNoticeVisible(input: {
   return true;
 }
 
+/**
+ * HPD-891. A queued follow-up is shown only in the queue until it is sent.
+ * The plane saves its message when it is queued, so every read of the
+ * conversation (a foreground refresh, a delegated result, a reload) brought
+ * it back into the chat as a sent bubble while the queue card still said
+ * "1. Follow-up queued" (Justus, HODL Build 61). The transcript leaves out the
+ * messages of every follow-up that has not started, and of every follow-up
+ * cancelled before it started, whatever read brought them in. A follow-up that
+ * started, or failed, is shown as before.
+ */
+export function mobileTranscriptWithoutUnsentFollowUps<Message extends { runId: string }>(
+  messages: readonly Message[],
+  followUps: readonly { runId: string | null; status: MobileQueuedFollowUpStatus }[],
+  withdrawnRunIds: ReadonlySet<string> = new Set(),
+): Message[] {
+  const hidden = new Set(withdrawnRunIds);
+  for (const followUp of followUps) {
+    if (followUp.runId && followUp.status !== "running" && followUp.status !== "failed") hidden.add(followUp.runId);
+  }
+  return hidden.size ? messages.filter((message) => !hidden.has(message.runId)) : [...messages];
+}
+
 export function mobileQueuedFollowUpShouldEnterTranscript(input: {
   status: ChatRunStatus;
   startedAt?: string | null;

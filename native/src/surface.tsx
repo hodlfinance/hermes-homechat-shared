@@ -291,6 +291,7 @@ import {
   mobileQueuedFollowUpNoticeActionState,
   mobileQueuedFollowUpNoticeVisible,
   mobileQueuedFollowUpShouldEnterTranscript,
+  mobileTranscriptWithoutUnsentFollowUps,
   mobileQueuedFollowUpSnapshotAfterStatus,
   mobileQueuedFollowUpTerminalStatus,
   mobileFailedMessageHasCompleted,
@@ -1870,6 +1871,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
   const [financeApprovalBusyId, setFinanceApprovalBusyId] = useState<string | null>(null);
   const [financeApprovalErrorById, setFinanceApprovalErrorById] = useState<Record<string, string>>({});
   const [queuedFollowUps, setQueuedFollowUps] = useState<MobileQueuedFollowUpView[]>([]);
+  // HPD-891: follow-ups cancelled before they were sent; never a chat bubble.
+  const [withdrawnFollowUpRunIds, setWithdrawnFollowUpRunIds] = useState<ReadonlySet<string>>(() => new Set());
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [voiceNoteState, setVoiceNoteState] = useState<SharedHomechatVoiceState>({
     error: null,
@@ -2600,6 +2603,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
     setHeySuggestionNotice(null);
     heySuggestionNudgeWorkspaceRef.current = null;
     setQueuedFollowUps([]);
+    setWithdrawnFollowUpRunIds(new Set());
     setIsRefreshing(false);
     setSessionRestored(true);
     setSessionNotice(null);
@@ -6705,6 +6709,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
     if (!mobileQueuedFollowUpHasStarted(queued.status)) {
       queuedFollowUpRef.current.delete(ownershipToken);
       queued.abortController.abort();
+      const withdrawnRunId = queued.runId;
+      if (withdrawnRunId) setWithdrawnFollowUpRunIds((current) => new Set([...current, withdrawnRunId]));
       const remainingMessages = mobileMessagesWithoutRun(messagesStateRef.current, queued.runId);
       messagesStateRef.current = remainingMessages;
       setMessages(remainingMessages);
@@ -7943,7 +7949,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
   const visibleMobileMessages = mobileMessagesForFailedRunNotice({
     events: visibleFailedMessage?.runId ? chatEventsByRunId[visibleFailedMessage.runId] ?? [] : [],
     failedRunId: visibleFailedMessage?.runId,
-    messages: pageStarterTranscript(homechatTranscriptMessages(messages, { includeEmpty: true }), pageStarter,
+    messages: pageStarterTranscript(homechatTranscriptMessages(
+      mobileTranscriptWithoutUnsentFollowUps(messages, queuedFollowUps, withdrawnFollowUpRunIds),
+      { includeEmpty: true },
+    ), pageStarter,
       { workspaceId: snapshot.workspace.id, conversationId: activeConversationSessionId ?? "" }, pageStarterCopy(appLocale).question),
   });
   const visibleChatApprovalCards = mobileVisibleChatApprovalCards({
