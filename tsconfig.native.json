@@ -15,5 +15,5 @@
       "@hodlfinance/hermes-homechat-shared/core": ["./src/index.ts"]
     }
   },
-  "include": ["native/*.ts", "native/src/**/*.ts", "native/src/**/*.tsx", "native/core/**/*.ts", "native/ui/**/*.ts", "scripts/native-typecheck/host-modules.d.ts"]
+  "include": ["native/*.ts", "native/src/**/*.ts", "native/src/**/*.tsx", "native/core/**/*.ts", "native/ui/**/*.ts", "native/test/**/*.ts", "scripts/native-typecheck/host-modules.d.ts"]
 }

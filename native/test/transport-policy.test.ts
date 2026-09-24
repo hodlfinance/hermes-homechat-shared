@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createNativeR8Transport } from '../transport';
+import type { ChatLatencySummary } from '../core/hermes-channel';
 import { workspaceStatusTruthRequest } from '../core/status-truth';
 import { permitsHodlNativeR8Request, isPreinstalledR8Suggestion } from '../policy';
 
@@ -60,6 +61,7 @@ test('native Finance approval decisions return the exact reviewed payload and co
     token: 'test-session',
     conversationSessionId: 'conversation_a',
   });
+  assert.ok(approval);
   await transport.confirmFinanceActionApproval({ token: 'test-session', approval });
   await transport.cancelFinanceActionApproval({ token: 'test-session', approval });
 
@@ -95,8 +97,15 @@ test('the installed native client routes bootstrap, settings and canonical mutat
   assert.equal(calls.length, 6);
   assert.ok(calls.every(call => call.url.startsWith('https://finhermes.test/api/')));
   assert.ok(calls.every(call => new Headers(call.init?.headers).get('authorization') === 'Bearer test-session'));
-  await transport.reportLatency('test-session', 'run_a', { outcome: 'success' });
-  assert.deepEqual(JSON.parse(String(calls.at(-1)?.init?.body)), { summary: { outcome: 'success' } });
+  const summary: ChatLatencySummary = {
+    action: 'chat.latency.summary',
+    schema: 'hey.chat.latency.v1',
+    clockDomain: 'mobile_client',
+    channel: 'hey_hermes_mobile',
+    outcome: 'success',
+  };
+  await transport.reportLatency('test-session', 'run_a', summary);
+  assert.deepEqual(JSON.parse(String(calls.at(-1)?.init?.body)), { summary });
   // A malformed status response can fail validation, but it must use the same
   // host transport rather than leaking to an ambient/global fetch.
   await workspaceStatusTruthRequest(client).catch(() => undefined);
@@ -105,7 +114,7 @@ test('the installed native client routes bootstrap, settings and canonical mutat
 
 test('the native transport never passes browser-only same-origin credentials to the host fetch', async () => {
   const credentials: Array<RequestCredentials | null> = [];
-  const strictNativeFetch: typeof fetch = async (_url, init = {}) => {
+  const strictNativeFetch: typeof fetch = async (_url, init: RequestInit = {}) => {
     credentials.push(init.credentials ?? null);
     if (init.credentials === 'same-origin') {
       throw new TypeError('Cannot cast same-origin to NativeRequestCredentials');

@@ -4,6 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 import type { ChatArtifactReference } from "../core/index";
+import type { SharedHomechatJsonValue } from "@hodlfinance/hermes-homechat-shared/core";
 import {
   messageRepeatsAnswer,
   mobileCitationSegments,
@@ -37,7 +38,10 @@ const MESSAGE = [
   "- Bank A: Kursziel 290 EUR [1]",
 ].join("\n");
 
-function source(number: number, url: string | null): Record<string, unknown> {
+// A reference as it travels in an artifact payload: plain JSON.
+type JsonObject = { [key: string]: SharedHomechatJsonValue };
+
+function source(number: number, url: string | null): JsonObject {
   return {
     source_number: number,
     title: `Research note ${number}`,

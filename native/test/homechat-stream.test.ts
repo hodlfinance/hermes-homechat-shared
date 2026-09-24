@@ -7,8 +7,8 @@ test("releases a terminal Expo fetch reader without cancelling its native stream
   const terminalEvent = new TextEncoder().encode(
     'id: cursor-final\nevent: run.status\ndata: {"runId":"run-1","state":"completed"}\n\n',
   );
-  let completeNativeResponse = () => undefined;
-  const body = new ReadableStream<Uint8Array>({
+  let completeNativeResponse: () => void = () => undefined;
+  const body = new ReadableStream<Uint8Array<ArrayBuffer>>({
     start(controller) {
       controller.enqueue(terminalEvent);
       completeNativeResponse = () => controller.close();

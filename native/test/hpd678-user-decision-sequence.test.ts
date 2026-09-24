@@ -42,6 +42,7 @@ function approvalCard(): ApprovalCard {
     createdAt,
     decidedAt: null,
     executedAt: null,
+    notes: [],
   };
 }
 
@@ -62,7 +63,7 @@ test("a live approval or clarification event immediately enters the visible wait
   });
 
   for (const incoming of [approval, clarify]) {
-    const statuses: Record<string, ChatRunStatus> = { run_1: "running" };
+    const statuses: { run_1: ChatRunStatus } = { run_1: "running" };
     statuses.run_1 = mobileChatUserDecisionStatusFromEvent(incoming) ?? statuses.run_1;
     assert.equal(statuses.run_1, "waiting_for_approval");
     if (incoming === approval) {
