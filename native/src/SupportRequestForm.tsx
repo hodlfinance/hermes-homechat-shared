@@ -237,7 +237,9 @@ function ProductSupportMailForm({
         ) : null}
       </View>
 
-      <Text style={[styles.boundary, { color: palette.secondary }]} allowFontScaling>{mailCopyText.boundary}</Text>
+      <Text style={[styles.boundary, { color: palette.secondary }]} allowFontScaling>
+        {mailAccount?.email ? mailCopyText.boundary : mailAccount ? mailCopyText.boundaryNoEmail : mailCopyText.boundarySignedOut}
+      </Text>
 
       <View style={styles.primaryButtonInset}>
         <Pressable
