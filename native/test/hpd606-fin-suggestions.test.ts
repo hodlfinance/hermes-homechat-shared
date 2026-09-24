@@ -162,7 +162,7 @@ test("the surface shows Fin suggestions only when the host asks for them", () =>
   assert.match(surface, /\{tab === "suggestions" && !finSuggestionsEnabled && \(/);
   // The card: Home Chat only, first shown while idle, pinned under the header
   // and outside the transcript; the transcript carries no suggestions.
-  assert.match(surface, /if \(tab !== "chat" \|\| activeChatRunId \|\| busy\) return;/);
+  assert.match(surface, /if \(tab !== "chat" \|\| activeChatRunId \|\| busy \|\| !hostVisible\) return;/);
   assert.match(surface, /finSuggestionsEnabled && finSuggestionsLoaded && isHomeChatActive && !finCardClosed && finCarouselIds/);
   assert.match(surface, /<View style=\{styles\.chatScreen\}>\s+\{\/\* HPD-606: pinned under the header, not part of the transcript\. \*\/\}\s+\{finCard\.length \? \(\s+<FinSuggestionCard/);
   assert.doesNotMatch(surface, /FinSuggestionCarousel/);

@@ -322,7 +322,9 @@ import {
   finLockedCarouselSuggestions,
   finSuggestionCardQualification,
   claimFinSuggestionCard,
+  finSuggestionCardStaysVisible,
   markFinSuggestionCardDismissed,
+  mergeStoredFinSuggestionDay,
   parseFinSuggestionsState,
   serializeFinSuggestionsState,
   type FinSuggestionAction,
@@ -1536,6 +1538,11 @@ type NativeR8SurfaceProps = {
     requestId: string;
     onAccepted?: ((id: string) => void) | null;
   };
+  /**
+   * HPD-606: false while the host shows another screen, for example another
+   * HODL tab, although the surface stays mounted. Defaults to true.
+   */
+  hostVisible?: boolean;
 };
 
 function NativeR8Surface(props: NativeR8SurfaceProps = {}) {
@@ -1546,7 +1553,7 @@ function NativeR8Surface(props: NativeR8SurfaceProps = {}) {
   );
 }
 
-function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8SurfaceProps = {}) {
+function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible = true }: NativeR8SurfaceProps = {}) {
   const systemColorScheme = useColorScheme();
   const reduceMotion = useReduceMotion();
   const hostAppLocale = host.presentation?.appLocale;
@@ -1598,7 +1605,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   // The Home Chat card picks its suggestions once per app session and keeps
   // them; all of them get the cooldown when it first shows (HPD-606).
   const [finCarouselIds, setFinCarouselIds] = useState<string[] | null>(null);
-  // X closes today's card for this session; the day is already used up.
+  // Today's card has ended for this mount: X, Later, Never, or the Home Chat
+  // left the front (HPD-606, Build 51). The stored day keeps it away elsewhere.
   const [finCardClosed, setFinCardClosed] = useState(false);
   // The card is for customers with fewer than two automations; read once per session.
   const [finAutomationCount, setFinAutomationCount] = useState<number | null>(null);
@@ -4108,7 +4116,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   }
 
   useEffect(() => {
-    if (!token || !snapshot) return;
+    // HPD-606: the Fin host shows no suggestion chips in an empty chat; its
+    // only suggestion the customer did not ask for is the Home Chat card.
+    if (!token || !snapshot || finSuggestionsEnabled) return;
     let cancelled = false;
     api
       .chatSuggestions()
@@ -4119,7 +4129,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     return () => {
       cancelled = true;
     };
-  }, [api, token, snapshot?.workspace.id, snapshot?.me.preferredLocale]);
+  }, [api, token, snapshot?.workspace.id, snapshot?.me.preferredLocale, finSuggestionsEnabled]);
 
   useEffect(() => {
     if (!token || !snapshot || (tab !== "chat" && tab !== "connections_customer")) return;
@@ -4210,7 +4220,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     }).catch(() => {
       if (!cancelled) setHeySuggestionNotice("Suggestions are temporarily unavailable.");
     });
-    if (heySuggestionNudgeWorkspaceRef.current !== snapshot.workspace.id) {
+    // HPD-606: the Fin host never asks for the Hey home nudge. It placed a
+    // second suggestion in the Home Chat with a 24-hour rule of its own.
+    if (!finSuggestionsEnabled && heySuggestionNudgeWorkspaceRef.current !== snapshot.workspace.id) {
       heySuggestionNudgeWorkspaceRef.current = snapshot.workspace.id;
       void api.suggestionHomeNudge({ sessionId: heySuggestionSessionIdRef.current, locale }).then((response) => {
         if (!cancelled && response.result.kind === "selected") {
@@ -4224,7 +4236,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
     return () => {
       cancelled = true;
     };
-  }, [api, token, snapshot?.workspace.id, snapshot?.me.preferredLocale]);
+  }, [api, token, snapshot?.workspace.id, snapshot?.me.preferredLocale, finSuggestionsEnabled]);
 
   useEffect(() => {
     if (!token || !snapshot) return;
@@ -6008,7 +6020,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       if (finHermesSuggestionWasSent(pendingSuggestion, message)) {
         setFinSuggestionsState((current) => {
           const next = applyFinSuggestionAction(current, pendingSuggestion.id, "tried");
-          if (finSuggestionsLoaded) void persistStoredString(finSuggestionsStorageKey, serializeFinSuggestionsState(next)).catch(() => undefined);
+          if (finSuggestionsLoaded) persistFinSuggestionsState(next);
           return next;
         });
       }
@@ -6463,7 +6475,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
   // them as shown, which starts their cooldown and uses up the day.
   useEffect(() => {
     if (!finSuggestionsEnabled || !finSuggestionsLoaded || finCarouselIds !== null || finCardClosed) return;
-    if (tab !== "chat" || activeChatRunId || busy) return;
+    if (tab !== "chat" || activeChatRunId || busy || !hostVisible) return;
     if (chatSessions.find((session) => session.id === activeConversationSessionId)?.role !== "home") return;
     const now = new Date();
     const qualification = finSuggestionCardQualification(finSuggestionsState, { now, automationCount: finAutomationCount });
@@ -6493,14 +6505,44 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
       if (state) setFinSuggestionsState(state);
       if (ids) setFinCarouselIds(ids);
     });
-  }, [finSuggestionsEnabled, finSuggestionsLoaded, finCarouselIds, finCardClosed, finAutomationCount, hermesApi, tab, activeChatRunId, busy, chatSessions, activeConversationSessionId, finSuggestionsState]);
+  }, [finSuggestionsEnabled, finSuggestionsLoaded, finCarouselIds, finCardClosed, finAutomationCount, hermesApi, tab, activeChatRunId, busy, chatSessions, activeConversationSessionId, finSuggestionsState, hostVisible]);
+
+  // HPD-606, Build 51: the card claimed today stays on screen only while the
+  // Home Chat is in front. Another screen or conversation, another HODL tab or
+  // the app in the background ends today's appearance for good.
+  const finCardShowing = finCarouselIds !== null && !finCardClosed;
+  const finHomeChatInFront = tab === "chat"
+    && chatSessions.find((session) => session.id === activeConversationSessionId)?.role === "home";
+  useEffect(() => {
+    if (!finCardShowing) return;
+    const endWhenHidden = (appState: string) => {
+      if (!finSuggestionCardStaysVisible({ homeChatInFront: finHomeChatInFront, hostVisible, appActive: appState !== "background" })) {
+        setFinCardClosed(true);
+      }
+    };
+    endWhenHidden(AppState.currentState);
+    const subscription = AppState.addEventListener("change", endWhenHidden);
+    return () => subscription.remove();
+  }, [finCardShowing, finHomeChatInFront, hostVisible]);
 
   // HPD-606: every change is kept on the device right away; a failed write keeps
   // the change for this session.
+  // HPD-606: a write keeps the newest card day and showings already stored, so
+  // an older copy in memory can never undo the claim of another mount.
+  function persistFinSuggestionsState(next: FinSuggestionsDeviceState) {
+    void readStoredStringStrict(finSuggestionsStorageKey)
+      .catch(() => null)
+      .then((stored) => persistStoredString(
+        finSuggestionsStorageKey,
+        serializeFinSuggestionsState(mergeStoredFinSuggestionDay(next, stored)),
+      ))
+      .catch(() => undefined);
+  }
+
   function updateFinSuggestionsState(next: FinSuggestionsDeviceState) {
     setFinSuggestionsState(next);
     if (!finSuggestionsLoaded) return;
-    void persistStoredString(finSuggestionsStorageKey, serializeFinSuggestionsState(next)).catch(() => undefined);
+    persistFinSuggestionsState(next);
   }
 
   function changeFinSuggestion(suggestion: FinHermesSuggestion, action: FinSuggestionAction) {
@@ -8109,7 +8151,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                   />
                 </View>
               ) : null}
-              {isHomeChatActive && heySuggestionNudge ? (
+              {isHomeChatActive && heySuggestionNudge && !finSuggestionsEnabled ? (
                 <View style={styles.heySuggestionNudge} accessibilityLabel={staticUiCopy(appLocale)["Hey suggestion"]}>
                   <Text style={styles.eyebrow}>{staticUiCopy(appLocale)["Suggestion"]}</Text>
                   <Text style={styles.rowTitle}>{heySuggestionNudge.label}</Text>
@@ -8232,7 +8274,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest }: NativeR8S
                 pendingAssistantText: Boolean(pendingAssistantText),
                 switchingConversation: chatSessionsBusy,
               }) ? (
-                <ChatEmptyState chatAccess={chatAccess} suggestions={chatSuggestions} copy={t} onUseSuggestion={startChatSuggestion} />
+                <ChatEmptyState chatAccess={chatAccess} suggestions={finSuggestionsEnabled ? [] : chatSuggestions} copy={t} onUseSuggestion={startChatSuggestion} />
               ) : null}
               {visibleMobileMessages.map((message) => (
                 <MessageBubble
