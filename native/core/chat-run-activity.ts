@@ -1,4 +1,11 @@
 import { projectHermesVisibleAssistantOutput } from "./hermes-api";
+import {
+  heyActivityStepForTool,
+  heyActivityStepFromHermesPhrase,
+  heyActivityVerbText,
+  type HeyActivityStep,
+  type HeyActivityVerbKey,
+} from "./run-activity-verbs";
 import type { ChatRunEvent, ChatRunStatus } from "./types";
 
 /**
@@ -509,7 +516,14 @@ function approvedHermesActivityText(content: string): string | null {
   const approved = approvedHermesActivityDescriptions.find(([prefix]) =>
     normalized === prefix || normalized.startsWith(`${prefix} `),
   );
-  if (!approved) return null;
+  if (!approved) {
+    // HPD-876. For a plugin tool Hermes says only "is using <tool>", with no
+    // preview. A tool the shared verb table knows may say what it does; any
+    // other tool name stays out of the UI.
+    const plugin = normalized.match(/^is using ([a-z0-9_]{2,80})$/);
+    const step = plugin ? heyActivityStepForTool(plugin[1] ?? "") : null;
+    return step ? heyActivityVerbText(step.verbKey, "en") : null;
+  }
   const [prefix, label, allowPreview] = approved;
   const preview = phrase.slice(prefix.length).trim();
   if (!allowPreview || !preview || unsafeHermesActivityPreview.test(preview)) return label;
@@ -531,6 +545,34 @@ function approvedHermesActivityDescription(event: ChatRunEvent): string | null {
     return approvedHermesActivityNarration(eventPayloadText(event, "content"));
   }
   return approvedHermesActivityText(eventPayloadText(event, "content"));
+}
+
+function trustedHermesStatus(event: ChatRunEvent) {
+  return (
+    event.type === "status" &&
+    eventPayloadText(event, "source") === "hermes_gateway" &&
+    eventPayloadText(event, "platform") === "heyhermes_web" &&
+    Boolean(eventPayloadText(event, "chatId"))
+  );
+}
+
+function trustedCompactionStatus(event: ChatRunEvent) {
+  if (!trustedHermesStatus(event)) return false;
+  return heyActivityStepFromHermesPhrase(eventPayloadText(event, "content"))?.verbKey === "compacting";
+}
+
+/**
+ * The step one trusted Hermes status names, if it names one: its verb and the
+ * tool's display name, read from the verb part of Hermes' phrase only. A
+ * narration, a foreign source, or an unknown tool names none.
+ */
+function trustedHermesStep(event: ChatRunEvent): HeyActivityStep | null {
+  if (!trustedHermesStatus(event)) return null;
+  if (eventPayloadText(event, "status") === "assistant_commentary") return null;
+  const content = eventPayloadText(event, "content");
+  if (trustedCompactionStatus(event)) return heyActivityStepFromHermesPhrase(content);
+  if (!approvedHermesActivityText(content)) return null;
+  return heyActivityStepFromHermesPhrase(content);
 }
 
 function friendlyStatusLabel(event: ChatRunEvent): HeyLiveRunActivity | null {
@@ -562,6 +604,9 @@ function friendlyStatusLabel(event: ChatRunEvent): HeyLiveRunActivity | null {
 
   const approvedDescription = approvedHermesActivityDescription(event);
   if (approvedDescription) return toolStatus(approvedDescription);
+  // HPD-758 lets exactly one compaction line through the gateway. It carries
+  // no input, so it may say what it is instead of falling back to "Working".
+  if (trustedCompactionStatus(event)) return toolStatus("Compacting the history");
 
   // Runtime status payloads are not user copy. They can contain command lines,
   // environment names, URLs, or provider diagnostics, so only their category
@@ -616,6 +661,14 @@ export function heyLiveRunActivity(input: {
   events: ChatRunEvent[];
   runStatus: ChatRunStatus | null;
 }): HeyLiveRunActivity | null {
+  return liveRunActivityWithSource(input)?.activity ?? null;
+}
+
+function liveRunActivityWithSource(input: {
+  assistantText?: string;
+  events: ChatRunEvent[];
+  runStatus: ChatRunStatus | null;
+}): { activity: HeyLiveRunActivity; source: ChatRunEvent | null } | null {
   if (
     input.runStatus === "completed" ||
     input.runStatus === "failed" ||
@@ -696,5 +749,78 @@ export function heyLiveRunActivity(input: {
     current = { label: "Getting ready", labelKey: "gettingReady" };
   }
 
-  return current ?? { label: "Working", labelKey: "working" };
+  const activity = current ?? { label: "Working", labelKey: "working" as const };
+  const source = currentCandidate && activity === currentCandidate.activity
+    ? input.events[currentCandidate.eventIndex] ?? null
+    : null;
+  return { activity, source };
+}
+
+// The English labels this module itself produces from a tool's category, and
+// the verb each one means. A narration is none of these and keeps its words.
+const friendlyLabelVerbs: Readonly<Record<string, HeyActivityVerbKey>> = {
+  Reading: "reading",
+  Searching: "searching",
+  Updating: "updating",
+  "Updating a result": "updating",
+  "Checking the web": "browsing",
+  "Checking memory": "checkingMemory",
+  "Checking a service": "usingTool",
+  "Using a tool": "usingTool",
+  "Compacting the history": "compacting",
+};
+
+export type HeyLiveRunPresentation = {
+  /** The accepted one-line projection, unchanged (HPD-322/HPD-662). */
+  activity: HeyLiveRunActivity;
+  /**
+   * The headline as a localized verb. Null when the headline is one of the
+   * fixed states other than working/writing (the surface already says those in
+   * the customer's language) or Hermes' own narration (its words are shown).
+   */
+  verbKey: HeyActivityVerbKey | null;
+  /**
+   * HPD-876. The newest tool step of this run, for the live line under the
+   * headline: a verb and a tool's display name, never its input or result.
+   * Null before the first tool and once the reply itself is being written.
+   */
+  step: HeyActivityStep | null;
+};
+
+/**
+ * HPD-876. The foreground status in two parts: a localized verb for what
+ * Hermes is doing, and the newest step under it. Both come from the events the
+ * gateway already sends; nothing here reads a tool input, a result, or a
+ * reasoning text.
+ */
+export function heyLiveRunPresentation(input: {
+  assistantText?: string;
+  events: ChatRunEvent[];
+  runStatus: ChatRunStatus | null;
+}): HeyLiveRunPresentation | null {
+  const projected = liveRunActivityWithSource(input);
+  if (!projected) return null;
+  const { activity, source } = projected;
+
+  let step: HeyActivityStep | null = null;
+  for (const event of input.events) {
+    const candidate = trustedHermesStep(event);
+    if (candidate) {
+      step = candidate;
+      continue;
+    }
+    // Once the reply is being written, the last tool is history.
+    if (event.type === "message_delta" && friendlyStatusLabel(event)?.labelKey === "writing") step = null;
+  }
+
+  let verbKey: HeyActivityVerbKey | null = null;
+  if (activity.labelKey === "working") verbKey = "thinking";
+  else if (activity.labelKey === "writing") verbKey = "writing";
+  else if (!activity.labelKey) {
+    const sourceStep = source ? trustedHermesStep(source) : null;
+    verbKey = sourceStep?.verbKey ?? friendlyLabelVerbs[activity.label] ?? null;
+  }
+  if (activity.labelKey === "writing") step = null;
+
+  return { activity, verbKey, step };
 }

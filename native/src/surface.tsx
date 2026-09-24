@@ -1,11 +1,12 @@
 import { isPreinstalledR8Suggestion } from "../policy";
-import { modelComparisonPresentation, modelComparisonCopy } from "../core/index";
+import { heyActivityStepText, heyActivityVerbText, modelComparisonPresentation, modelComparisonCopy } from "../core/index";
 import { adminUiCopy, notificationDeliveryNotice } from "../core/admin-ui-copy";
 import { connectionUiMessage, connectionPermissionLines as localizedConnectionPermissionLines } from "../core/connection-ui-copy";
 import { staticUiCopy, staticUiMessage } from "./static-ui-copy";
 import { supportAccessCopy, supportAccessOpenCount } from "../core/support-request";
 import { capabilityCopy, capabilityStatusCopy } from "../core/capability-copy";
 import { MobilePrivacySheet } from "./MobilePrivacySheet";
+import { MobileDelegatedActivityTimeline, useSteadyLine } from "./mobile-delegated-activity";
 import { FinanceArtifactCard } from "./FinanceArtifactCard";
 import { FinanceCitationSheet } from "./FinanceCitationSheet";
 import {
@@ -2251,6 +2252,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
       token: token || "missing",
     }),
     [token],
+  );
+  const openDelegatedRunEvents = useCallback(
+    (runId: string, cursor: string | null, signal?: AbortSignal) =>
+      hermesApi.runEventsResponse(runId, { lastEventId: cursor, signal }),
+    [hermesApi],
   );
   const chatRunTransport = useMemo(
     () => ({
@@ -7838,6 +7844,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
     activeConversationSessionId,
     dismissedDelegatedTaskIds,
   );
+  // HPD-874: the sub thread on screen, running or finished, and the run its
+  // steps were posted to.
+  const openDelegatedTask = activeConversationSessionId
+    ? delegatedTasks.find((task) => task.conversationId === activeConversationSessionId && task.runId) ?? null
+    : null;
   const voiceTranscriptionFailed = voiceNoteDraft.phase === "transcription_failed";
   const readAloudActive = readAloudState.phase === "requesting" || readAloudState.phase === "playing";
   const canStopReadAloud = readAloudActive;
@@ -8367,6 +8378,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
                   onAnswer={(response) => void submitMobileClarify(runId, clarify, response)}
                 />
               ))}
+              {openDelegatedTask ? (
+                <MobileDelegatedActivityTimeline
+                  locale={appLocale}
+                  runId={openDelegatedTask.runId ?? null}
+                  live={openDelegatedTask.state === "running"}
+                  open={openDelegatedRunEvents}
+                />
+              ) : null}
               {pendingAssistantText || activeChatRunActivityView ? (
                 <PendingAssistantMessage locale={appLocale}
                   text={chatStreamingText}
@@ -10232,10 +10251,23 @@ function MobileRunActivityTrail({ locale,
 }) {
   const reduceMotion = useReduceMotion();
   const { summary } = view;
-  if (!summary) return null;
   // The animated dragon already says that Hermes is busy. The line beside it
   // says what he is busy with, and it has to say it in the customer's language.
-  const label = summary.labelKey ? copy[summary.labelKey] : summary.label;
+  // HPD-876: a verb from the shared table first, then a fixed state, and only
+  // then Hermes' own narration in its own words.
+  const headline = !summary
+    ? null
+    : summary.verbKey
+      ? heyActivityVerbText(summary.verbKey, locale)
+      : summary.labelKey
+        ? copy[summary.labelKey]
+        : summary.label;
+  // The live line under it: the newest step as verb and tool, never an input.
+  const stepLine = summary && view.step ? heyActivityStepText(view.step, locale, summary.verbKey ?? null) : null;
+  const steadyHeadline = useSteadyLine(headline);
+  const steadyStepLine = useSteadyLine(stepLine && stepLine !== headline ? stepLine : null);
+  if (!summary) return null;
+  const label = steadyHeadline ?? headline ?? summary.label;
 
   const tone = summary.tone;
   const Icon = tone === "done" ? Check : tone === "error" ? AlertTriangle : Clock3;
@@ -10264,6 +10296,11 @@ function MobileRunActivityTrail({ locale,
           text={label}
         />
       </View>
+      {tone === "working" && steadyStepLine ? (
+        <Text style={styles.activityTrailStep} numberOfLines={1} ellipsizeMode="tail">
+          {steadyStepLine}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -13655,6 +13692,14 @@ const styles = StyleSheet.create({
   },
   activityTrailNeutral: {
     borderLeftColor: palette.line,
+  },
+  activityTrailStep: {
+    color: palette.muted,
+    fontSize: 12,
+    lineHeight: 16,
+    // Under the headline text, past the dragon's column.
+    paddingLeft: 32,
+    maxWidth: "100%",
   },
   activityTrailSummary: {
     minHeight: 28,

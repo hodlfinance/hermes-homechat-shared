@@ -33,6 +33,9 @@ export * from "./ranked-task-automations";
 export * from "./ranked-task-projection";
 export * from "./ranked-task-refresh";
 export * from "./chat-run-activity";
+export * from "./run-activity-verbs";
+export * from "./delegated-activity-timeline";
+export * from "./steady-line";
 // runtime-delivery-mode is deliberately absent. It imports node:crypto, and this
 // barrel is bundled for the browser, so re-exporting it fails the Web build.
 // Import it through "./runtime-delivery-mode" instead.
