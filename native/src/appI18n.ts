@@ -398,6 +398,9 @@ type MobileCopy = {
     messageCopied: string;
     messageCopyFailed: string;
     messageTime: string;
+    interimWorking: string;
+    interimStopped: string;
+    interimInterrupted: string;
     failedNotSentTitle: string;
     failedNoAnswerTitle: string;
     failedRetry: string;
@@ -3564,6 +3567,9 @@ const en: MobileCopy = {
     messageCopied: "Message copied.",
     messageCopyFailed: "Could not copy this message.",
     messageTime: "Sent at",
+    interimWorking: "Still working",
+    interimStopped: "Stopped",
+    interimInterrupted: "Interrupted",
     failedNotSentTitle: "That message didn't send",
     failedNoAnswerTitle: "That reply never arrived",
     failedRetry: "Try again",
@@ -3654,6 +3660,9 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "messageCopied": "Nachricht kopiert.",
   "messageCopyFailed": "Diese Nachricht konnte nicht kopiert werden.",
   "messageTime": "Gesendet um",
+  "interimWorking": "Arbeitet noch",
+  "interimStopped": "Abgebrochen",
+  "interimInterrupted": "Unterbrochen",
   "failedNotSentTitle": "Die Nachricht wurde nicht gesendet",
   "failedNoAnswerTitle": "Die Antwort kam nicht zustande",
   "failedRetry": "Erneut versuchen",
@@ -3764,6 +3773,9 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "messageCopied": "Message copié.",
   "messageCopyFailed": "Impossible de copier ce message.",
   "messageTime": "Envoyé à",
+  "interimWorking": "Travail en cours",
+  "interimStopped": "Arrêté",
+  "interimInterrupted": "Interrompu",
   "failedNotSentTitle": "Le message n’a pas été envoyé",
   "failedNoAnswerTitle": "La réponse n’est pas arrivée",
   "failedRetry": "Réessayer",
@@ -3875,6 +3887,9 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "messageCopied": "Mensaje copiado.",
   "messageCopyFailed": "No se pudo copiar este mensaje.",
   "messageTime": "Enviado a las",
+  "interimWorking": "Sigue trabajando",
+  "interimStopped": "Detenido",
+  "interimInterrupted": "Interrumpido",
   "failedNotSentTitle": "El mensaje no se envió",
   "failedNoAnswerTitle": "La respuesta no llegó",
   "failedRetry": "Intentar de nuevo",
@@ -3956,6 +3971,9 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "messageCopied": "Messaggio copiato.",
   "messageCopyFailed": "Impossibile copiare questo messaggio.",
   "messageTime": "Inviato alle",
+  "interimWorking": "Sta ancora lavorando",
+  "interimStopped": "Fermato",
+  "interimInterrupted": "Interrotto",
   "failedNotSentTitle": "Il messaggio non è stato inviato",
   "failedNoAnswerTitle": "La risposta non è arrivata",
   "failedRetry": "Riprova",
@@ -4067,6 +4085,9 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "messageCopied": "Mensagem copiada.",
   "messageCopyFailed": "Não foi possível copiar esta mensagem.",
   "messageTime": "Enviada às",
+  "interimWorking": "Ainda trabalhando",
+  "interimStopped": "Parado",
+  "interimInterrupted": "Interrompido",
   "failedNotSentTitle": "A mensagem não foi enviada",
   "failedNoAnswerTitle": "A resposta não chegou",
   "failedRetry": "Tentar novamente",
@@ -4185,6 +4206,9 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "messageCopied": "メッセージをコピーしました。",
   "messageCopyFailed": "このメッセージをコピーできませんでした。",
   "messageTime": "送信時刻",
+  "interimWorking": "作業中",
+  "interimStopped": "停止しました",
+  "interimInterrupted": "中断されました",
   "failedNotSentTitle": "メッセージを送信できませんでした",
   "failedNoAnswerTitle": "返信が届きませんでした",
   "failedRetry": "再試行",
@@ -4305,6 +4329,9 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "messageCopied": "메시지를 복사했습니다.",
   "messageCopyFailed": "이 메시지를 복사하지 못했습니다.",
   "messageTime": "보낸 시간",
+  "interimWorking": "작업 중",
+  "interimStopped": "중지됨",
+  "interimInterrupted": "중단됨",
   "failedNotSentTitle": "메시지를 보내지 못했습니다",
   "failedNoAnswerTitle": "답변이 도착하지 않았습니다",
   "failedRetry": "다시 시도",

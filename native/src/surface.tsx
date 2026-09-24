@@ -312,6 +312,7 @@ import {
 } from "./mobile-chat-user-decision";
 import { mobileAssistantLinkSegments } from "./mobile-message-links";
 import { mobileMarkdownBlocks, type MobileMarkdownInlineSegment } from "./mobile-markdown";
+import { mobileInterimReplyLabel, mobileInterimReplyMark, type MobileInterimReplyMark } from "./mobile-interim-reply";
 import { mobileBlockingRunId, mobileRunStatusIsFinished, mobileStoppedRunStatus } from "./mobile-stop-target";
 import { FinSuggestionCard, FinSuggestionsPage } from "./FinSuggestions";
 import { FINHERMES_SUGGESTIONS, finHermesSuggestionDraft, finHermesSuggestionWasSent, type FinHermesSuggestion } from "../core/finhermes-suggestions";
@@ -8336,6 +8337,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
                   message={message}
                   locale={appLocale}
                   copy={t.chat}
+                  interimMark={mobileInterimReplyMark({
+                    message,
+                    runStatus: message.runId ? chatRunStatusesById[message.runId] : null,
+                    activeRunId: activeChatRunId,
+                    openConversationId: activeConversationSessionId,
+                  })}
                   showAssistantIdentity={message.id === firstVisibleAssistantMessageId}
                   onVisibleTextLayout={
                     message.role === "assistant" && message.runId === chatLatencyRef.current?.runId
@@ -9968,12 +9975,15 @@ function MessageBubble({
   message,
   locale,
   copy,
+  interimMark = null,
   showAssistantIdentity,
   onVisibleTextLayout,
 }: {
   message: ChatMessage;
   locale: AppLocale;
   copy: ReturnType<typeof mobileText>["chat"];
+  /** HPD-871: set while the run that posted this text has not answered. */
+  interimMark?: MobileInterimReplyMark | null;
   showAssistantIdentity: boolean;
   onVisibleTextLayout?: () => void;
 }) {
@@ -10021,10 +10031,21 @@ function MessageBubble({
           ))}
         </View>
       ) : null}
+      {!isUser && interimMark ? (
+        <View
+          style={[styles.interimReplyBadge, interimMark !== "working" && styles.interimReplyBadgeEnded]}
+          accessibilityRole="text"
+          accessibilityLabel={mobileInterimReplyLabel(interimMark, copy)}
+          testID={`interim-reply-${interimMark}`}
+        >
+          {interimMark === "working" ? <View style={styles.interimReplyDot} /> : null}
+          <Text style={styles.interimReplyBadgeText}>{mobileInterimReplyLabel(interimMark, copy)}</Text>
+        </View>
+      ) : null}
       {isUser
         ? <Text style={textStyle} selectable>{message.content}</Text>
         : (
-          <View onLayout={onVisibleTextLayout}>
+          <View onLayout={onVisibleTextLayout} style={interimMark ? styles.interimReplyText : undefined}>
             <LinkedMessageText citations={citations} onCitationPress={pressCitation} text={assistantText} />
           </View>
         )}
@@ -13664,6 +13685,40 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 17,
     lineHeight: 25,
+  },
+  // HPD-871: an interim text is visibly not the answer yet. The badge and the
+  // muted text use palette tokens only, so both hosts paint it in their own
+  // light and dark colours.
+  interimReplyBadge: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: palette.lineStrong,
+    backgroundColor: palette.tealSoft,
+  },
+  interimReplyBadgeEnded: {
+    backgroundColor: "transparent",
+  },
+  interimReplyDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: palette.accent,
+  },
+  interimReplyBadgeText: {
+    color: palette.muted,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
+  },
+  interimReplyText: {
+    opacity: 0.62,
   },
   messageTime: {
     alignSelf: "flex-end",
