@@ -32,3 +32,13 @@ test("mail mode renders only the product form: no account row, no reference, no 
   assert.match(form, /if \(props\.mode === "mail"\) \{\s+return \(\s+<ProductSupportMailForm/);
   assert.match(form, /return <HermesSupportRequestForm \{\.\.\.props\} mode=\{props\.mode \?\? "signed_in"\} \/>;/);
 });
+
+test("the Hermes help screen stays as it is: Hermes form, legal links and temporary support access", () => {
+  const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  const section = surface.slice(surface.indexOf('{visibleSettingsSection === "support" ? ('), surface.indexOf('{visibleSettingsSection === "support" ? (') + 900);
+  assert.match(section, /<MobileSupportRequestForm locale=\{appLocale\} client=\{supportRequestClient\} \/>/);
+  assert.match(section, /<MobileLegalSupportLinks locale=\{appLocale\} \/>/);
+  assert.match(section, /<SupportAccessPanel/);
+  // Its address stays the Hermes one.
+  assert.match(form, /const MOBILE_SUPPORT_EMAIL = "support@heyhermes\.app";/);
+});
