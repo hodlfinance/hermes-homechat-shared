@@ -24,14 +24,14 @@ function keyboardAvoidingView() {
 }
 
 function keyboardHost(os = "ios", visible = false) {
-  const listeners = new Map<string, Array<(value?: string) => void>>();
-  const add = (event: string, listener: (value?: string) => void) => {
+  const listeners = new Map<string, Array<(value: string) => void>>();
+  const add = (event: string, listener: (value: string) => void) => {
     listeners.set(event, [...(listeners.get(event) ?? []), listener]);
     return { remove: () => listeners.set(event, (listeners.get(event) ?? []).filter((item) => item !== listener)) };
   };
   return {
     listeners,
-    emit: (event: string, value?: string) => { for (const listener of listeners.get(event) ?? []) listener(value); },
+    emit: (event: string, value = "") => { for (const listener of listeners.get(event) ?? []) listener(value); },
     host: {
       os,
       keyboard: { addListener: add, isVisible: () => visible },

@@ -4,6 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 import type { ChatArtifactReference } from "../core/index";
+import type { SharedHomechatJsonValue } from "@hodlfinance/hermes-homechat-shared/core";
 import {
   messageRepeatsAnswer,
   mobileFinanceMessageCarriesAnswer,
@@ -200,13 +201,14 @@ test("malformed CapChat context cards fail closed", () => {
   const presentation = reference.artifactPresentation as Record<string, unknown>;
   const payload = presentation.payload as Record<string, unknown>;
   const contextCard = payload.contextCard as Record<string, unknown>;
-  const tabs = contextCard.tabs as Array<Record<string, unknown>>;
+  const [research, data, web] = contextCard.tabs as SharedHomechatJsonValue[];
+  assert.ok(research && data && web);
   assert.equal(mobileFinanceArtifactCard(capChatReference({
     artifactPresentation: {
       ...presentation,
       payload: {
         ...payload,
-        contextCard: { ...contextCard, tabs: [tabs[1], tabs[0], tabs[2]] },
+        contextCard: { ...contextCard, tabs: [data, research, web] },
       },
     },
   })), null);
@@ -349,6 +351,7 @@ test("the actual native card mounts and its source link calls the host", () => {
   const globalOnlyContext = globalOnlyPayload.contextCard as Record<string, unknown>;
   const globalOnlyTabs = globalOnlyContext.tabs as Array<Record<string, unknown>>;
   const researchTab = globalOnlyTabs[0];
+  assert.ok(researchTab);
   researchTab.content = { sources: [] };
   const globalOnlyTree = component({ reference: globalOnlyReference, locale: "en", onOpenUrl: () => {} });
   const globalOnlyLinks = nodes(globalOnlyTree).filter(

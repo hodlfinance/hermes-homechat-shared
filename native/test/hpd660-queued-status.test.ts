@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createHomechatClientController } from "../../src/index";
-import { reconcileMobileRunBoundMessages } from "../src/mobile-run-binding";
+import { reconcileMobileRunBoundMessages, type MobileRunBoundMessage } from "../src/mobile-run-binding";
 import {
   mobileQueuedFollowUpNoticeVisible,
   mobileQueuedFollowUpSnapshotAfterStatus,
@@ -36,10 +36,17 @@ test("takeover reuses canonical messages and rejects other-run, queued, and late
 });
 
 test("an open status stream promotes a saved follow-up exactly once without waiting for completion or polling", async () => {
-  const user = { id: "saved-user", runId: "follow-up", conversationSessionId: "home", role: "user" as const, content: "Synthetic question" };
+  const user: MobileRunBoundMessage = {
+    id: "saved-user",
+    runId: "follow-up",
+    conversationSessionId: "home",
+    role: "user",
+    content: "Synthetic question",
+    createdAt: "2026-09-14T12:00:00.000Z",
+  };
   const queued = { id: "follow-up", status: "queued" as ChatRunStatus, messages: [user] };
   let snapshot: typeof queued | null = null;
-  let visible: typeof user[] = [];
+  let visible: MobileRunBoundMessage[] = [];
   let promotions = 0;
   let release!: () => void;
   let observed!: () => void;

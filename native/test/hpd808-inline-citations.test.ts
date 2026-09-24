@@ -4,6 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 import type { ChatArtifactReference } from "../core/index";
+import type { SharedHomechatJsonValue } from "@hodlfinance/hermes-homechat-shared/core";
 import {
   messageRepeatsAnswer,
   mobileCitationSegments,
@@ -23,7 +24,7 @@ import {
 const ANSWER = "NVIDIA beat estimates [1] and raised guidance [2, 3].\n\nSee [Reuters](https://www.reuters.com/x) and [10].";
 
 function capChatReference(
-  references: Array<Record<string, unknown>>,
+  references: JsonObject[],
   answer = ANSWER,
   id = "artifact-808",
 ): ChatArtifactReference {
@@ -61,7 +62,10 @@ function capChatReference(
   };
 }
 
-function research(number: number, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+// A reference as it travels in an artifact payload: plain JSON.
+type JsonObject = { [key: string]: SharedHomechatJsonValue };
+
+function research(number: number, overrides: JsonObject = {}): JsonObject {
   return {
     source_number: number,
     source_type: "research",

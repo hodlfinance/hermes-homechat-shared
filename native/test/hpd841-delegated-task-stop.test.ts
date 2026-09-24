@@ -58,7 +58,12 @@ test("HPD-841: the shared chat's stop request passes the HODL allow-list with th
       }), { headers: { "content-type": "application/json" } });
     },
   });
-  const hermes = transport.createCanonicalClient({ baseUrl, token: "test-session" });
+  const hermes = transport.createCanonicalClient({
+    baseUrl,
+    token: "test-session",
+    // The transport binds its own gated fetch; this one must never be called.
+    fetchImpl: async () => { throw new Error("createCanonicalClient must use the transport fetch"); },
+  });
 
   const stopped = await hermes.stopDelegatedTask(taskId);
 

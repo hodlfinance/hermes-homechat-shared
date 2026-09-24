@@ -71,7 +71,7 @@ test("three mouth puffs start connected to the mouth and every particle travels 
   const particles = [...particleBlock.matchAll(
     /\{ id: "([^"]+)", source: [^,]+, scale: ([\d.]+), heightRatio: ([\d.]+), startY: ([\d.]+), xTravel: (-?[\d.]+), yTravel: (-?[\d.]+), rotation: "(-?[\d.]+)deg" \}/g,
   )].map((match) => ({
-    id: match[1],
+    id: match[1]!, // mandatory capture group
     scale: Number(match[2]),
     heightRatio: Number(match[3]),
     startY: Number(match[4]),

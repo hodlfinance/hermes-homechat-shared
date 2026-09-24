@@ -35,11 +35,12 @@ test("the startup snapshot names the conversation it belongs to", () => {
 function exportedNames(file: string): Set<string> {
   const text = readFileSync(file, "utf8");
   const names = new Set<string>();
+  // The capture groups in both patterns are mandatory, so every match carries them.
   for (const match of text.matchAll(/export\s+(?:declare\s+)?(?:async\s+)?(?:function\*?|const|let|var|class|enum|type|interface)\s+([A-Za-z_$][\w$]*)/g)) {
-    names.add(match[1]);
+    names.add(match[1]!);
   }
   for (const match of text.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}/g)) {
-    for (const part of match[1].split(",")) {
+    for (const part of match[1]!.split(",")) {
       const name = part.trim().replace(/^type\s+/, "").split(/\s+as\s+/).pop()?.trim();
       if (name) names.add(name);
     }
@@ -64,14 +65,15 @@ test("every named import between native/src modules is exported by its source", 
     const text = readFileSync(file, "utf8");
     for (const match of text.matchAll(/import\s+(type\s+)?\{([^}]*)\}\s+from\s+"(\.\/[^"]+)"/g)) {
       if (match[1]) continue;
-      const target = resolveModule(file, match[3]);
+      // Groups 2 and 3 are mandatory, so every match carries them.
+      const target = resolveModule(file, match[3]!);
       if (!target) continue;
       const exported = exportedNames(target);
       if (exported.has("*")) continue;
-      for (const part of match[2].split(",")) {
+      for (const part of match[2]!.split(",")) {
         const raw = part.trim();
         if (!raw || raw.startsWith("type ")) continue;
-        const name = raw.split(/\s+as\s+/)[0].trim();
+        const name = raw.split(/\s+as\s+/)[0]!.trim(); // split always yields one part
         if (!exported.has(name)) missing.push(`${entry}: ${name} from ${match[3]}`);
       }
     }

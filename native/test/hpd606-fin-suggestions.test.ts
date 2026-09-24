@@ -218,7 +218,12 @@ test("the card's automation count reaches the Fin server through the HODL allow-
       });
     },
   });
-  const hermes = transport.createCanonicalClient({ baseUrl, token: "test-session" });
+  const hermes = transport.createCanonicalClient({
+    baseUrl,
+    token: "test-session",
+    // The transport binds its own gated fetch; this one must never be called.
+    fetchImpl: async () => { throw new Error("createCanonicalClient must use the transport fetch"); },
+  });
 
   const view = await hermes.automations();
 

@@ -14,7 +14,7 @@ const finding = {
   title: "Untrusted finding text", sourceLabel: "mail",
 } as RankedTaskListRow;
 const pending = {
-  id: "t_pending", title: "Pending card", nativeStatus: "triage",
+  id: "t_pending", title: "Pending card", nativeStatus: "open",
 } as PendingRankedTaskListRow;
 
 test("Chat prefills only the stable native or ranked identity, regardless of language", () => {

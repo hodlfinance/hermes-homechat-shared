@@ -57,7 +57,7 @@ test("native queued ownership survives follow:false observation loss and cancel 
   const runId = "native-owned-run";
   let stoppedRunId: string | null = null;
   const transport = {
-    createRun: async (): Promise<Run> => ({ id: runId, status: "queued", messages: [] }),
+    createRun: async (_request: { message: string }): Promise<Run> => ({ id: runId, status: "queued", messages: [] }),
     getRun: async (): Promise<Run> => {
       throw new SharedHomechatTransportError("Run read unavailable", { status: 404 });
     },

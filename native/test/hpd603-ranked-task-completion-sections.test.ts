@@ -64,7 +64,7 @@ test("native raw candidate projection keeps a completed and dismissed finding di
   });
   const sections = rankedTaskCompletionSections(rankedTaskListView({
     tasks,
-    sources: ["kanban", "email_triage", "vault", "memory"].map((source) => ({
+    sources: (["kanban", "email_triage", "vault", "memory"] as const).map((source) => ({
       source,
       state: "unavailable" as const,
       observedAt: null,

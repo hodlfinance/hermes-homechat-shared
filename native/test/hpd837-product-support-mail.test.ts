@@ -11,7 +11,7 @@ import { supportMailCopy, supportRequestCopy } from "../core/support-request";
 const form = readFileSync(new URL("../src/SupportRequestForm.tsx", import.meta.url), "utf8");
 
 test("the product mail copy names the host product and never Hey", () => {
-  for (const locale of ["en", "de", "fr", "es", "it", "pt", "ja"] as const) {
+  for (const locale of ["en", "de", "fr", "es", "it", "pt-BR", "ja", "ko"] as const) {
     const copy = supportMailCopy(locale, "HODL");
     for (const text of Object.values(copy)) {
       assert.doesNotMatch(text, /Hey|heyhermes|\{product\}/, `${locale}: ${text}`);
