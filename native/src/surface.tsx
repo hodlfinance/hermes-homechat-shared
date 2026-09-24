@@ -10263,7 +10263,10 @@ function MobileRunActivityTrail({ locale,
         ? copy[summary.labelKey]
         : summary.label;
   // The live line under it: the newest step as verb and tool, never an input.
-  const stepLine = summary && view.step ? heyActivityStepText(view.step, locale, summary.verbKey ?? null) : null;
+  const stepText = summary && view.step ? heyActivityStepText(view.step, locale, summary.verbKey ?? null) : null;
+  // HPD-874/876 phase 2: the newest filtered thinking line or step target
+  // joins it, still one line, still held 1.2 s.
+  const stepLine = summary && view.detail ? (stepText ? `${stepText} · ${view.detail}` : view.detail) : stepText;
   const steadyHeadline = useSteadyLine(headline);
   const steadyStepLine = useSteadyLine(stepLine && stepLine !== headline ? stepLine : null);
   if (!summary) return null;

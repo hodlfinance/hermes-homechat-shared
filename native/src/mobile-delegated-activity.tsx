@@ -135,26 +135,35 @@ type TimelineCopy = {
   omitted: (count: number) => string;
   running: string;
   failed: string;
+  /** Phase 2. The collapsed thinking block of one model call. */
+  thinking: string;
+  /** Phase 2. Shown under a step whose result excerpt is collapsed. */
+  showResult: string;
 };
 
 const timelineCopy: Readonly<Record<AppLocale, TimelineCopy>> = {
-  en: { title: "Steps", show: "Show steps", hide: "Hide steps", omitted: (n) => `${n} earlier steps not shown`, running: "running", failed: "failed" },
-  de: { title: "Arbeitsschritte", show: "Schritte zeigen", hide: "Schritte ausblenden", omitted: (n) => `${n} frühere Schritte ausgeblendet`, running: "läuft", failed: "fehlgeschlagen" },
-  fr: { title: "Étapes", show: "Afficher les étapes", hide: "Masquer les étapes", omitted: (n) => `${n} étapes antérieures masquées`, running: "en cours", failed: "échec" },
-  es: { title: "Pasos", show: "Mostrar pasos", hide: "Ocultar pasos", omitted: (n) => `${n} pasos anteriores ocultos`, running: "en curso", failed: "falló" },
-  it: { title: "Passaggi", show: "Mostra passaggi", hide: "Nascondi passaggi", omitted: (n) => `${n} passaggi precedenti nascosti`, running: "in corso", failed: "non riuscito" },
-  "pt-BR": { title: "Etapas", show: "Mostrar etapas", hide: "Ocultar etapas", omitted: (n) => `${n} etapas anteriores ocultas`, running: "em andamento", failed: "falhou" },
-  ja: { title: "作業ステップ", show: "ステップを表示", hide: "ステップを隠す", omitted: (n) => `以前の${n}ステップは非表示`, running: "実行中", failed: "失敗" },
-  ko: { title: "작업 단계", show: "단계 보기", hide: "단계 숨기기", omitted: (n) => `이전 ${n}단계 숨김`, running: "진행 중", failed: "실패" },
+  en: { title: "Steps", show: "Show steps", hide: "Hide steps", omitted: (n) => `${n} earlier steps not shown`, running: "running", failed: "failed", thinking: "Thinking", showResult: "Show result" },
+  de: { title: "Arbeitsschritte", show: "Schritte zeigen", hide: "Schritte ausblenden", omitted: (n) => `${n} frühere Schritte ausgeblendet`, running: "läuft", failed: "fehlgeschlagen", thinking: "Denkschritte", showResult: "Ergebnis zeigen" },
+  fr: { title: "Étapes", show: "Afficher les étapes", hide: "Masquer les étapes", omitted: (n) => `${n} étapes antérieures masquées`, running: "en cours", failed: "échec", thinking: "Réflexion", showResult: "Afficher le résultat" },
+  es: { title: "Pasos", show: "Mostrar pasos", hide: "Ocultar pasos", omitted: (n) => `${n} pasos anteriores ocultos`, running: "en curso", failed: "falló", thinking: "Razonamiento", showResult: "Mostrar resultado" },
+  it: { title: "Passaggi", show: "Mostra passaggi", hide: "Nascondi passaggi", omitted: (n) => `${n} passaggi precedenti nascosti`, running: "in corso", failed: "non riuscito", thinking: "Ragionamento", showResult: "Mostra risultato" },
+  "pt-BR": { title: "Etapas", show: "Mostrar etapas", hide: "Ocultar etapas", omitted: (n) => `${n} etapas anteriores ocultas`, running: "em andamento", failed: "falhou", thinking: "Raciocínio", showResult: "Mostrar resultado" },
+  ja: { title: "作業ステップ", show: "ステップを表示", hide: "ステップを隠す", omitted: (n) => `以前の${n}ステップは非表示`, running: "実行中", failed: "失敗", thinking: "思考", showResult: "結果を表示" },
+  ko: { title: "작업 단계", show: "단계 보기", hide: "단계 숨기기", omitted: (n) => `이전 ${n}단계 숨김`, running: "진행 중", failed: "실패", thinking: "생각", showResult: "결과 보기" },
 };
 
 /** Collapsed, a sub thread shows this many newest entries. */
 const collapsedEntryCount = 6;
 
 /**
- * HPD-874, phase 1. The background task's steps in its own sub thread: tool
- * by display name, duration, ok or failed, and the model's own progress
- * notes. No tool input, no tool output, no reasoning.
+ * HPD-874. The background task's steps in its own sub thread: tool by display
+ * name, duration, ok or failed, and the model's own progress notes.
+ *
+ * Phase 2 (Justus, 24.09.2026, "Ja, gefiltert"): a step also shows its
+ * filtered target on the same line and its short filtered result collapsed
+ * under it; mail, Google, finance and secret steps show a count only. Each
+ * model call's thinking is one collapsed block. All of it is plain text the
+ * guest and the plane have filtered; nothing here is rendered as markup.
  */
 export function MobileDelegatedActivityTimeline({
   locale,
@@ -171,7 +180,13 @@ export function MobileDelegatedActivityTimeline({
   const events = useDelegatedRunEvents(runId, live, open);
   const timeline = useMemo(() => heyDelegatedActivityTimeline(events), [events]);
   const [expanded, setExpanded] = useState(false);
-  const [openNotes, setOpenNotes] = useState<ReadonlySet<string>>(() => new Set());
+  const [openKeys, setOpenKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = (key: string) => setOpenKeys((current) => {
+    const next = new Set(current);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
   const copy = timelineCopy[locale] ?? timelineCopy.en;
   if (!runId || !timeline.entries.length) return null;
 
@@ -194,17 +209,33 @@ export function MobileDelegatedActivityTimeline({
         <Text style={[styles.omitted, { color: palette.muted }]}>{copy.omitted(omitted)}</Text>
       ) : null}
       {visible.map((entry) => {
-        if (entry.kind === "note") {
-          const noteOpen = openNotes.has(entry.key);
+        if (entry.kind === "reasoning") {
+          const thoughtOpen = openKeys.has(entry.key);
           return (
             <Pressable
               key={entry.key}
-              onPress={() => setOpenNotes((current) => {
-                const next = new Set(current);
-                if (next.has(entry.key)) next.delete(entry.key);
-                else next.add(entry.key);
-                return next;
-              })}
+              onPress={() => toggle(entry.key)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: thoughtOpen }}
+              accessibilityLabel={copy.thinking}
+            >
+              <Text style={[styles.thinkingTitle, { color: palette.muted }]}>
+                {thoughtOpen ? "▾" : "▸"} {copy.thinking}
+              </Text>
+              {thoughtOpen ? (
+                <Text style={[styles.thinking, { color: palette.muted }]} selectable>
+                  {entry.text}
+                </Text>
+              ) : null}
+            </Pressable>
+          );
+        }
+        if (entry.kind === "note") {
+          const noteOpen = openKeys.has(entry.key);
+          return (
+            <Pressable
+              key={entry.key}
+              onPress={() => toggle(entry.key)}
               accessibilityRole="button"
             >
               <Text
@@ -221,13 +252,39 @@ export function MobileDelegatedActivityTimeline({
         const duration = heyDelegatedActivityDurationText(entry.durationMs);
         const outcome = entry.state === "ok" ? "✓" : entry.state === "error" ? "✗" : "…";
         const outcomeColor = entry.state === "error" ? palette.coral : entry.state === "ok" ? palette.teal : palette.muted;
-        const trailing = entry.state === "error" ? copy.failed : entry.state === "running" ? copy.running : duration;
-        return (
-          <View key={entry.key} style={styles.step}>
+        const timing = entry.state === "error" ? copy.failed : entry.state === "running" ? copy.running : duration;
+        const count = typeof entry.resultCount === "number" ? String(entry.resultCount) : null;
+        const trailing = [count, timing].filter(Boolean).join(" · ");
+        const preview = entry.confidential ? null : entry.resultPreview ?? null;
+        const previewOpen = preview ? openKeys.has(entry.key) : false;
+        const row = (
+          <View style={styles.step}>
             <Text style={[styles.outcome, { color: outcomeColor }]}>{outcome}</Text>
-            <Text style={[styles.stepLabel, { color: palette.ink }]} numberOfLines={1} ellipsizeMode="tail">{label}</Text>
+            <Text style={[styles.stepLabel, { color: palette.ink }]} numberOfLines={1} ellipsizeMode="tail">
+              {label}
+              {entry.target ? <Text style={{ color: palette.muted }}>{` · ${entry.target}`}</Text> : null}
+            </Text>
             {trailing ? <Text style={[styles.duration, { color: palette.muted }]}>{trailing}</Text> : null}
           </View>
+        );
+        if (!preview) return <View key={entry.key}>{row}</View>;
+        return (
+          <Pressable
+            key={entry.key}
+            onPress={() => toggle(entry.key)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: previewOpen }}
+            accessibilityHint={copy.showResult}
+          >
+            {row}
+            <Text
+              style={[styles.preview, { color: palette.muted }]}
+              numberOfLines={previewOpen ? undefined : 1}
+              ellipsizeMode="tail"
+            >
+              {previewOpen ? preview : copy.showResult}
+            </Text>
+          </Pressable>
         );
       })}
     </View>
@@ -253,4 +310,7 @@ const styles = StyleSheet.create({
   stepLabel: { flexShrink: 1, fontSize: 13 },
   duration: { marginLeft: "auto", fontSize: 12, fontVariant: ["tabular-nums"] },
   note: { fontSize: 13, lineHeight: 18, paddingLeft: 22 },
+  preview: { fontSize: 12, lineHeight: 17, paddingLeft: 22, paddingTop: 2 },
+  thinkingTitle: { fontSize: 12, fontWeight: "500", paddingLeft: 22 },
+  thinking: { fontSize: 12, lineHeight: 17, paddingLeft: 22, paddingTop: 2, fontStyle: "italic" },
 });

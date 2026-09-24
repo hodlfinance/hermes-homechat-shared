@@ -785,7 +785,45 @@ export type HeyLiveRunPresentation = {
    * Null before the first tool and once the reply itself is being written.
    */
   step: HeyActivityStep | null;
+  /**
+   * HPD-874/876 phase 2 (Justus, 24.09.2026, "Ja, gefiltert"). The newest
+   * filtered line from the run's own stream: the first line of the latest
+   * thinking block, or the target of the newest step. One line, at most 120
+   * characters. Null when the run carries neither, and once the reply is being
+   * written.
+   */
+  detail: string | null;
 };
+
+export const heyLiveRunDetailLimit = 120;
+
+function liveDetailLine(value: string) {
+  const line = value
+    .split("\n")
+    .map((part) => part.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim())
+    .find(Boolean) ?? "";
+  if (line.length <= heyLiveRunDetailLimit) return line;
+  return `${line.slice(0, heyLiveRunDetailLimit - 1).trimEnd()}…`;
+}
+
+/** Phase 2. See HeyLiveRunPresentation.detail. */
+export function heyLiveRunDetail(events: readonly ChatRunEvent[]): string | null {
+  let detail: string | null = null;
+  for (const event of events) {
+    if (event.type === "message_delta" && friendlyStatusLabel(event)?.labelKey === "writing") {
+      detail = null;
+      continue;
+    }
+    if (event.type !== "status" || eventPayloadText(event, "source") !== "hermes_gateway") continue;
+    const phase = eventPayloadText(event, "phase");
+    if (phase === "reasoning") {
+      detail = liveDetailLine(eventPayloadText(event, "content")) || detail;
+    } else if (phase === "tool.started" && event.payload?.confidential !== true) {
+      detail = liveDetailLine(eventPayloadText(event, "target")) || null;
+    }
+  }
+  return detail;
+}
 
 /**
  * HPD-876. The foreground status in two parts: a localized verb for what
@@ -821,6 +859,7 @@ export function heyLiveRunPresentation(input: {
     verbKey = sourceStep?.verbKey ?? friendlyLabelVerbs[activity.label] ?? null;
   }
   if (activity.labelKey === "writing") step = null;
+  const detail = activity.labelKey === "writing" ? null : heyLiveRunDetail(input.events);
 
-  return { activity, verbKey, step };
+  return { activity, verbKey, step, detail };
 }
