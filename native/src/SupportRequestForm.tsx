@@ -13,6 +13,7 @@ import {
   UNAVAILABLE_SUPPORT_REQUEST_CLIENT,
   buildAnonymousSupportRequestUserInput,
   buildSupportRequestUserInput,
+  looksLikeReplyEmail,
   normalizeSupportContextResult,
   normalizeSupportSubmissionResult,
   supportMailCopy,
@@ -70,6 +71,8 @@ export function MobileSupportRequestForm(props: {
   supportEmail?: string;
   productName?: string;
   mailContext?: readonly string[];
+  /** mode "mail": the signed-in account shown on the form; null when signed out. */
+  mailAccount?: ProductSupportMailAccount | null;
   openMail?: (mailto: string) => Promise<boolean>;
 }) {
   if (props.mode === "mail") {
@@ -79,6 +82,7 @@ export function MobileSupportRequestForm(props: {
         supportEmail={props.supportEmail ?? ""}
         productName={props.productName ?? ""}
         mailContext={props.mailContext ?? []}
+        mailAccount={props.mailAccount ?? null}
         openMail={props.openMail ?? openSupportMailUrl}
       />
     );
@@ -86,26 +90,40 @@ export function MobileSupportRequestForm(props: {
   return <HermesSupportRequestForm {...props} mode={props.mode ?? "signed_in"} />;
 }
 
+/** The account a product support email reports, as the host shows it. */
+export type ProductSupportMailAccount = {
+  /** The account ID, shortened or masked by the host. */
+  display: string;
+  /** The account's email address, when it has one. */
+  email?: string | null;
+};
+
 // HPD-837: the product help screen outside Hermes. Same page shape as the
 // Hermes form, but it composes an email to the product's own support address:
 // no Hey account, no Hermes session, no reference number.
+// HPD-889: like the Hermes form it shows the reported account and takes a
+// reply email; the reply address goes into the email's context lines.
 function ProductSupportMailForm({
   locale,
   supportEmail,
   productName,
   mailContext,
+  mailAccount,
   openMail,
 }: {
   locale: AppLocale;
   supportEmail: string;
   productName: string;
   mailContext: readonly string[];
+  mailAccount: ProductSupportMailAccount | null;
   openMail: (mailto: string) => Promise<boolean>;
 }) {
   const copy = supportRequestCopy(locale);
   const mailCopyText = supportMailCopy(locale, productName);
   const [problem, setProblem] = useState("");
   const [problemMissing, setProblemMissing] = useState(false);
+  const [replyEmail, setReplyEmail] = useState("");
+  const [replyEmailInvalid, setReplyEmailInvalid] = useState(false);
   const [outcome, setOutcome] = useState<"opened" | "unavailable" | null>(null);
   const [opening, setOpening] = useState(false);
   const [supportEmailCopied, setSupportEmailCopied] = useState(false);
@@ -119,13 +137,19 @@ function ProductSupportMailForm({
       return;
     }
     setProblemMissing(false);
+    const reply = replyEmail.trim();
+    if (reply && !looksLikeReplyEmail(reply)) {
+      setReplyEmailInvalid(true);
+      return;
+    }
+    setReplyEmailInvalid(false);
     setOpening(true);
     try {
       const composed = await openMail(productSupportMailto({
         supportEmail,
         subject: mailCopyText.subject,
         problem,
-        context: mailContext,
+        context: reply ? [...mailContext, `Reply email: ${reply}`] : mailContext,
       }));
       // Some mail apps refuse a long body; the plain address still opens.
       const opened = composed || await openMail(plainMailto);
@@ -139,6 +163,47 @@ function ProductSupportMailForm({
     <MobileSystemSection title={copy.title}>
       <View style={styles.insetBlock}>
         <Text style={[styles.muted, { color: palette.secondary }]} allowFontScaling>{mailCopyText.subtitle}</Text>
+      </View>
+
+      {mailAccount ? (
+        <View style={styles.field} testID="product-support-account">
+          <Text style={[styles.label, { color: palette.ink }]} allowFontScaling>{mailCopyText.account}</Text>
+          <Text style={[styles.value, { color: palette.text }]} selectable allowFontScaling>{mailAccount.display}</Text>
+          {mailAccount.email ? (
+            <>
+              <Text style={[styles.label, { color: palette.ink }]} allowFontScaling>{mailCopyText.accountEmail}</Text>
+              <Text style={[styles.value, { color: palette.text }]} selectable allowFontScaling>{mailAccount.email}</Text>
+            </>
+          ) : null}
+          <Text style={[styles.muted, { color: palette.secondary }]} allowFontScaling>{mailCopyText.sessionSource}</Text>
+        </View>
+      ) : null}
+
+      <View style={styles.field}>
+        <Text style={[styles.label, { color: palette.ink }]} allowFontScaling>{mailCopyText.replyEmail}</Text>
+        <TextInput
+          style={[
+            styles.input,
+            { backgroundColor: palette.userTint, borderColor: replyEmailInvalid ? palette.coral : palette.lineStrong, color: palette.ink },
+          ]}
+          value={replyEmail}
+          onChangeText={setReplyEmail}
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+          editable={!opening}
+          accessibilityLabel={mailCopyText.replyEmail}
+          accessibilityHint={mailAccount?.email ? mailCopyText.replyHint : mailCopyText.replyHintSignedOut}
+          allowFontScaling
+        />
+        <Text style={[styles.muted, { color: palette.secondary }]} allowFontScaling>
+          {mailAccount?.email ? mailCopyText.replyHint : mailCopyText.replyHintSignedOut}
+        </Text>
+        {replyEmailInvalid ? (
+          <Text style={[styles.error, { color: palette.coral }]} accessibilityRole="alert" accessibilityLiveRegion="polite" allowFontScaling>
+            {mailCopyText.invalidEmail}
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.field}>
