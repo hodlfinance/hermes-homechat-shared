@@ -264,3 +264,64 @@ export function finLockedCarouselSuggestions(
     .map((id) => catalog.find((suggestion) => suggestion.id === id))
     .filter((suggestion): suggestion is FinHermesSuggestion => Boolean(suggestion && available(state, suggestion.id)));
 }
+
+// HPD-606, Justus 24.09. about 01:40Z on Build 51: "Suggestions" still came
+// too often, three times in one day. The day was claimed once, but the claimed
+// card then stayed on screen for the whole life of the chat. HODL keeps the
+// Hermes tab mounted, so every return to that tab, and every return to the Home
+// Chat from another screen, showed the same card again. The Hey home nudge and
+// the empty-chat chips came on top, each with rules of their own.
+//
+// One rule now covers every suggestion the customer did not ask for: at most
+// one appearance per device-local calendar day, kept on the device. An
+// appearance ends as soon as the Home Chat is no longer in front: another
+// screen or conversation, another HODL tab, or the app going to the
+// background. An ended appearance does not come back in this mount, and the
+// stored day keeps it away in every later mount, restart or conversation.
+
+/** Whether the Home Chat is still in front, so today's card may stay on screen. */
+export function finSuggestionCardStaysVisible(input: {
+  homeChatInFront: boolean;
+  hostVisible: boolean;
+  appActive: boolean;
+}): boolean {
+  return input.homeChatInFront && input.hostVisible && input.appActive;
+}
+
+function laterIso(left: string | null | undefined, right: string | null | undefined): string | null {
+  if (!left) return right ?? null;
+  if (!right) return left;
+  return Date.parse(right) > Date.parse(left) ? right : left;
+}
+
+/**
+ * Every write keeps the newest card day and showings already on the device, so
+ * a copy read before another mount claimed the day can never undo that claim.
+ */
+export function mergeStoredFinSuggestionDay(
+  next: FinSuggestionsDeviceState,
+  storedRaw: string | null | undefined,
+): FinSuggestionsDeviceState {
+  const stored = parseFinSuggestionsState(storedRaw);
+  const cardShownOn = !next.cardShownOn ? stored.cardShownOn
+    : stored.cardShownOn && stored.cardShownOn > next.cardShownOn ? stored.cardShownOn
+    : next.cardShownOn;
+  const entries: Record<string, FinSuggestionEntryState> = { ...next.entries };
+  for (const [id, storedEntry] of Object.entries(stored.entries)) {
+    const current = entries[id];
+    // This copy never touched the entry, so the device's version stands.
+    if (!current) {
+      entries[id] = storedEntry;
+      continue;
+    }
+    const shownAt = laterIso(current.shownAt, storedEntry.shownAt);
+    if (shownAt !== (current.shownAt ?? null)) entries[id] = Object.freeze({ ...current, shownAt });
+  }
+  return Object.freeze({
+    ...next,
+    entries: Object.freeze(entries),
+    cardShownOn,
+    cardShownAt: laterIso(next.cardShownAt, stored.cardShownAt),
+    cardDismissedAt: laterIso(next.cardDismissedAt, stored.cardDismissedAt),
+  });
+}
