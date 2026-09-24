@@ -154,6 +154,20 @@ export function createHermesApiClient({ baseUrl, token = "", fetchImpl = fetch }
         body: JSON.stringify(body),
         signal: options.signal,
       }),
+    /**
+     * HPD-843. Deletes an automation's own thread from the menu. The plane
+     * archives it and refuses every other conversation; the automation's next
+     * result opens a new thread.
+     */
+    archiveConversation: (
+      conversationId: string,
+      options: HermesRequestOptions = {},
+    ) =>
+      request<HermesConversationResponse>(`/hermes/conversations/${encodeURIComponent(conversationId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "archived" }),
+        signal: options.signal,
+      }),
     messages: (
       conversationId: string,
       query: { surface?: string; before?: string; limit?: number } = {},

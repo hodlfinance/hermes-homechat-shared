@@ -22,6 +22,12 @@ import { pageStarterCopy } from "../ui/page-starter-copy";
 import { MobilePageMenuRow } from "./mobile-page-menu-row";
 import { emailMagicLinkTokenFromUrl, solveEmailMagicLinkAbuseChallenge } from "./mobile-email-magic-link";
 import { pageMenuRemovalCopy } from "../ui/page-menu-copy";
+import {
+  automationThreadForJob,
+  automationThreadListLimit,
+  automationThreadRemovalCopy,
+  automationThreads,
+} from "./mobile-automation-threads";
 import { subscribeKeyboardInsetRelease } from "./mobile-keyboard-inset";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -2333,6 +2339,21 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
     }),
     [hermesApi],
   );
+  // HPD-843: a thread an automation made since the last refresh appears as
+  // soon as the menu opens, without waiting for the next foreground refresh.
+  useEffect(() => {
+    if (!menuOpen) return;
+    let current = true;
+    void chatConversationController
+      .refreshConversations(createHomechatPagedState<ConversationSession>(), { limit: automationThreadListLimit })
+      .then((page) => {
+        if (current && page.phase !== "error") setChatSessions(page.items);
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [menuOpen, chatConversationController]);
   const voiceRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const voiceRecorderState = useAudioRecorderState(voiceRecorder);
   const voiceNoteController = useMemo(
@@ -2691,7 +2712,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
         ]);
         const [activeRuns, sessionsPage, pendingApprovals] = await Promise.all([
           hermesApi.activeRuns().catch((): ChatRun[] => []),
-          chatConversationController.refreshConversations(createHomechatPagedState<ConversationSession>(), { limit: 12 }),
+          chatConversationController.refreshConversations(createHomechatPagedState<ConversationSession>(), { limit: automationThreadListLimit }),
           api.approvals({ status: "pending", limit: 100 }).catch((): ApprovalCard[] => []),
         ]);
         if (!refreshIsCurrent()) return;
@@ -5240,7 +5261,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
     }
     setTab("chat");
     try {
-      const sessionsPage = await chatConversationController.refreshConversations(createHomechatPagedState<ConversationSession>(), { limit: 12 });
+      const sessionsPage = await chatConversationController.refreshConversations(createHomechatPagedState<ConversationSession>(), { limit: automationThreadListLimit });
       if (sessionsPage.phase === "error") throw new Error(sessionsPage.error || "Could not open Home chat.");
       const sessions = sessionsPage.items;
       setChatSessions(sessions);
@@ -7084,6 +7105,26 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
     setBookmarkNotice("Removed from Pages.");
   }
 
+  // HPD-843: deleting an automation's thread archives it on the plane; the
+  // automation's next result opens a new one. An open thread closes to Home.
+  async function archiveAutomationThread(entry: MobileRemovableNavigationEntry) {
+    await hermesApi.archiveConversation(entry.entryId);
+    setChatSessions((current) => current.filter((session) => session.id !== entry.entryId));
+    if (activeConversationSessionIdRef.current === entry.entryId) {
+      await openMobileHomeChat({ force: true });
+    }
+  }
+
+  // HPD-843: the chat button on an automation's card opens that automation's
+  // own thread. Before its first result there is none, and the caller keeps
+  // the earlier behaviour (a question about it in Home).
+  function openAutomationThread(jobId: string | null | undefined) {
+    const thread = automationThreadForJob(chatSessions, jobId);
+    if (!thread) return false;
+    void loadMobileChatSession(thread.id, { force: true });
+    return true;
+  }
+
   async function startVoiceNote() {
     if (voiceControllerBusy || voiceRecordingActive || voiceNoteDraftRef.current.phase !== "idle") return;
     // The button that leads here is disabled by the same decision, so this is
@@ -7407,9 +7448,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
           plan=""
           tab={tab}
           isOwner={false}
-          isHomeChatActive={tab === "chat"}
+          isHomeChatActive={tab === "chat" && chatSessions.find((session) => session.id === activeConversationSessionId)?.role !== "chat"}
           bookmarks={[]}
           onRemoveBookmark={archiveNavigationEntry}
+          onRemoveAutomationThread={archiveAutomationThread}
           onNewPage={() => {
             setMenuOpen(false);
             setOpeningDestinationTitle(pageStarterCopy(appLocale).label);
@@ -8104,6 +8146,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
           isHomeChatActive={isHomeChatActive}
           bookmarks={snapshot.bookmarks}
           onRemoveBookmark={archiveNavigationEntry}
+          onRemoveAutomationThread={archiveAutomationThread}
           onNewPage={() => void openPageEntry()}
           chatSessions={chatSessions}
           activeSessionId={activeConversationSessionId}
@@ -8812,6 +8855,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
                 await loadRankedTaskAutomations();
               }}
               onAsk={askAboutAutomation}
+              onOpenThread={openAutomationThread}
               onReset={(role: RankedTaskAutomationRole) => void mutateAutomation(
                 () => api.resetRankedTaskAutomation(role, Crypto.randomUUID()),
               )}
@@ -9563,6 +9607,7 @@ function MobileNavigationDrawer({
   onOpenSession,
   onOpenBookmark,
   onRemoveBookmark,
+  onRemoveAutomationThread,
   onNewPage,
   onOpenTasks,
   onOpenSuggestions,
@@ -9600,6 +9645,7 @@ function MobileNavigationDrawer({
   onOpenSession: (sessionId: string) => void;
   onOpenBookmark: (href: string) => void;
   onRemoveBookmark: (entry: MobileRemovableNavigationEntry) => Promise<void>;
+  onRemoveAutomationThread: (entry: MobileRemovableNavigationEntry) => Promise<void>;
   onNewPage: () => void;
   onOpenTasks: () => void;
   onOpenSuggestions?: () => void;
@@ -9690,6 +9736,22 @@ function MobileNavigationDrawer({
               copy={pageMenuRemovalCopy(appLocale, bookmark.title)}
               onPress={() => onOpenBookmark(bookmark.href)}
               onRemove={onRemoveBookmark}
+            />
+          ))}
+
+          {/* HPD-843: every automation that has delivered a result has its own
+              thread here, next to New App or Page. Only automations make
+              threads; the customer cannot start one of his own. */}
+          {automationThreads(chatSessions).map((thread) => (
+            <MobilePageMenuRow
+              key={thread.id}
+              entry={{ entryId: thread.id, mode: "archive" }}
+              icon={<CalendarClock size={18} color={thread.id === activeSessionId && tab === "chat" ? palette.teal : palette.text} />}
+              color={thread.id === activeSessionId && tab === "chat" ? palette.teal : palette.text}
+              label={thread.title}
+              copy={automationThreadRemovalCopy(appLocale, thread.title)}
+              onPress={() => onOpenSession(thread.id)}
+              onRemove={onRemoveAutomationThread}
             />
           ))}
 
@@ -11115,6 +11177,7 @@ function MobileAutomationsPanel({
   onDismissMutationError,
   onRefresh,
   onAsk,
+  onOpenThread,
   onReset,
   onReinstall,
   onRestoreVersion,
@@ -11137,6 +11200,7 @@ function MobileAutomationsPanel({
   onDismissMutationError: () => void;
   onRefresh: () => void;
   onAsk: (prompt: string) => void;
+  onOpenThread: (jobId: string | null | undefined) => boolean;
   onReset: (role: RankedTaskAutomationRole) => void;
   onReinstall: (role: RankedTaskAutomationRole) => void;
   onRestoreVersion: (role: RankedTaskAutomationRole, version: number) => void;
@@ -11200,7 +11264,10 @@ function MobileAutomationsPanel({
             locale={locale}
             timeZone={timeZone}
             busy={mutationBusy}
-            onChat={(target) => onAsk(promptFor(copy.chatPrompt, target))}
+            onChat={(target) => {
+              if (onOpenThread(target.jobId)) return;
+              onAsk(promptFor(copy.chatPrompt, target));
+            }}
             onEdit={(target) => onAsk(promptFor(copy.editPrompt, target))}
             onReset={(target) => { if (target.role) onReset(target.role); }}
             onReinstall={(target) => { if (target.role) onReinstall(target.role); }}

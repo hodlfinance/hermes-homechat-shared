@@ -70,6 +70,7 @@ export function mobileConversationSessionFromCanonical(
     lastMessageAt: conversation.lastMessageAt,
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
+    automationJobId: conversation.automationJobId ?? null,
   };
 }
 
@@ -246,6 +247,16 @@ export function createNativeR8CanonicalController(
       assertFullHeyConversation(response.conversation, identity.surface);
       if (response.conversation.channelOrigin !== heyHermesMobileChannel) {
         throw new Error("Canonical Hermes conversation did not retain the mobile channel binding.");
+      }
+      return mobileConversationSessionFromCanonical(response.conversation);
+    },
+    archiveConversation: async (
+      conversationId: string,
+      context: MobileHermesRequestContext = {},
+    ) => {
+      const response = await client.archiveConversation(conversationId, context);
+      if (response.conversation.id !== conversationId || response.conversation.status !== "archived") {
+        throw new Error("Canonical Hermes did not delete that thread.");
       }
       return mobileConversationSessionFromCanonical(response.conversation);
     },
