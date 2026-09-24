@@ -319,6 +319,13 @@ export type HermesApiConversation = {
   lastMessageAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * HPD-843. Set when this conversation is an automation's own thread: the
+   * plane made it for that job's first delivered result, and every later
+   * result of the job lands here while the thread exists. Null for Home and
+   * every other conversation; absent from a plane older than HPD-843.
+   */
+  automationJobId?: string | null;
 };
 
 export type HermesApiMessage = {

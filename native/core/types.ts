@@ -1205,6 +1205,8 @@ export interface ConversationSession {
   lastMessageAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** HPD-843: the job whose own thread this is; absent or null otherwise. */
+  automationJobId?: string | null;
 }
 
 export type ChatArtifactReference = Record<string, SharedHomechatJsonValue> &
