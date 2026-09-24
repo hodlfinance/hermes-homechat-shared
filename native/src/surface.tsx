@@ -454,6 +454,7 @@ import { MobileSupportRequestForm } from "./SupportRequestForm";
 import { createReduceMotionStore } from "./mobile-reduce-motion-store";
 import { MobileWorkingDragon } from "./mobile-working-dragon";
 import { MobileStatusShimmerText } from "./mobile-status-shimmer";
+import { lapseNoticeDismissedStorageKey, mobileLapseNotice, type MobileLapseNotice } from "./mobile-lapse-notice";
 import {
   createMobileAccountActionState,
   mobileAccountActionFailed,
@@ -1751,6 +1752,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
   const [foregroundNotification, setForegroundNotification] = useState<MobileForegroundNotificationNotice | null>(null);
   const [handledNotificationIds, setHandledNotificationIds] = useState<string[]>([]);
   const [pendingNotificationNotice, setPendingNotificationNotice] = useState<MobileForegroundNotificationNotice | null>(null);
+  // HPD-735: the lapse notices (export link, deletion) dismissed on this device.
+  const [dismissedLapseNoticeIds, setDismissedLapseNoticeIds] = useState<string[]>([]);
   const [mobilePushBusy, setMobilePushBusy] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatEventsByRunId, setChatEventsByRunId] = useState<ChatRunEventMap>({});
@@ -1798,6 +1801,29 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
   useEffect(() => { pageStarterRef.current = null; setPageStarter(null); }, [token]);
   const pageWorkspaceRef = useRef(snapshot?.workspace.id);
   pageWorkspaceRef.current = snapshot?.workspace.id;
+  // HPD-735: the lapse notice from the snapshot the plane already sends.
+  const lapseNotice = mobileLapseNotice(snapshot?.notifications, new Date(), dismissedLapseNoticeIds);
+  useEffect(() => {
+    let active = true;
+    void readStoredString(lapseNoticeDismissedStorageKey).then((stored) => {
+      if (!active || !stored) return;
+      try {
+        const ids = JSON.parse(stored);
+        if (Array.isArray(ids)) setDismissedLapseNoticeIds(ids.filter((id): id is string => typeof id === "string"));
+      } catch {
+        // An unreadable entry only means the notice shows again.
+      }
+    });
+    return () => { active = false; };
+  }, []);
+  const dismissLapseNotice = useCallback(() => {
+    if (!lapseNotice) return;
+    setDismissedLapseNoticeIds((current) => {
+      const next = [...current.filter((id) => id !== lapseNotice.id), lapseNotice.id].slice(-20);
+      void persistStoredString(lapseNoticeDismissedStorageKey, JSON.stringify(next));
+      return next;
+    });
+  }, [lapseNotice]);
   useEffect(() => {
     if (tab !== "chat") pageEntryGeneration.current += 1;
     const next = pageStarterAfterNavigation(pageStarterRef.current, { workspaceId: snapshot?.workspace.id ?? "", conversationId: activeConversationSessionId ?? "" }, tab === "chat");
@@ -8193,6 +8219,16 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
         />
       ) : null}
 
+      {lapseNotice ? (
+        <MobileLapseNoticeBanner locale={appLocale}
+          notice={lapseNotice}
+          onOpen={() => {
+            if (lapseNotice.actionUrl) void WebBrowser.openBrowserAsync(lapseNotice.actionUrl);
+          }}
+          onDismiss={dismissLapseNotice}
+        />
+      ) : null}
+
       {tab === "chat" ? (
         <KeyboardAvoidingView
           ref={chatKeyboardAvoidingRef}
@@ -9945,6 +9981,44 @@ function MobileForegroundNotificationBanner({ locale,
         <Text style={styles.foregroundNotificationBody} numberOfLines={2}>
           {notice.body}
         </Text>
+      </View>
+      <Pressable
+        style={styles.foregroundNotificationDismiss}
+        onPress={onDismiss}
+        accessibilityRole="button"
+        accessibilityLabel={staticUiCopy(locale)["Dismiss notification"]}
+      >
+        <X size={16} color={palette.muted} />
+      </Pressable>
+    </Pressable>
+  );
+}
+
+// HPD-735: the export link or the deletion notice. The whole text is shown,
+// because it is the only place a Fin/hodl customer learns either.
+function MobileLapseNoticeBanner({ locale,
+  notice,
+  onOpen,
+  onDismiss,
+}: { locale: AppLocale } & {
+  notice: MobileLapseNotice;
+  onOpen: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <Pressable
+      style={styles.foregroundNotification}
+      onPress={onOpen}
+      disabled={!notice.actionUrl}
+      accessibilityRole={notice.actionUrl ? "link" : "text"}
+      accessibilityLabel={notice.title}
+    >
+      <View style={styles.foregroundNotificationIcon}>
+        <MessageSquare size={17} color={palette.teal} />
+      </View>
+      <View style={styles.flexOne}>
+        <Text style={styles.foregroundNotificationTitle}>{notice.title}</Text>
+        <Text style={styles.foregroundNotificationBody}>{notice.body}</Text>
       </View>
       <Pressable
         style={styles.foregroundNotificationDismiss}
