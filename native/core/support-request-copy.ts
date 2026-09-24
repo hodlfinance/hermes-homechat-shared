@@ -359,7 +359,9 @@ export function supportRequestCopy(locale: AppLocale = defaultAppLocale) {
 // account; the product name comes from the host.
 const mailEn = {
   "subtitle": "A normal {product} support request — not an AI chat.",
-  "boundary": "{product} adds the app version, platform, your {product} account ID and account email to the email. Do not paste passwords or tokens.",
+  "boundary": "{product} adds the app version, platform, your {product} account ID, the account email and any reply email you enter. Do not paste passwords or tokens.",
+  "boundaryNoEmail": "{product} adds the app version, platform, your {product} account ID and any reply email you enter. Do not paste passwords or tokens.",
+  "boundarySignedOut": "{product} adds the app version, platform and any reply email you enter. No account is sent. Do not paste passwords or tokens.",
   "account": "{product} account",
   "accountEmail": "Account email",
   "sessionSource": "Taken from your signed-in session and cannot be changed here.",
@@ -377,7 +379,9 @@ const mailCopy: Partial<Record<AppLocale, typeof mailEn>> = {
   en: mailEn,
   de: {
     "subtitle": "Eine normale Support-Anfrage an {product} — kein KI-Chat.",
-    "boundary": "{product} fügt der E-Mail App-Version, Plattform, Deine {product}-Kontokennung und die E-Mail-Adresse des Kontos hinzu. Füge keine Passwörter oder Tokens ein.",
+    "boundary": "{product} fügt der E-Mail App-Version, Plattform, Deine {product}-Kontokennung, die E-Mail-Adresse des Kontos und eine eingetragene Antwort-E-Mail hinzu. Füge keine Passwörter oder Tokens ein.",
+    "boundaryNoEmail": "{product} fügt der E-Mail App-Version, Plattform, Deine {product}-Kontokennung und eine eingetragene Antwort-E-Mail hinzu. Füge keine Passwörter oder Tokens ein.",
+    "boundarySignedOut": "{product} fügt der E-Mail App-Version, Plattform und eine eingetragene Antwort-E-Mail hinzu. Es wird kein Konto mitgesendet. Füge keine Passwörter oder Tokens ein.",
     "account": "{product}-Konto",
     "accountEmail": "E-Mail-Adresse des Kontos",
     "sessionSource": "Aus Deiner angemeldeten Sitzung übernommen und hier nicht änderbar.",
