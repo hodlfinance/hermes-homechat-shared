@@ -352,3 +352,35 @@ const copy: Record<AppLocale, typeof en> = {
 export function supportRequestCopy(locale: AppLocale = defaultAppLocale) {
   return copy[locale] ?? copy[defaultAppLocale];
 }
+
+// HPD-837: the product help screen outside Hermes (HODL's Account and other
+// help buttons). It has no Hermes session, so it composes an email to the
+// product's own support address. Nothing here names Hey Hermes or a Hey
+// account; the product name comes from the host.
+const mailEn = {
+  "subtitle": "A normal {product} support request — not an AI chat.",
+  "boundary": "{product} adds the app version, platform and your {product} account ID to the email. Do not paste passwords or tokens.",
+  "compose": "Write email to support",
+  "opened": "Your mail app opened with the request. Send it from there.",
+  "unavailable": "No mail app could be opened on this device. Write to the address below.",
+  "subject": "{product} support",
+};
+
+const mailCopy: Partial<Record<AppLocale, typeof mailEn>> = {
+  en: mailEn,
+  de: {
+    "subtitle": "Eine normale Support-Anfrage an {product} — kein KI-Chat.",
+    "boundary": "{product} fügt der E-Mail App-Version, Plattform und Deine {product}-Kontokennung hinzu. Füge keine Passwörter oder Tokens ein.",
+    "compose": "E-Mail an den Support schreiben",
+    "opened": "Deine Mail-App ist mit der Anfrage geöffnet. Sende sie dort ab.",
+    "unavailable": "Auf diesem Gerät ließ sich keine Mail-App öffnen. Schreib an die Adresse unten.",
+    "subject": "{product} Support",
+  },
+};
+
+export function supportMailCopy(locale: AppLocale = defaultAppLocale, product: string) {
+  const selected = mailCopy[locale] ?? mailEn;
+  return Object.fromEntries(
+    Object.entries(selected).map(([key, value]) => [key, value.split("{product}").join(product)]),
+  ) as typeof mailEn;
+}
