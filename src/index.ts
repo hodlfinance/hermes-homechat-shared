@@ -1356,16 +1356,34 @@ export function nextHomechatStreamingText(
   return mergeHomechatStreamingText(cleanCurrent, cleanIncoming);
 }
 
+/**
+ * HPD-896. A clarify question reaches the chat as a message delta that carries
+ * its request (`clarifyRequest`, `clarifyId`), so an answer can be bound to it.
+ * Its text belongs to the question card alone. Counted as reply text, it stood
+ * a second time under the card, and several questions of one run were glued
+ * together without a space ("...detail?Shall I create..."; Justus, HODL,
+ * 25.09.2026).
+ */
+export function isHomechatClarifyDelta(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  const record = payload as Record<string, unknown>;
+  return (record.clarifyRequest !== undefined && record.clarifyRequest !== null)
+    || (typeof record.clarifyId === "string" && record.clarifyId.trim().length > 0);
+}
+
 export function streamingTextFromHomechatEvents(events: readonly unknown[]): string {
   return events.reduce<string>((draft, input) => {
     const event = normalizeHomechatRunEvent(input);
-    if (event?.type !== "message.delta") return draft;
+    if (event?.type !== "message.delta" || isHomechatClarifyDelta(event.payload)) return draft;
     return nextHomechatStreamingText(draft, { text: event.text }, event.replace === true);
   }, "");
 }
 
 export function homechatStreamingTextFromPayloads(payloads: readonly Record<string, unknown>[]): string {
-  return payloads.reduce((draft, payload) => nextHomechatStreamingText(draft, payload), "");
+  return payloads.reduce(
+    (draft, payload) => isHomechatClarifyDelta(payload) ? draft : nextHomechatStreamingText(draft, payload),
+    "",
+  );
 }
 
 export function reconcileHomechatFinalAnswer(finalAnswer: string, streamedDraft: string): string {
@@ -1829,6 +1847,10 @@ export function reduceHomechatClientState<
     };
   }
   if (event.type === "message.delta") {
+    // HPD-896: a clarify question is the question card's, never reply text.
+    if (isHomechatClarifyDelta(event.payload)) {
+      return { ...state, events, runId: event.runId ?? state.runId, slots };
+    }
     return {
       ...state,
       events,
