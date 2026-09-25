@@ -8476,6 +8476,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
                   runId={openDelegatedTask.runId ?? null}
                   live={openDelegatedTask.state === "running"}
                   open={openDelegatedRunEvents}
+                  knownEvents={openDelegatedTask.runId ? chatEventsByRunId[openDelegatedTask.runId] : undefined}
                 />
               ) : null}
               {pendingAssistantText || activeChatRunActivityView ? (

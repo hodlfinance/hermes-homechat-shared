@@ -13,6 +13,7 @@ import {
   type ChatRunEvent,
 } from "../core/index";
 import { useMobilePalette } from "./mobile-palette-context";
+import { delegatedStreamChunkText, mergeDelegatedRunEvents } from "./mobile-delegated-run-events";
 
 type StreamResponse = Pick<Response, "body" | "ok" | "status" | "text">;
 
@@ -64,48 +65,64 @@ export function useDelegatedRunEvents(
   runId: string | null,
   live: boolean,
   open: MobileDelegatedRunEventsOpen,
+  // HPD-874 (reopened): the events of this run the chat already holds from
+  // its own observation of it -- its stream, or its polling where streaming
+  // is unavailable. The timeline shows them even when its own stream brings
+  // nothing on the device.
+  knownEvents: readonly ChatRunEvent[] = noKnownEvents,
 ): ChatRunEvent[] {
   const [events, setEvents] = useState<ChatRunEvent[]>([]);
+  const eventsRef = useRef<ChatRunEvent[]>([]);
+  const runIdRef = useRef(runId);
+  runIdRef.current = runId;
   const liveRef = useRef(live);
   liveRef.current = live;
+  const openRef = useRef(open);
+  openRef.current = open;
+  const add = (incoming: readonly ChatRunEvent[], forRunId: string | null) => {
+    const merged = mergeDelegatedRunEvents(eventsRef.current, incoming, forRunId, maxHeldEvents);
+    if (!merged) return;
+    eventsRef.current = merged;
+    setEvents(merged);
+  };
+
   useEffect(() => {
+    eventsRef.current = [];
     setEvents([]);
     if (!runId) return;
     let cancelled = false;
     let controller: AbortController | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let cursor: string | null = null;
-    const collected: ChatRunEvent[] = [];
-    const ids = new Set<string>();
 
     const connect = async () => {
+      // Never two streams for one timeline: the previous one is closed before
+      // the next opens. Before, a stream that failed on the device stayed open
+      // while a new one was opened every three seconds.
+      controller?.abort();
       controller = new AbortController();
       let terminal = false;
       const take = (parsed: ReturnType<ReturnType<typeof createHomechatEventStreamDecoder>["push"]>) => {
         if (parsed.cursor) cursor = parsed.cursor;
-        let changed = false;
+        const incoming: ChatRunEvent[] = [];
         for (const canonical of parsed.events) {
           if (isTerminalHomechatEvent(canonical)) terminal = true;
           const event = chatRunEventFromHermesEvent(canonical);
-          if (!event || ids.has(event.id)) continue;
-          ids.add(event.id);
-          collected.push(event);
-          changed = true;
+          if (event) incoming.push(event);
         }
-        if (collected.length > maxHeldEvents) collected.splice(0, collected.length - maxHeldEvents);
-        if (changed && !cancelled) setEvents([...collected]);
+        if (!cancelled) add(incoming, runId);
       };
       try {
-        const response = await open(runId, cursor, controller.signal);
+        const response = await openRef.current(runId, cursor, controller.signal);
         if (response.ok) {
           const decoder = createHomechatEventStreamDecoder({ cursor });
           const reader = response.body?.getReader?.();
           if (reader) {
-            const text = new TextDecoder();
+            const text = typeof TextDecoder === "function" ? new TextDecoder() : null;
             while (!cancelled) {
               const chunk = await reader.read();
               if (chunk.done) break;
-              take(decoder.push(text.decode(chunk.value, { stream: true })));
+              take(decoder.push(delegatedStreamChunkText(chunk.value, text)));
               if (terminal) break;
             }
           } else {
@@ -116,7 +133,10 @@ export function useDelegatedRunEvents(
       } catch {
         // A dropped stream is reopened below; the timeline keeps what it has.
       }
-      if (!cancelled && !terminal && liveRef.current) timer = setTimeout(() => void connect(), 3_000);
+      if (!cancelled && !terminal && liveRef.current) {
+        controller?.abort();
+        timer = setTimeout(() => void connect(), 3_000);
+      }
     };
     void connect();
     return () => {
@@ -124,9 +144,16 @@ export function useDelegatedRunEvents(
       controller?.abort();
       if (timer) clearTimeout(timer);
     };
-  }, [runId, open]);
+  }, [runId]);
+
+  // After the reset above, so a new run starts with what the chat holds.
+  useEffect(() => {
+    if (runId) add(knownEvents, runId);
+  }, [runId, knownEvents]);
   return events;
 }
+
+const noKnownEvents: readonly ChatRunEvent[] = [];
 
 type TimelineCopy = {
   title: string;
@@ -170,14 +197,17 @@ export function MobileDelegatedActivityTimeline({
   runId,
   live,
   open,
+  knownEvents,
 }: {
   locale: AppLocale;
   runId: string | null;
   live: boolean;
   open: MobileDelegatedRunEventsOpen;
+  /** HPD-874: the run's events the chat already holds (stream or polling). */
+  knownEvents?: readonly ChatRunEvent[];
 }) {
   const palette = useMobilePalette();
-  const events = useDelegatedRunEvents(runId, live, open);
+  const events = useDelegatedRunEvents(runId, live, open, knownEvents);
   const timeline = useMemo(() => heyDelegatedActivityTimeline(events), [events]);
   const [expanded, setExpanded] = useState(false);
   const [openKeys, setOpenKeys] = useState<ReadonlySet<string>>(() => new Set());
