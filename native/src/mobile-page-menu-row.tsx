@@ -5,7 +5,7 @@ import { mobileSystemSurfaceMetrics } from "./mobile-system-surface";
 
 /** HPD-619: only removes a bookmark; the caller retains ownership of its content. */
 export function MobilePageMenuRow({
-  entry, label, icon, color, onPress, onRemove, copy,
+  entry, label, icon, color, onPress, onRemove, copy, extraAction,
 }: {
   entry: MobileRemovableNavigationEntry;
   label: string;
@@ -14,6 +14,8 @@ export function MobilePageMenuRow({
   onPress: () => void;
   onRemove: (entry: MobileRemovableNavigationEntry) => Promise<void>;
   copy: { remove: string; cancel: string; title: string; message: string; failed: string; pending: string };
+  /** HPD-898: one more entry in the row's menu, above the removal. */
+  extraAction?: { label: string; onPress: () => void };
 }) {
   const callback = useRef(onRemove);
   callback.current = onRemove;
@@ -49,12 +51,22 @@ export function MobilePageMenuRow({
     if (pending || actionMenuOpen.current) return;
     actionMenuOpen.current = true;
     if (Platform.OS === "ios") {
+      const options = extraAction ? [copy.cancel, extraAction.label, copy.remove] : [copy.cancel, copy.remove];
+      const removeIndex = options.length - 1;
       ActionSheetIOS.showActionSheetWithOptions({
-        title: label, options: [copy.cancel, copy.remove], cancelButtonIndex: 0, destructiveButtonIndex: 1,
+        title: label, options, cancelButtonIndex: 0, destructiveButtonIndex: removeIndex,
       }, (index) => {
         actionMenuOpen.current = false;
-        if (index === 1) confirmRemoval();
+        if (extraAction && index === 1) extraAction.onPress();
+        else if (index === removeIndex) confirmRemoval();
       });
+    } else if (extraAction) {
+      actionMenuOpen.current = false;
+      Alert.alert(label, undefined, [
+        { text: copy.cancel, style: "cancel" },
+        { text: extraAction.label, onPress: extraAction.onPress },
+        { text: copy.remove, style: "destructive", onPress: confirmRemoval },
+      ], { cancelable: true });
     } else {
       actionMenuOpen.current = false;
       confirmRemoval();
@@ -65,8 +77,13 @@ export function MobilePageMenuRow({
     <View style={styles.row}>
       <Pressable style={styles.open} onPress={onPress} onLongPress={openActions} disabled={pending}
         accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: pending, busy: pending }}
-        accessibilityActions={[{ name: "remove", label: copy.remove }]}
-        onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === "remove") openActions(); }}>
+        accessibilityActions={extraAction
+          ? [{ name: "extra", label: extraAction.label }, { name: "remove", label: copy.remove }]
+          : [{ name: "remove", label: copy.remove }]}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === "remove") openActions();
+          else if (event.nativeEvent.actionName === "extra") extraAction?.onPress();
+        }}>
         <View style={styles.iconColumn} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           {icon}
         </View>

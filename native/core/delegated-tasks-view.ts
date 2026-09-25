@@ -55,11 +55,29 @@ export function mobileDelegatedTaskStatusLabel(state: HermesDelegatedTaskState) 
   return "Completed";
 }
 
+/**
+ * HPD-897. The running-work bar above the composer belongs to the
+ * conversation on screen: it shows the background tasks started from it, and
+ * no others. A task started in Home stood in an automation thread's bar. A
+ * task whose start is not known (an older plane sends no
+ * sourceConversationId) keeps showing, as before.
+ */
+export function delegatedTaskStartedIn(
+  task: Pick<HermesDelegatedTask, "sourceConversationId">,
+  conversationId: string | null | undefined,
+) {
+  if (conversationId === undefined) return true;
+  if (!task.sourceConversationId) return true;
+  return task.sourceConversationId === conversationId;
+}
+
 export function delegatedTasksView(
   tasks: HermesDelegatedTask[],
   nowMs: number,
+  conversationId?: string | null,
 ): DelegatedTasksView | null {
   const rows = tasks
+    .filter((task) => delegatedTaskStartedIn(task, conversationId))
     // The compact indicator describes work that is still running. Terminal
     // results remain in the task's persistent conversation, but never keep the
     // composer or the running-work affordance alive.

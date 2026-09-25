@@ -26,6 +26,7 @@ import {
   automationThreadForJob,
   automationThreadListLimit,
   automationThreadRemovalCopy,
+  automationThreadViewAllLabel,
   automationThreads,
 } from "./mobile-automation-threads";
 import { subscribeKeyboardInsetRelease } from "./mobile-keyboard-inset";
@@ -8522,6 +8523,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
             ) : null}
             <MobileDelegatedTasksIndicator locale={appLocale}
               tasks={delegatedTasks}
+              conversationId={activeConversationSessionId}
               dismissedTaskIds={dismissedDelegatedTaskIds}
               stoppingTaskIds={stoppingDelegatedTaskIds}
               onOpenConversation={(conversationId, taskName) =>
@@ -9802,6 +9804,7 @@ function MobileNavigationDrawer({
               copy={automationThreadRemovalCopy(appLocale, thread.title)}
               onPress={() => onOpenSession(thread.id)}
               onRemove={onRemoveAutomationThread}
+              extraAction={{ label: automationThreadViewAllLabel(appLocale), onPress: onOpenAutomations }}
             />
           ))}
 
@@ -10464,8 +10467,11 @@ function MobileDelegatedTasksIndicator({ locale,
   stoppingTaskIds,
   onOpenConversation,
   onCloseTask,
+  conversationId,
 }: { locale: AppLocale } & {
   tasks: HermesDelegatedTask[];
+  /** HPD-897: the conversation on screen; only its own background tasks show. */
+  conversationId: string | null;
   dismissedTaskIds: readonly string[];
   stoppingTaskIds: readonly string[];
   onOpenConversation: (conversationId: string, taskName: string) => void;
@@ -10484,6 +10490,7 @@ function MobileDelegatedTasksIndicator({ locale,
   const view = delegatedTasksView(
     tasks.filter((task) => !dismissedTaskIds.includes(task.taskId)),
     nowMs,
+    conversationId,
   );
   if (!view) return null;
 
