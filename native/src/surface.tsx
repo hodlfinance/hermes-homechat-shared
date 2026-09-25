@@ -1561,6 +1561,12 @@ type NativeR8SurfaceProps = {
     onAccepted?: ((id: string) => void) | null;
   };
   /**
+   * HPD-899: the host's Hermes tab was tapped. Each new requestId opens the
+   * Home chat from wherever the surface is (a sub thread, an automation
+   * thread, the account page, Home scrolled up) and shows its newest message.
+   */
+  homeRequest?: { requestId: string };
+  /**
    * HPD-606: false while the host shows another screen, for example another
    * HODL tab, although the surface stays mounted. Defaults to true.
    */
@@ -1575,7 +1581,7 @@ function NativeR8Surface(props: NativeR8SurfaceProps = {}) {
   );
 }
 
-function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible = true }: NativeR8SurfaceProps = {}) {
+function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest, hostVisible = true }: NativeR8SurfaceProps = {}) {
   const systemColorScheme = useColorScheme();
   const reduceMotion = useReduceMotion();
   const hostAppLocale = host.presentation?.appLocale;
@@ -7433,6 +7439,23 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
     });
     return () => { active = false; };
   }, [token, snapshot?.workspace.id, navigationRequest?.requestId]);
+
+  const homeRequestRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!token || !snapshot || !homeRequest || homeRequestRef.current === homeRequest.requestId) return;
+    homeRequestRef.current = homeRequest.requestId;
+    let active = true;
+    // Leave any other page (account, automations, tasks) for the chat first;
+    // loading a session alone does not switch the page.
+    setTab("chat");
+    setSettingsSection(null);
+    void openMobileHomeChat({ force: true, preserveDraft: true }).then((opened) => {
+      // A Home chat that was already open does not reload, so it is scrolled
+      // here; a freshly loaded one follows the newest message after this jump.
+      if (active && opened) setTimeout(() => { if (active) jumpToLatestMobileMessage(); }, 0);
+    });
+    return () => { active = false; };
+  }, [token, snapshot?.workspace.id, homeRequest?.requestId]);
 
   const presentedChatTitle = host.presentation?.chatTitle || mobileScreenTitle(tab, settingsSection, t);
   const ChatHeaderSupportIcon = host.presentation?.chatHeaderSupportIcon;
