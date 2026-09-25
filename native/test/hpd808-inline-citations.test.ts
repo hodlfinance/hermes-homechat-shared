@@ -26,6 +26,7 @@ import {
 
 const ANSWER = "NVIDIA beat estimates [1] and raised guidance [2, 3].\n\nSee [Reuters](https://www.reuters.com/x) and [10].";
 const ARTIFACT_ID = "12345678-1234-4123-8123-123456789abc";
+const SECOND_ARTIFACT_ID = "87654321-4321-4321-8321-cba987654321";
 const SIGNATURE = "A".repeat(43);
 
 function capChatReference(
@@ -226,7 +227,7 @@ test("a named Markdown source link targets only one matching safe source", () =>
   assert.equal(mobileFinanceCitationForUrl("https://research.example/notes/1", [...citations, citations[0]!]), null);
 });
 
-test("a reference with nothing to show and nowhere to go, or without a usable number, is no citation", () => {
+test("a reference with nothing to show, an invalid number, or a duplicate number is no citation", () => {
   const citations = mobileFinanceCitations([capChatReference([
     research(1, { full_text: null, body: null, summary: null, url: "http://insecure.example/x" }),
     research(2, { title: null, preview_title: null, source_name: null }),
@@ -236,7 +237,7 @@ test("a reference with nothing to show and nowhere to go, or without a usable nu
     research(5),
     research(5, { title: "Second copy of five" }),
   ])]);
-  assert.deepEqual(citations.map((item) => [item.number, item.title]), [[5, "Research note 5"]]);
+  assert.deepEqual(citations.map((item) => [item.number, item.title]), []);
 });
 
 test("markers split into tappable pieces that join back to exactly the answer", () => {
@@ -271,13 +272,34 @@ test("the card knows when the message above already is its answer", () => {
   assert.equal(messageRepeatsAnswer(ANSWER, null), false);
 });
 
-test("citations from several cards are merged, first number wins", () => {
-  const first = capChatReference([research(1)], "One [1].", "artifact-a");
-  const second = capChatReference([research(1, { title: "Other one" }), research(2)], "Two [2].", "artifact-b");
-  assert.deepEqual(mobileFinanceCitations([first, second]).map((item) => [item.number, item.title]), [
-    [1, "Research note 1"],
-    [2, "Research note 2"],
-  ]);
+test("duplicate [1] across signed cards stays plain unless the visible answer exactly identifies one card", () => {
+  const first = capChatReference([
+    research(1, { source_type: "in_house_article", article_id: "41", document_kind: "stored_research_body" }),
+  ], "One [1].", ARTIFACT_ID);
+  const second = capChatReference([
+    research(1, { title: "Other one", source_type: "in_house_article", article_id: "42", document_kind: "stored_research_body" }),
+    research(2),
+  ], "Two [1] and [2].", SECOND_ARTIFACT_ID);
+  const unbound = mobileFinanceCitations([first, second], "Summary [1] and [2].");
+  assert.deepEqual(unbound.map((item) => [item.number, item.title]), [[2, "Research note 2"]]);
+  assert.deepEqual(mobileCitationSegments("Summary [1] and [2].", unbound).map((segment) =>
+    segment.kind === "citation" ? [segment.text, segment.citation.number] : [segment.text, null]), [
+      ["Summary [1] and ", null], ["[2]", 2], [".", null],
+    ]);
+  const bound = mobileFinanceCitations([first, second], "Two [1] and [2].");
+  assert.deepEqual(bound.map((item) => [item.number, item.title]), [[1, "Other one"], [2, "Research note 2"]]);
+  assert.equal(bound[0]?.documentReference?.artifactId, SECOND_ARTIFACT_ID);
+  const sameAnswer = capChatReference([
+    research(1, { source_type: "in_house_article", article_id: "43", document_kind: "stored_research_body" }),
+  ], "Two [1] and [2].", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+  assert.deepEqual(mobileFinanceCitations([second, sameAnswer], "Two [1] and [2].").map((item) => item.number), [2]);
+  assert.equal(mobileFinanceArtifactCard(first)?.citations?.[0]?.documentReference?.artifactId, ARTIFACT_ID);
+  assert.equal(mobileFinanceArtifactCard(second)?.citations?.[0]?.documentReference?.artifactId, SECOND_ARTIFACT_ID);
+  // A numbered but unusable source in another card still prevents a global guess.
+  const unusable = capChatReference([
+    research(1, { title: null, preview_title: null, source_name: null, url: null }),
+  ], "Unavailable [1].", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+  assert.deepEqual(mobileFinanceCitations([first, unusable], "Summary [1]."), []);
   assert.deepEqual(mobileFinanceCitations(undefined), []);
 });
 

@@ -518,11 +518,13 @@ function storedDocumentReference(reference: ChatArtifactReference, source: Recor
 
 function capChatCitations(value: unknown, reference: ChatArtifactReference): MobileFinanceCitation[] {
   if (!Array.isArray(value)) return [];
-  const seen = new Set<number>();
+  const numbers = capChatSourceNumbers(value);
+  const counts = new Map<number, number>();
+  for (const number of numbers) counts.set(number, (counts.get(number) ?? 0) + 1);
   return value.slice(0, 200).flatMap((item) => {
     const source = record(item);
     const number = source?.source_number;
-    if (!source || typeof number !== "number" || !Number.isSafeInteger(number) || number < 1 || seen.has(number)) {
+    if (!source || typeof number !== "number" || counts.get(number) !== 1) {
       return [];
     }
     const title = firstText(source, ["title", "preview_title", "source_name", "name"], 300);
@@ -532,7 +534,6 @@ function capChatCitations(value: unknown, reference: ChatArtifactReference): Mob
     // A reference needs something to show or somewhere to go; otherwise its
     // marker stays plain text instead of becoming a dead button.
     if (!title || (!documentReference && !url)) return [];
-    seen.add(number);
     return [{
       number,
       title,
@@ -541,6 +542,14 @@ function capChatCitations(value: unknown, reference: ChatArtifactReference): Mob
       url,
       documentReference,
     }];
+  });
+}
+
+function capChatSourceNumbers(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 200).flatMap((item) => {
+    const number = record(item)?.source_number;
+    return typeof number === "number" && Number.isSafeInteger(number) && number > 0 ? [number] : [];
   });
 }
 
@@ -656,9 +665,12 @@ export function mobileCitationSegments(
 // it a second time.
 export function messageRepeatsAnswer(message: string | null | undefined, answer: string | null | undefined): boolean {
   if (!message || !answer) return false;
-  const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
-  const normalizedAnswer = normalize(answer);
-  return normalizedAnswer.length > 0 && normalize(message).includes(normalizedAnswer);
+  const normalizedAnswer = normalizeAnswerText(answer);
+  return normalizedAnswer.length > 0 && normalizeAnswerText(message).includes(normalizedAnswer);
+}
+
+function normalizeAnswerText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 // True when the chat message above a CapChat card already is the answer: either
@@ -857,18 +869,33 @@ export function mobileFinanceCitationDate(value: string | null, locale: string):
     : null;
 }
 
-// Every numbered reference the message's Fin Hermes cards carry. A number is
-// taken once, from the first card that has it.
+// An inline number belongs to one card only when the visible message exactly
+// matches that card's answer, or no other card claims the same source number.
+// Otherwise [n] remains text: picking the first card could open another
+// artifact's signed document. A card's own answer still uses its own sources.
 export function mobileFinanceCitations(
   references: readonly ChatArtifactReference[] | null | undefined,
+  messageText?: string | null,
 ): MobileFinanceCitation[] {
-  const byNumber = new Map<number, MobileFinanceCitation>();
+  const cards: { card: MobileFinanceArtifactCard; numbers: number[] }[] = [];
   for (const reference of references ?? []) {
-    for (const citation of mobileFinanceArtifactCard(reference)?.citations ?? []) {
-      if (!byNumber.has(citation.number)) byNumber.set(citation.number, citation);
-    }
+    const card = mobileFinanceArtifactCard(reference);
+    if (!card?.answerMarkdown) continue;
+    const presentation = record(reference.artifactPresentation);
+    const payload = record(presentation?.payload);
+    cards.push({ card, numbers: capChatSourceNumbers(payload?.references) });
   }
-  return [...byNumber.values()];
+  const normalizedMessage = messageText ? normalizeAnswerText(messageText) : "";
+  if (normalizedMessage) {
+    const exact = cards.filter(({ card }) => normalizeAnswerText(card.answerMarkdown!) === normalizedMessage);
+    if (exact.length === 1) return exact[0]!.card.citations ?? [];
+  }
+  const claimed = new Map<number, number>();
+  for (const { numbers } of cards) {
+    for (const number of new Set(numbers)) claimed.set(number, (claimed.get(number) ?? 0) + 1);
+  }
+  return cards.flatMap(({ card }) => card.citations ?? [])
+    .filter((citation) => claimed.get(citation.number) === 1);
 }
 
 export function mobileFinanceArtifactCard(reference: ChatArtifactReference): MobileFinanceArtifactCard | null {

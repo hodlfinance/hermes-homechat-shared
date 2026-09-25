@@ -10223,7 +10223,7 @@ function MessageBubble({
     ? []
     : uniqueMobileFinanceArtifactReferences(message.artifactReferences);
   const citations = financeReferences.length
-    ? mobileFinanceCitations(financeReferences).filter((citation) =>
+    ? mobileFinanceCitations(financeReferences, assistantText).filter((citation) =>
         mobileFinanceCitationAction(citation, Boolean(readFinanceSourceDocument)) !== "plain")
     : [];
   const [openCitation, setOpenCitation] = useState<{
