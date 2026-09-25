@@ -6524,16 +6524,20 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       current.map((item) => (item.id === suggestion.id ? { ...item, usedAt: item.usedAt || new Date().toISOString() } : item)),
     );
     setInput("");
+    const homeId = await homeChatForSuggestion();
+    if (!homeId) return;
     try {
       const used = await api.useChatSuggestion(suggestion.id, {
         pillInstanceId: suggestion.pillInstanceId ?? null,
-        conversationSessionId: activeConversationSessionId ?? undefined,
+        conversationSessionId: homeId,
       });
       setChatSuggestions((current) => current.map((item) => (item.id === used.id ? used : item)));
     } catch {
       // The prepared prompt still works even if the convenience used-state call fails.
     }
-    await runSend(suggestion.prompt);
+    // HPD-900: named explicitly; the state of this render may still hold the
+    // conversation that was open before.
+    await runSend(suggestion.prompt, "text", undefined, undefined, homeId);
   }
 
   function rememberHeySuggestion(suggestion: HeySuggestionView) {
@@ -6625,7 +6629,24 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     updateFinSuggestionsState(applyFinSuggestionAction(finSuggestionsState, suggestion.id, action));
   }
 
-  function startFinSuggestion(suggestion: FinHermesSuggestion) {
+  /**
+   * HPD-900 (Justus, launch package): a suggestion always goes to the Home
+   * chat, never into the automation thread or sub thread that happens to be
+   * open. It used to take whichever conversation was on screen. Returns the
+   * Home conversation's id, or null when Home could not be opened.
+   */
+  async function homeChatForSuggestion(): Promise<string | null> {
+    const home = homeConversationSession(chatSessions);
+    if (home && activeConversationSessionIdRef.current === home.id) {
+      selectMobileScreen("chat");
+      return home.id;
+    }
+    const opened = await openMobileHomeChat({ force: true, preserveDraft: true });
+    return opened ? activeConversationSessionIdRef.current : null;
+  }
+
+  async function startFinSuggestion(suggestion: FinHermesSuggestion) {
+    if (!(await homeChatForSuggestion())) return;
     pendingFinSuggestionRef.current = suggestion;
     setInput(finHermesSuggestionDraft(suggestion));
     selectMobileScreen("chat");
@@ -6645,6 +6666,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       rememberHeySuggestion(response.suggestion);
       setHeySuggestionNudge((current) => current?.id === suggestion.id ? null : current);
       if (action.kind === "editable_draft") {
+        if (!(await homeChatForSuggestion())) return;
         setInput(action.draft);
         selectMobileScreen("chat");
         setHeySuggestionNotice("Draft added to Chat. Edit it before sending.");
