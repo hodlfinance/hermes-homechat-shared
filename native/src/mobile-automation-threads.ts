@@ -52,6 +52,24 @@ const removalTranslations: Record<AppLocale, readonly [string, string, string, s
   ko: ["스레드 삭제", "취소", "{title} 스레드를 삭제할까요?", "이 스레드만 삭제됩니다. 자동화는 계속 실행되며 다음 결과가 새 스레드를 엽니다.", "이 스레드를 삭제하지 못했습니다.", "삭제 중…"],
 };
 
+// HPD-898, Justus' words: English "View all automations", German "Alle
+// Automationen anzeigen"; the other six carry the same meaning.
+const viewAllAutomations: Record<AppLocale, string> = {
+  en: "View all automations",
+  de: "Alle Automationen anzeigen",
+  fr: "Voir toutes les automatisations",
+  es: "Ver todas las automatizaciones",
+  it: "Mostra tutte le automazioni",
+  "pt-BR": "Ver todas as automações",
+  ja: "すべての自動化を表示",
+  ko: "모든 자동화 보기",
+};
+
+/** HPD-898: the entry in an automation thread's menu that opens the automations screen. */
+export function automationThreadViewAllLabel(locale: AppLocale) {
+  return viewAllAutomations[locale] ?? viewAllAutomations.en;
+}
+
 export function automationThreadRemovalCopy(locale: AppLocale, title: string) {
   const [remove, cancel, question, message, failed, pending] = removalTranslations[locale] ?? removalTranslations.en;
   return { remove, cancel, title: question.replace("{title}", title), message, failed, pending };
