@@ -254,7 +254,7 @@ import {
   type MobileSecurityStateWords,
   type MobileSystemPagesCopy,
 } from "./appI18n";
-import { isMobileAccountFullyReady } from "./mobile-product-access";
+import { isMobileAccountFullyReady, mobilePendingAccessVariant } from "./mobile-product-access";
 import {
   startMobileAiAccessOauth,
   type MobileAiAccessOauthStartOutcome,
@@ -7855,7 +7855,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, hostVisible
     snapshot.subscription.promotionalGrant,
   );
   const pendingProductAccess = host.session.mode === "standalone" && !isMobileAccountFullyReady(snapshot, workspaceStatusTruth);
-  const pendingAccessCopy = mobilePendingAccessCopy(appLocale);
+  const pendingAccessCopy = mobilePendingAccessCopy(appLocale, mobilePendingAccessVariant(workspaceStatusTruth));
   const mobilePersonalPurchaseAvailable = mobilePersonalPurchaseCanStart(
     snapshot.me.id,
     snapshot.subscription,

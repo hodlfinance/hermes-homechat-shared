@@ -26,6 +26,11 @@ export const workspaceStatusTruthSchemaVersion = "heyhermes.workspace-status-tru
 
 export type StatusTruthAvailability = "available" | "unavailable" | "unknown";
 
+export interface WorkspaceStatusTruthCapacityRefusal {
+  reason: string;
+  recordedAt: string;
+}
+
 export interface WorkspaceStatusTruthView {
   schemaVersion: typeof workspaceStatusTruthSchemaVersion;
   generatedAt: string;
@@ -90,6 +95,12 @@ export interface WorkspaceStatusTruthView {
     region: string | null;
     serverType: string | null;
     backupsEnabled: boolean | null;
+    /**
+     * HPD-823: present only while the host refused this guest because it is at
+     * capacity. Optional; older servers never send it, and a malformed value is
+     * dropped rather than failing the whole status response.
+     */
+    capacityRefusal?: WorkspaceStatusTruthCapacityRefusal;
   };
   security: {
     availability: StatusTruthAvailability;
@@ -234,6 +245,39 @@ function isModelChoices(value: unknown): value is ModelOptionItem[] {
     && recommended[0]!.id === defaults[0]!.id;
 }
 
+function isCapacityRefusal(value: unknown): value is WorkspaceStatusTruthCapacityRefusal {
+  return isRecord(value) && typeof value.reason === "string" && typeof value.recordedAt === "string";
+}
+
+/**
+ * The host's capacity refusal, or null. Lenient: an absent or malformed value
+ * reads as "no refusal" and never throws.
+ */
+export function workspaceStatusTruthCapacityRefusal(
+  status: Pick<WorkspaceStatusTruthView, "server"> | null | undefined,
+): WorkspaceStatusTruthCapacityRefusal | null {
+  const refusal: unknown = isRecord(status) && isRecord(status.server) ? status.server.capacityRefusal : undefined;
+  return isCapacityRefusal(refusal) ? { reason: refusal.reason, recordedAt: refusal.recordedAt } : null;
+}
+
+// Drops a malformed optional `server.capacityRefusal` so the rest of the
+// response still renders exactly as before. Everything else passes through.
+function withoutMalformedCapacityRefusal(view: WorkspaceStatusTruthView): WorkspaceStatusTruthView {
+  const server = view.server as WorkspaceStatusTruthView["server"] & Record<string, unknown>;
+  if (!("capacityRefusal" in server) || isCapacityRefusal(server.capacityRefusal)) return view;
+  const { capacityRefusal: _dropped, ...rest } = server;
+  return { ...view, server: rest as WorkspaceStatusTruthView["server"] };
+}
+
+/**
+ * Validates a raw `/workspace/status-truth` payload. Returns null when a
+ * required field is missing or an enum is unknown; optional extras are
+ * tolerated.
+ */
+export function parseWorkspaceStatusTruth(value: unknown): WorkspaceStatusTruthView | null {
+  return isWorkspaceStatusTruthView(value) ? withoutMalformedCapacityRefusal(value) : null;
+}
+
 function isWorkspaceStatusTruthView(value: unknown): value is WorkspaceStatusTruthView {
   if (!isRecord(value) || value.schemaVersion !== workspaceStatusTruthSchemaVersion || typeof value.generatedAt !== "string") return false;
   const { account, plan, aiAccess, server, security, capabilities } = value;
@@ -327,8 +371,9 @@ export async function workspaceStatusTruthRequest(
     });
     if (!response.ok) throw new Error("Current server status could not be loaded.");
     const payload: unknown = await response.json();
-    if (!isWorkspaceStatusTruthView(payload)) throw new Error("Current server status returned an unsupported response.");
-    return payload;
+    const view = parseWorkspaceStatusTruth(payload);
+    if (!view) throw new Error("Current server status returned an unsupported response.");
+    return view;
   } catch (error) {
     if (timedOut) throw new Error("Current server status did not respond in time.");
     throw error;
