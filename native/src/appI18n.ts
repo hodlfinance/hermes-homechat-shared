@@ -486,8 +486,28 @@ const pendingAccessCopyByLocale: Record<AppLocale, MobilePendingAccessCopy> = {
   },
 };
 
-export function mobilePendingAccessCopy(locale: AppLocale): MobilePendingAccessCopy {
-  return pendingAccessCopyByLocale[locale];
+// HPD-823: shown instead of the pending copy while the host has refused the
+// guest for capacity. Title and body read as one sentence; no promise of a
+// notification.
+const capacityAccessCopyByLocale: Record<AppLocale, Pick<MobilePendingAccessCopy, "title" | "body">> = {
+  en: { title: "We’re at capacity", body: "Hermes will be ready as soon as a place is free." },
+  de: { title: "Kapazität erreicht", body: "Hermes ist bereit, sobald ein Platz frei ist." },
+  fr: { title: "Capacité atteinte", body: "Hermes sera prêt dès qu’une place se libère." },
+  es: { title: "Capacidad completa", body: "Hermes estará listo en cuanto haya una plaza libre." },
+  it: { title: "Capacità esaurita", body: "Hermes sarà pronto non appena si libera un posto." },
+  "pt-BR": { title: "Capacidade esgotada", body: "O Hermes estará pronto assim que houver uma vaga livre." },
+  ja: { title: "現在、空きがありません", body: "空きが出しだい、Hermes の準備が整います。" },
+  ko: { title: "현재 수용 한도에 도달했습니다", body: "자리가 나는 대로 Hermes가 준비됩니다." },
+};
+
+export type MobilePendingAccessVariant = "pending" | "capacity";
+
+export function mobilePendingAccessCopy(
+  locale: AppLocale,
+  variant: MobilePendingAccessVariant = "pending",
+): MobilePendingAccessCopy {
+  const pending = pendingAccessCopyByLocale[locale];
+  return variant === "capacity" ? { ...pending, ...capacityAccessCopyByLocale[locale] } : pending;
 }
 
 type NavigationRemovalCopy = Pick<MobileCopy["nav"],
