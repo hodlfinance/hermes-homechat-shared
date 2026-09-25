@@ -10321,7 +10321,8 @@ function MessageBubble({
           key={`${reference.id}:${reference.version}`}
           reference={reference}
           locale={locale}
-          messageText={message.content}
+          messageText={assistantText}
+          messageArtifactReferences={financeReferences}
           onCitationPress={pressCitation}
           onOpenUrl={(url) => void Linking.openURL(url)}
         />

@@ -303,6 +303,38 @@ test("duplicate [1] across signed cards stays plain unless the visible answer ex
   assert.deepEqual(mobileFinanceCitations(undefined), []);
 });
 
+test("one card's [1] cannot collapse another card's different answer", () => {
+  const first = capChatReference([
+    research(1, { source_type: "in_house_article", article_id: "41", document_kind: "stored_research_body" }),
+  ], "One [1].", ARTIFACT_ID);
+  const second = capChatReference([
+    research(1, { source_type: "in_house_article", article_id: "42", document_kind: "stored_research_body" }),
+  ], "Two [1].", SECOND_ARTIFACT_ID);
+  const allReferences = [first, second];
+  const firstCard = mobileFinanceArtifactCard(first);
+  const secondCard = mobileFinanceArtifactCard(second);
+  assert.equal(mobileFinanceMessageCarriesAnswer("Two [1].", firstCard, { reference: first, allReferences }), false);
+  assert.equal(mobileFinanceMessageCarriesAnswer("Two [1].", secondCard, { reference: second, allReferences }), true);
+
+  const FinanceArtifactCard = loadNative("FinanceArtifactCard.tsx", true).FinanceArtifactCard as (props: Record<string, unknown>) => unknown;
+  const pressed: string[] = [];
+  const sharedProps = {
+    locale: "en", messageText: "Two [1].", messageArtifactReferences: allReferences,
+    onCitationPress: (source: MobileFinanceCitation) => pressed.push(source.documentReference?.artifactId ?? "missing"),
+    onOpenUrl: () => {},
+  };
+  const firstTree = nodes(FinanceArtifactCard({ ...sharedProps, reference: first }));
+  assert.equal(firstTree.some((node) => node.type === "Text" && textOf(node) === "CapChat answer"), true);
+  const firstMarker = firstTree.find((node) => node.type === "Text" && node.props.accessibilityLabel === "Source 1: Research note 1");
+  assert.ok(firstMarker);
+  (firstMarker.props.onPress as () => void)();
+  assert.deepEqual(pressed, [ARTIFACT_ID]);
+
+  const secondTree = nodes(FinanceArtifactCard({ ...sharedProps, reference: second }));
+  assert.equal(secondTree.some((node) => node.type === "Text" && textOf(node) === "CapChat answer"), false);
+  assert.equal(secondTree.some((node) => node.type === "Pressable" && node.props.accessibilityLabel === "Sources (1)"), true);
+});
+
 test("the source date shows as a day, never as Invalid Date", () => {
   assert.match(mobileFinanceCitationDate("2026-09-18T08:00:00.000Z", "en") ?? "", /Sep 18, 2026/);
   assert.equal(mobileFinanceCitationDate("not a date", "en"), null);
@@ -478,7 +510,8 @@ test("the chat message keeps inline references and routes confirmed documents th
   assert.match(bubble, /if \(result\.kind !== "document"\)/);
   assert.match(bubble, /setOpenCitation\(\{ citation, document: null, phase: "error" \}\)/);
   assert.match(bubble, /<LinkedMessageText citations=\{citations\} onCitationPress=\{pressCitation\} text=\{assistantText\} \/>/);
-  assert.match(bubble, /messageText=\{message\.content\}/);
+  assert.match(bubble, /messageText=\{assistantText\}/);
+  assert.match(bubble, /messageArtifactReferences=\{financeReferences\}/);
   assert.match(bubble, /<FinanceCitationSheet[\s\S]+onClose=\{closeCitation\}/);
 
   const inline = surface.slice(surface.indexOf("function MobileMarkdownInlineText("), surface.indexOf("function LinkedMessageText("));

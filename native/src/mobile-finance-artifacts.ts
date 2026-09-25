@@ -682,10 +682,27 @@ function normalizeAnswerText(value: string): string {
 export function mobileFinanceMessageCarriesAnswer(
   message: string | null | undefined,
   card: MobileFinanceArtifactCard | null | undefined,
+  binding?: {
+    reference: ChatArtifactReference;
+    allReferences: readonly ChatArtifactReference[];
+  },
 ): boolean {
   if (!message || !card?.answerMarkdown) return false;
+  if (binding) {
+    const exact = binding.allReferences.filter((reference) => {
+      const answer = mobileFinanceArtifactCard(reference)?.answerMarkdown;
+      return answer && normalizeAnswerText(answer) === normalizeAnswerText(message);
+    });
+    if (exact.length) return exact.length === 1 &&
+      exact[0]?.id === binding.reference.id &&
+      exact[0]?.version === binding.reference.version &&
+      exact[0]?.kind === binding.reference.kind;
+  }
   if (messageRepeatsAnswer(message, card.answerMarkdown)) return true;
-  const citations = card.citations ?? [];
+  const citations = binding
+    ? mobileFinanceCitations(binding.allReferences, message).filter((citation) =>
+        card.citations?.some((own) => own.number === citation.number))
+    : card.citations ?? [];
   return citations.length > 0 &&
     mobileCitationSegments(message, citations).some((segment) => segment.kind === "citation");
 }

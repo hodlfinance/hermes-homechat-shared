@@ -188,6 +188,7 @@ export function FinanceArtifactCard({
   reference,
   locale,
   messageText,
+  messageArtifactReferences,
   onCitationPress,
   onOpenUrl,
 }: {
@@ -196,6 +197,8 @@ export function FinanceArtifactCard({
   // The chat message this card sits under. When it already is the answer, the
   // card does not print it again (HPD-808).
   messageText?: string;
+  /** All finance cards below the same message, so duplicate [n] stays unbound. */
+  messageArtifactReferences?: readonly ChatArtifactReference[];
   onCitationPress?: (citation: MobileFinanceCitation) => void;
   onOpenUrl: (url: string) => void;
 }) {
@@ -206,7 +209,8 @@ export function FinanceArtifactCard({
   // its [n] markers are the way to a single source (HPD-808).
   const [activeContextTab, setActiveContextTab] = useState<string | null>(null);
   if (!card) return null;
-  if (mobileFinanceMessageCarriesAnswer(messageText, card)) {
+  if (mobileFinanceMessageCarriesAnswer(messageText, card, messageArtifactReferences
+    ? { reference, allReferences: messageArtifactReferences } : undefined)) {
     // HPD-808: the message above is the answer and carries the references.
     // What is left is one small row that opens the source titles and links.
     if (!card.sources.length) return null;

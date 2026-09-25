@@ -91,11 +91,13 @@ function capChatReference(): ChatArtifactReference {
 }
 
 test("a message that carries the card's references already carries the answer", () => {
-  const card = mobileFinanceArtifactCard(capChatReference());
+  const reference = capChatReference();
+  const card = mobileFinanceArtifactCard(reference);
   assert.ok(card);
   // The wording differs, so the verbatim check alone misses it: the 13:39 bug.
   assert.equal(messageRepeatsAnswer(MESSAGE, card.answerMarkdown), false);
   assert.equal(mobileFinanceMessageCarriesAnswer(MESSAGE, card), true);
+  assert.equal(mobileFinanceMessageCarriesAnswer(MESSAGE, card, { reference, allReferences: [reference] }), true);
   // Word for word still counts.
   assert.equal(mobileFinanceMessageCarriesAnswer(CAPCHAT_ANSWER, card), true);
   // No message, or one without a single resolvable reference: the card still has to show the answer.
