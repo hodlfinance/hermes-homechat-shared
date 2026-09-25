@@ -56,11 +56,13 @@ test("the handoff's page-session URL opens in the private (in-app) browser", asy
   assert.deepEqual(opened, [["in-app", "https://finhermes.app/api/hermes/native-r8/workspace/page-sessions/fhp_token"]]);
 });
 
-test("the chat transcript routes message links through the handoff opener", () => {
+test("the chat transcript routes ordinary message links through the handoff opener", () => {
   const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   const inline = source.slice(source.indexOf("function MobileMarkdownInlineText("), source.indexOf("function LinkedMessageText("));
   assert.match(inline, /useContext\(MessageLinkOpenerContext\)/);
-  assert.match(inline, /onPress=\{\(\) => openMessageLink\(href\)\}/);
+  // An exact Finance source link opens that source; all other links retain
+  // the authenticated private-page handoff.
+  assert.match(inline, /onPress=\{\(\) => linkedCitation \? onCitationPress\?\.\(linkedCitation\) : openMessageLink\(href\)\}/);
   assert.doesNotMatch(inline, /Linking\.openURL/);
   assert.match(source, /<MessageLinkOpenerContext\.Provider value=\{openMessageLink\}>/);
   assert.match(source, /privateMobileBrowserHrefFromUrl\(API_BASE, url\)/);

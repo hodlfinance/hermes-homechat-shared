@@ -11,9 +11,13 @@ import { FinanceArtifactCard } from "./FinanceArtifactCard";
 import { FinanceCitationSheet } from "./FinanceCitationSheet";
 import {
   mobileCitationSegments,
+  mobileFinanceCitationAction,
+  mobileFinanceCitationDocumentResult,
+  mobileFinanceCitationForUrl,
   mobileFinanceCitations,
   uniqueMobileFinanceArtifactReferences,
   type MobileFinanceCitation,
+  type MobileFinanceSourceDocument,
 } from "./mobile-finance-artifacts";
 import { MobileFinanceActionApprovalCard } from "./mobile-finance-action-approval";
 import { workspacePrivacyCopy } from "../ui/workspace-privacy-copy";
@@ -520,6 +524,7 @@ export function createNativeR8Surface(host: NativeR8Host) {
   const createMobileHermesCanonicalClient = host.transport.createCanonicalClient;
   const createSupportRequestClient = host.transport.createSupportClient;
   const createAnonymousSupportRequestClient = host.transport.createAnonymousSupportClient;
+  const readFinanceSourceDocument = host.transport.readFinanceSourceDocument;
   const expoFetch = host.transport.fetchStream;
   const { bindMobilePurchasesAccount, isMobilePurchaseCancelled,
     mobilePurchasesConfiguredForBuild, mobilePurchasesController } = host.purchases;
@@ -10217,13 +10222,58 @@ function MessageBubble({
   const financeReferences = isUser
     ? []
     : uniqueMobileFinanceArtifactReferences(message.artifactReferences);
-  const citations = financeReferences.length ? mobileFinanceCitations(financeReferences) : [];
-  const [openCitation, setOpenCitation] = useState<MobileFinanceCitation | null>(null);
-  // HPD-808: a reference with text opens over the conversation; one without
-  // text, a plain web result, goes straight to its page.
+  const citations = financeReferences.length
+    ? mobileFinanceCitations(financeReferences).filter((citation) =>
+        mobileFinanceCitationAction(citation, Boolean(readFinanceSourceDocument)) !== "plain")
+    : [];
+  const [openCitation, setOpenCitation] = useState<{
+    citation: MobileFinanceCitation;
+    document: MobileFinanceSourceDocument | null;
+    phase: "loading" | "ready" | "error";
+  } | null>(null);
+  const citationRequest = useRef<{ controller: AbortController } | null>(null);
+  useEffect(() => () => { citationRequest.current?.controller.abort(); }, []);
+  const closeCitation = () => {
+    citationRequest.current?.controller.abort();
+    citationRequest.current = null;
+    setOpenCitation(null);
+  };
+  // Stored research and approved podcast bodies are read only after a tap. Everything else opens
+  // its safe original URL; no truncated artifact preview becomes a full text.
   const pressCitation = (citation: MobileFinanceCitation) => {
-    if (citation.text) setOpenCitation(citation);
-    else if (citation.url) void Linking.openURL(citation.url);
+    const action = mobileFinanceCitationAction(citation, Boolean(readFinanceSourceDocument));
+    if (action === "original") {
+      if (citation.url) void Linking.openURL(citation.url);
+      return;
+    }
+    if (action !== "document" || !citation.documentReference || !readFinanceSourceDocument) return;
+    citationRequest.current?.controller.abort();
+    const request = { controller: new AbortController() };
+    citationRequest.current = request;
+    setOpenCitation({ citation, document: null, phase: "loading" });
+    void mobileFinanceCitationDocumentResult(
+      citation,
+      readFinanceSourceDocument,
+      request.controller.signal,
+    ).then((result) => {
+      if (citationRequest.current !== request || request.controller.signal.aborted) return;
+      if (result.kind !== "document") {
+        citationRequest.current = null;
+        if (result.kind === "original") {
+          setOpenCitation(null);
+          void Linking.openURL(result.url);
+        } else {
+          setOpenCitation({ citation, document: null, phase: "error" });
+        }
+        return;
+      }
+      citationRequest.current = null;
+      setOpenCitation({ citation, document: result.document, phase: "ready" });
+    }).catch(() => {
+      if (citationRequest.current !== request || request.controller.signal.aborted) return;
+      citationRequest.current = null;
+      setOpenCitation({ citation, document: null, phase: "error" });
+    });
   };
 
   return (
@@ -10278,10 +10328,13 @@ function MessageBubble({
       ))}
       {openCitation ? (
         <FinanceCitationSheet
-          citation={openCitation}
+          citation={openCitation.citation}
+          document={openCitation.document}
+          phase={openCitation.phase}
           locale={locale}
-          onClose={() => setOpenCitation(null)}
+          onClose={closeCitation}
           onOpenUrl={(url) => void Linking.openURL(url)}
+          onRetry={() => pressCitation(openCitation.citation)}
         />
       ) : null}
       {messageTime ? (
@@ -10650,6 +10703,7 @@ function MobileMarkdownInlineText({
               ? styles.markdownTableBoldText
               : undefined;
           const href = segment.href ? mobileMessageUrl(segment.href) : null;
+          const linkedCitation = href && onCitationPress ? mobileFinanceCitationForUrl(href, citations) : null;
           const emphasisStyle = markdownSegment.kind === "italic" ? [kindStyle, styles.messageTextItalic] : kindStyle;
           if (!href && onCitationPress && citations.length) {
             return mobileCitationSegments(segment.text, citations).map((piece, pieceIndex) => piece.kind === "citation" ? (
@@ -10671,8 +10725,9 @@ function MobileMarkdownInlineText({
             <Text
               key={`${segmentIndex}-${linkIndex}-${segment.text}`}
               style={[kindStyle, styles.messageLink]}
-              accessibilityRole="link"
-              onPress={() => openMessageLink(href)}
+              accessibilityRole={linkedCitation ? "button" : "link"}
+              accessibilityLabel={linkedCitation ? `Source ${linkedCitation.number}: ${linkedCitation.title}` : undefined}
+              onPress={() => linkedCitation ? onCitationPress?.(linkedCitation) : openMessageLink(href)}
             >
               {segment.text}
             </Text>

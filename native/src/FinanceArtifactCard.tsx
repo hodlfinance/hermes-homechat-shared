@@ -5,6 +5,7 @@ import type { AppLocale, ChatArtifactReference } from "../core/index";
 import { useMobilePalette } from "./mobile-palette-context";
 import {
   messageRepeatsAnswer,
+  mobileFinanceCitationForUrl,
   mobileCitationSegments,
   mobileFinanceArtifactCard,
   mobileFinanceArtifactTimestamp,
@@ -63,6 +64,7 @@ function MarkdownInlineText({
         }
         return mobileAssistantLinkSegments(segment.text).map((link, linkIndex) => {
           const href = link.href ? safeMessageUrl(link.href) : null;
+          const linkedCitation = href && onCitationPress ? mobileFinanceCitationForUrl(href, citations) : null;
           const emphasis = segment.kind === "bold" || link.kind === "bold";
           const italic = segment.kind === "italic";
           if (!href) {
@@ -83,9 +85,10 @@ function MarkdownInlineText({
           }
           return (
             <Text
-              accessibilityRole="link"
+              accessibilityRole={linkedCitation ? "button" : "link"}
+              accessibilityLabel={linkedCitation ? `Source ${linkedCitation.number}: ${linkedCitation.title}` : undefined}
               key={`${segmentIndex}-${linkIndex}-${link.text}`}
-              onPress={() => onOpenUrl(href)}
+              onPress={() => linkedCitation ? onCitationPress?.(linkedCitation) : onOpenUrl(href)}
               style={[emphasis ? styles.boldText : undefined, styles.markdownLink]}
             >
               {link.text}
