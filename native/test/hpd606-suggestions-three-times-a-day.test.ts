@@ -140,7 +140,7 @@ test("a stale copy never undoes a newer claim, showings or progress on the devic
 test("the surface ends the card when the Home Chat leaves the front and shows no other unrequested suggestion in the Fin host", () => {
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   // The host tells the surface when another HODL tab is in front.
-  assert.match(surface, /function NativeR8SurfaceBody\(\{ initialDraft = "", navigationRequest, hostVisible = true \}/);
+  assert.match(surface, /function NativeR8SurfaceBody\(\{ initialDraft = "", navigationRequest, homeRequest, hostVisible = true \}/);
   assert.match(surface, /if \(tab !== "chat" \|\| activeChatRunId \|\| busy \|\| !hostVisible\) return;/);
   assert.match(surface, /finSuggestionCardStaysVisible\(\{ homeChatInFront: finHomeChatInFront, hostVisible, appActive: appState !== "background" \}\)\) \{\s+setFinCardClosed\(true\);/);
   assert.match(surface, /AppState\.addEventListener\("change", endWhenHidden\)/);
