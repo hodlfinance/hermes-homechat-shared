@@ -7,6 +7,7 @@ import type { createNativeR8CanonicalController } from "./src/hermes-canonical";
 import type { MobilePurchasesController } from "./src/revenuecat-purchases";
 import type { NativeSessionSecureStore } from "./src/mobile-session-storage";
 import type { MobilePalette } from "./src/mobile-palette";
+import type { MobileFinanceCitation } from "./src/mobile-finance-artifacts";
 
 export type NativeAudioStatus = {
   playing: boolean; didJustFinish: boolean; isBuffering: boolean; currentTime: number;
@@ -145,6 +146,12 @@ export type NativeR8Transport = {
   cancelFinanceActionApproval(input: { token: string; approval: NativeFinanceActionApproval }): Promise<void>;
   reportLatency(token: string, runId: string, summary: ChatLatencySummary): Promise<void>;
   fetchStream: typeof fetch;
+  /** Optional product-owned reader. A null result means the exact source has no stored full document. */
+  readFinanceSourceDocument?(input: {
+    reference: NonNullable<MobileFinanceCitation["documentReference"]>;
+    sourceNumber: number;
+    signal?: AbortSignal;
+  }): Promise<unknown | null>;
 };
 export type NativeR8Host = {
   apiBaseUrl: string;

@@ -35,8 +35,21 @@ export type MobileFinanceCitation = {
   title: string;
   publisher: string | null;
   publishedAt: string | null;
-  text: string | null;
   url: string | null;
+  documentReference: {
+    artifactId: string;
+    locator: string;
+    context: string;
+  } | null;
+};
+
+export type MobileFinanceSourceDocument = {
+  documentKind: "stored_research_body" | "approved_podcast_transcript";
+  title: string;
+  publisher: string | null;
+  publishedAt: string | null;
+  body: string;
+  originalUrl: string | null;
 };
 
 export type MobileFinanceArtifactCard = {
@@ -458,11 +471,8 @@ function capChatContextTabs(value: unknown): MobileFinanceArtifactContextTab[] |
   return tabs.length === CAPCHAT_CONTEXT_TAB_ORDER.length ? tabs : null;
 }
 
-const CITATION_TEXT_MAX = 8_000;
-
-// CapChat names the same thing under several keys depending on the source. The
-// reader gets the first one present, and the longest available text, because
-// CapChat's full_text is often only the headline.
+// The source bundle only contains previews. Its full_text/body keys are capped
+// upstream and can be a headline, so they never authorize a full-document UI.
 function firstText(source: Record<string, unknown>, keys: readonly string[], max: number): string | null {
   for (const key of keys) {
     const value = text(source[key], max);
@@ -471,45 +481,134 @@ function firstText(source: Record<string, unknown>, keys: readonly string[], max
   return null;
 }
 
-function longestText(source: Record<string, unknown>, keys: readonly string[], max: number): string | null {
-  let best: string | null = null;
-  for (const key of keys) {
-    const value = text(source[key], max);
-    if (value && (!best || value.length > best.length)) best = value;
-  }
-  return best;
+const ARTIFACT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SIGNED_LOCATOR = /^fa1\.([0-9a-f-]{36})\.[A-Za-z0-9_-]{43}$/;
+const SIGNED_CONTEXT = /^fac1\.([0-9a-f-]{36})\.[A-Za-z0-9_-]{43}$/;
+
+function positiveDocumentId(value: unknown): boolean {
+  return typeof value === "number"
+    ? Number.isSafeInteger(value) && value > 0
+    : typeof value === "string" && /^[1-9]\d*$/.test(value) && Number.isSafeInteger(Number(value));
 }
 
-function capChatCitations(value: unknown): MobileFinanceCitation[] {
+function storedDocumentReference(reference: ChatArtifactReference, source: Record<string, unknown>): MobileFinanceCitation["documentReference"] {
+  const sourceType = source.source_type;
+  const metadata = record(source.research_metadata);
+  const hasStoredBody = source.document_kind === "stored_research_body" &&
+    sourceType === "in_house_article" && positiveDocumentId(source.article_id);
+  const hasPodcastTranscript =
+    source.document_kind === "approved_podcast_transcript" && (
+    (sourceType === "podcast_transcript_segment" && positiveDocumentId(metadata?.episode_id)) ||
+    (sourceType === "podcast_episode_summary" && positiveDocumentId(source.article_id)) ||
+    (sourceType === "podcast_episode_transcript" &&
+      typeof source.article_id === "string" && /^podcast_episode:[1-9]\d*$/.test(source.article_id) &&
+      Number.isSafeInteger(Number(source.article_id.slice("podcast_episode:".length)))));
+  if ((!hasStoredBody && !hasPodcastTranscript) || !ARTIFACT_ID.test(reference.id)) return null;
+  const locator = record(reference.locator);
+  const context = record(reference.context);
+  if (locator?.type !== "finhermes_artifact" || locator.version !== 1 ||
+      context?.type !== "finhermes_artifact_context" || context.version !== 1 ||
+      typeof locator.value !== "string" || typeof context.value !== "string") return null;
+  const locatorMatch = SIGNED_LOCATOR.exec(locator.value);
+  const contextMatch = SIGNED_CONTEXT.exec(context.value);
+  if (!locatorMatch || !contextMatch || locatorMatch[1]?.toLowerCase() !== reference.id.toLowerCase() ||
+      contextMatch[1]?.toLowerCase() !== reference.id.toLowerCase()) return null;
+  return { artifactId: reference.id, locator: locator.value, context: context.value };
+}
+
+function capChatCitations(value: unknown, reference: ChatArtifactReference): MobileFinanceCitation[] {
   if (!Array.isArray(value)) return [];
-  const seen = new Set<number>();
+  const numbers = capChatSourceNumbers(value);
+  const counts = new Map<number, number>();
+  for (const number of numbers) counts.set(number, (counts.get(number) ?? 0) + 1);
   return value.slice(0, 200).flatMap((item) => {
     const source = record(item);
     const number = source?.source_number;
-    if (!source || typeof number !== "number" || !Number.isSafeInteger(number) || number < 1 || seen.has(number)) {
+    if (!source || typeof number !== "number" || counts.get(number) !== 1) {
       return [];
     }
     const title = firstText(source, ["title", "preview_title", "source_name", "name"], 300);
     const url = safeUrl(source.url) ?? safeUrl(source.article_url) ?? safeUrl(source.link) ??
       safeUrl(source.source_url) ?? safeUrl(source.web_url);
-    const body = longestText(
-      source,
-      ["full_text", "body", "content", "summary", "excerpt", "snippet", "preview_text"],
-      CITATION_TEXT_MAX,
-    );
+    const documentReference = storedDocumentReference(reference, source);
     // A reference needs something to show or somewhere to go; otherwise its
     // marker stays plain text instead of becoming a dead button.
-    if (!title || (!body && !url)) return [];
-    seen.add(number);
+    if (!title || (!documentReference && !url)) return [];
     return [{
       number,
       title,
       publisher: firstText(source, ["publisher", "source_firm", "publication", "publication_name", "source_name", "outlet"], 160),
       publishedAt: timestamp(source.published_at) ?? timestamp(source.timestamp),
-      text: body && body !== title ? body : null,
       url,
+      documentReference,
     }];
   });
+}
+
+function capChatSourceNumbers(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 200).flatMap((item) => {
+    const number = record(item)?.source_number;
+    return typeof number === "number" && Number.isSafeInteger(number) && number > 0 ? [number] : [];
+  });
+}
+
+export function mobileFinanceCitationAction(
+  citation: MobileFinanceCitation,
+  canReadDocument: boolean,
+): "document" | "original" | "plain" {
+  if (citation.documentReference && canReadDocument) return "document";
+  return citation.url ? "original" : "plain";
+}
+
+/** A named Markdown link represents one source only when its safe URL is unambiguous. */
+export function mobileFinanceCitationForUrl(
+  value: string,
+  citations: readonly MobileFinanceCitation[],
+): MobileFinanceCitation | null {
+  const url = safeUrl(value);
+  if (!url) return null;
+  const matches = citations.filter((citation) => citation.url === url);
+  return matches.length === 1 ? matches[0]! : null;
+}
+
+export function mobileFinanceSourceDocument(value: unknown): MobileFinanceSourceDocument | null {
+  const envelope = record(value);
+  const document = record(envelope?.document);
+  if (envelope?.status !== "ok" ||
+      (document?.documentKind !== "stored_research_body" && document?.documentKind !== "approved_podcast_transcript") ||
+      typeof document.body !== "string" || !document.body.trim()) return null;
+  const title = text(document.title, 300);
+  if (!title) return null;
+  return {
+    documentKind: document.documentKind,
+    title,
+    publisher: text(document.publisher, 160),
+    publishedAt: timestamp(document.publishedAt),
+    body: document.body,
+    originalUrl: safeUrl(document.originalUrl),
+  };
+}
+
+export async function mobileFinanceCitationDocumentResult(
+  citation: MobileFinanceCitation,
+  readDocument: (input: {
+    reference: NonNullable<MobileFinanceCitation["documentReference"]>;
+    sourceNumber: number;
+    signal?: AbortSignal;
+  }) => Promise<unknown | null>,
+  signal?: AbortSignal,
+): Promise<
+  | { kind: "document"; document: MobileFinanceSourceDocument }
+  | { kind: "original"; url: string }
+  | { kind: "unavailable" }
+> {
+  if (!citation.documentReference) throw new Error("No signed full-document reference exists.");
+  const response = await readDocument({ reference: citation.documentReference, sourceNumber: citation.number, signal });
+  if (response === null) return citation.url ? { kind: "original", url: citation.url } : { kind: "unavailable" };
+  const document = mobileFinanceSourceDocument(response);
+  if (!document) throw new Error("The full document response was invalid.");
+  return { kind: "document", document };
 }
 
 export type MobileCitationSegment =
@@ -566,9 +665,12 @@ export function mobileCitationSegments(
 // it a second time.
 export function messageRepeatsAnswer(message: string | null | undefined, answer: string | null | undefined): boolean {
   if (!message || !answer) return false;
-  const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
-  const normalizedAnswer = normalize(answer);
-  return normalizedAnswer.length > 0 && normalize(message).includes(normalizedAnswer);
+  const normalizedAnswer = normalizeAnswerText(answer);
+  return normalizedAnswer.length > 0 && normalizeAnswerText(message).includes(normalizedAnswer);
+}
+
+function normalizeAnswerText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 // True when the chat message above a CapChat card already is the answer: either
@@ -580,10 +682,27 @@ export function messageRepeatsAnswer(message: string | null | undefined, answer:
 export function mobileFinanceMessageCarriesAnswer(
   message: string | null | undefined,
   card: MobileFinanceArtifactCard | null | undefined,
+  binding?: {
+    reference: ChatArtifactReference;
+    allReferences: readonly ChatArtifactReference[];
+  },
 ): boolean {
   if (!message || !card?.answerMarkdown) return false;
+  if (binding) {
+    const exact = binding.allReferences.filter((reference) => {
+      const answer = mobileFinanceArtifactCard(reference)?.answerMarkdown;
+      return answer && normalizeAnswerText(answer) === normalizeAnswerText(message);
+    });
+    if (exact.length) return exact.length === 1 &&
+      exact[0]?.id === binding.reference.id &&
+      exact[0]?.version === binding.reference.version &&
+      exact[0]?.kind === binding.reference.kind;
+  }
   if (messageRepeatsAnswer(message, card.answerMarkdown)) return true;
-  const citations = card.citations ?? [];
+  const citations = binding
+    ? mobileFinanceCitations(binding.allReferences, message).filter((citation) =>
+        card.citations?.some((own) => own.number === citation.number))
+    : card.citations ?? [];
   return citations.length > 0 &&
     mobileCitationSegments(message, citations).some((segment) => segment.kind === "citation");
 }
@@ -604,7 +723,7 @@ function capChatContextCard(
   return {
     answerMarkdown,
     capturedAt: timestamp(payload.capturedAt),
-    citations: capChatCitations(payload.references),
+    citations: capChatCitations(payload.references, reference),
     contextTabs: tabs,
     message: null,
     presentation: "capchat_context_card",
@@ -767,18 +886,33 @@ export function mobileFinanceCitationDate(value: string | null, locale: string):
     : null;
 }
 
-// Every numbered reference the message's Fin Hermes cards carry. A number is
-// taken once, from the first card that has it.
+// An inline number belongs to one card only when the visible message exactly
+// matches that card's answer, or no other card claims the same source number.
+// Otherwise [n] remains text: picking the first card could open another
+// artifact's signed document. A card's own answer still uses its own sources.
 export function mobileFinanceCitations(
   references: readonly ChatArtifactReference[] | null | undefined,
+  messageText?: string | null,
 ): MobileFinanceCitation[] {
-  const byNumber = new Map<number, MobileFinanceCitation>();
+  const cards: { card: MobileFinanceArtifactCard; numbers: number[] }[] = [];
   for (const reference of references ?? []) {
-    for (const citation of mobileFinanceArtifactCard(reference)?.citations ?? []) {
-      if (!byNumber.has(citation.number)) byNumber.set(citation.number, citation);
-    }
+    const card = mobileFinanceArtifactCard(reference);
+    if (!card?.answerMarkdown) continue;
+    const presentation = record(reference.artifactPresentation);
+    const payload = record(presentation?.payload);
+    cards.push({ card, numbers: capChatSourceNumbers(payload?.references) });
   }
-  return [...byNumber.values()];
+  const normalizedMessage = messageText ? normalizeAnswerText(messageText) : "";
+  if (normalizedMessage) {
+    const exact = cards.filter(({ card }) => normalizeAnswerText(card.answerMarkdown!) === normalizedMessage);
+    if (exact.length === 1) return exact[0]!.card.citations ?? [];
+  }
+  const claimed = new Map<number, number>();
+  for (const { numbers } of cards) {
+    for (const number of new Set(numbers)) claimed.set(number, (claimed.get(number) ?? 0) + 1);
+  }
+  return cards.flatMap(({ card }) => card.citations ?? [])
+    .filter((citation) => claimed.get(citation.number) === 1);
 }
 
 export function mobileFinanceArtifactCard(reference: ChatArtifactReference): MobileFinanceArtifactCard | null {
