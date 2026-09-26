@@ -50,8 +50,9 @@ test("a host support button replaces the chat-header lock; Hey keeps the lock (H
   assert.match(supportButton, /<ChatHeaderSupportIcon size=\{24\} color=\{palette\.ink\} \/>/);
   assert.match(header, /<Menu size=\{22\} color=\{palette\.ink\} \/>/);
   assert.match(supportButton, /accessibilityLabel=\{t\.nav\.support\}/);
-  // The lock renders only when the host brings no support button.
-  assert.match(live, /\{tab === "chat" && !ChatHeaderSupportIcon \? \(\s+<Pressable[\s\S]*?setPrivacyWorkspace[\s\S]*?<Lock size=\{27\}/);
+  // The lock renders only when the host brings no support button (and, since
+  // HPD-924, not in an automation thread, whose options stand there instead).
+  assert.match(live, /\{automationThreadHeader \? null : tab === "chat" && !ChatHeaderSupportIcon \? \(\s+<Pressable[\s\S]*?setPrivacyWorkspace[\s\S]*?<Lock size=\{27\}/);
   const opening = surface.slice(surface.indexOf("const renderChatOpening"), surface.indexOf("const renderChatOpening") + 2500);
   assert.match(opening, /\{ChatHeaderSupportIcon \? \(\s+\/\/ HPD-837[^\n]*\n\s+<View style=\{styles\.mobileAppBarSpacer\} \/>\s+\) : \(\s+<View\s+style=\{\[styles\.mobilePrivacyButton, styles\.disabledButton\]\}/);
   // Privacy stays reachable from the left menu with the same view.

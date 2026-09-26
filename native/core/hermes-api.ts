@@ -316,6 +316,12 @@ export type HermesApiConversation = {
   safeSummary: string | null;
   activeRunId: string | null;
   messageCount: number;
+  /**
+   * HPD-924: account-scoped assistant messages the server says are unread.
+   * Absent on an older control plane; clients must not derive a replacement
+   * from messageCount or the drawer's local open state.
+   */
+  unreadCount?: number;
   lastMessageAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -379,6 +385,18 @@ export type CreateHermesConversationRequest = {
   channel?: HermesChannelId;
   sensitivity?: HermesConversationSensitivity;
   allowedSurfaces?: HermesSurface[];
+};
+
+/**
+ * HPD-924. The newest message the client has actually rendered in the open
+ * conversation. The plane checks that the message belongs to this account's
+ * accessible conversation and only ever moves the read cursor forward; it
+ * never substitutes the conversation's current latest message. The response is
+ * the conversation with its updated `unreadCount`.
+ */
+export type MarkHermesConversationReadRequest = {
+  messageId: string;
+  surface?: HermesSurface;
 };
 
 export type HermesConversationListResponse = {

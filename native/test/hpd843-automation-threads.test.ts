@@ -122,7 +122,8 @@ test("HPD-843: the drawer lists the threads above New App or Page and the card's
   const threads = drawer.indexOf("automationThreads(chatSessions).map(");
   const newPage = drawer.indexOf("label={pageStarterCopy(appLocale).label}");
   assert.ok(threads > 0 && newPage > threads, "automation threads come directly before New App or Page");
-  assert.equal(source.match(/onRemoveAutomationThread=\{archiveAutomationThread\}/g)?.length, 2, "both drawer hosts can delete a thread");
+  // HPD-924: Delete moved from the menu row to the open thread's header.
+  assert.equal(source.match(/onRemove=\{archiveAutomationThread\}/g)?.length, 1, "the open thread's options can delete it");
   assert.match(source, /if \(onOpenThread\(target\.jobId\)\) return;\s*onAsk\(promptFor\(copy\.chatPrompt, target\)\);/);
   assert.match(source, /await hermesApi\.archiveConversation\(entry\.entryId\);/);
   assert.doesNotMatch(source, /refreshConversations\(createHomechatPagedState<ConversationSession>\(\), \{ limit: 12 \}\)/);
