@@ -27,6 +27,7 @@ import { MobilePageMenuRow, MobileThreadOptionsButton, MobileUnreadBadge } from 
 import { emailMagicLinkTokenFromUrl, solveEmailMagicLinkAbuseChallenge } from "./mobile-email-magic-link";
 import { pageMenuRemovalCopy } from "../ui/page-menu-copy";
 import {
+  applyAutomationThreadReadAnswer,
   automationThreadForJob,
   automationThreadListLimit,
   automationThreadOptionsLabel,
@@ -2424,9 +2425,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     const { conversationId, messageId } = threadReadTarget;
     acknowledgedReadRef.current.set(conversationId, messageId);
     void hermesApi.markConversationRead(conversationId, messageId).then((updated) => {
-      setChatSessions((current) => current.map((session) => (
-        session.id === updated.id ? { ...session, unreadCount: updated.unreadCount ?? 0 } : session
-      )));
+      setChatSessions((current) => applyAutomationThreadReadAnswer(current, updated, {
+        messageId,
+        acknowledgedMessageId: acknowledgedReadRef.current.get(conversationId),
+      }));
     }, () => {
       // Not durable, so the count stays as the plane last said. After a pause
       // the thread on screen may acknowledge the same message again.

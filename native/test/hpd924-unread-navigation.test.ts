@@ -6,6 +6,7 @@ import type { ConversationSession, HermesApiConversation } from "../core/index";
 import { permitsHodlNativeR8Request } from "../policy";
 import { mobileConversationSessionFromCanonical } from "../src/hermes-canonical";
 import {
+  applyAutomationThreadReadAnswer,
   automationThreadOptionsLabel,
   automationThreadReadTarget,
   automationThreadUnreadBadge,
@@ -207,4 +208,18 @@ test("HPD-924: the acknowledgement is one permitted POST naming the exact render
 test("HPD-924: a reply about another conversation never clears this thread", async () => {
   const { hermes } = readTransport({ ...canonical, id: "report", unreadCount: 0 });
   await assert.rejects(() => hermes.markConversationRead("news", "m3"));
+});
+
+test("HPD-924: an older read answer that arrives after a newer acknowledgement leaves the badge alone", () => {
+  const sessions = [thread("news", { unreadCount: 0 }), thread("report", { unreadCount: 4 })];
+  // m3 was acknowledged, then m4; m3's answer (still counting m4 unread) arrives last.
+  const stale = applyAutomationThreadReadAnswer(sessions, { id: "news", unreadCount: 1 }, { messageId: "m3", acknowledgedMessageId: "m4" });
+  assert.equal(stale, sessions, "a stale answer changes nothing");
+  const current = applyAutomationThreadReadAnswer(sessions, { id: "news", unreadCount: 0 }, { messageId: "m4", acknowledgedMessageId: "m4" });
+  assert.deepEqual(current.map((session) => [session.id, session.unreadCount]), [["news", 0], ["report", 4]]);
+  // An answer without a count reads as zero; other threads keep theirs.
+  const absent = applyAutomationThreadReadAnswer([thread("news", { unreadCount: 3 })], { id: "news" }, { messageId: "m4", acknowledgedMessageId: "m4" });
+  assert.equal(absent[0]?.unreadCount, 0);
+  // The surface asks the helper with the acknowledgement current when the answer lands.
+  assert.match(surface, /applyAutomationThreadReadAnswer\(current, updated, \{\s*messageId,\s*acknowledgedMessageId: acknowledgedReadRef\.current\.get\(conversationId\),\s*\}\)/);
 });

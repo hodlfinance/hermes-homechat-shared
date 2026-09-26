@@ -171,3 +171,20 @@ export function automationThreadReadTarget(input: {
   if (!newest || newest === input.acknowledgedMessageId) return null;
   return { conversationId: session.id, messageId: newest };
 }
+
+/**
+ * HPD-924: applies the plane's answer to one read acknowledgement. Two
+ * acknowledgements for the same thread can overlap; only the answer to the
+ * one still current may set the count, so an older answer arriving last
+ * cannot put back a badge the newer one cleared.
+ */
+export function applyAutomationThreadReadAnswer(
+  sessions: ConversationSession[],
+  updated: Pick<ConversationSession, "id" | "unreadCount">,
+  acknowledgement: { messageId: string; acknowledgedMessageId: string | null | undefined },
+): ConversationSession[] {
+  if (acknowledgement.acknowledgedMessageId !== acknowledgement.messageId) return sessions;
+  return sessions.map((session) => (
+    session.id === updated.id ? { ...session, unreadCount: updated.unreadCount ?? 0 } : session
+  ));
+}
