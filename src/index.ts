@@ -1400,17 +1400,40 @@ export function isHomechatClarifyDelta(payload: unknown): boolean {
     || (typeof record.clarifyId === "string" && record.clarifyId.trim().length > 0);
 }
 
+/**
+ * HPD-896, second finding (QA-A, HODL Build 81, 26.09.2026). The model often
+ * writes its question as ordinary text and then calls the clarify tool with the
+ * same question. That text reaches the chat as a normal delta just before the
+ * clarify delta, so it stood under the card as reply text and, after the card
+ * was answered, glued to the answer ("...laufen?Ich habe..."). When the clarify
+ * delta arrives, the question leaves the end of the draft; text before it stays.
+ */
+export function homechatDraftWithoutClarifyQuestion(draft: string, clarifyPayload: unknown): string {
+  if (!isHomechatClarifyDelta(clarifyPayload)) return draft;
+  const record = clarifyPayload as Record<string, unknown>;
+  const request = homechatRecord(record.clarifyRequest);
+  const question = (homechatText(request.question) ?? homechatStreamingValue(record.content) ?? homechatStreamingValue(record.delta) ?? "").trim();
+  const cleanDraft = stripHomechatStreamingCursor(draft);
+  if (!question || !cleanDraft) return draft;
+  const index = cleanDraft.lastIndexOf(question);
+  if (index < 0 || cleanDraft.slice(index + question.length).trim()) return draft;
+  return cleanDraft.slice(0, index).trimEnd();
+}
+
 export function streamingTextFromHomechatEvents(events: readonly unknown[]): string {
   return events.reduce<string>((draft, input) => {
     const event = normalizeHomechatRunEvent(input);
-    if (event?.type !== "message.delta" || isHomechatClarifyDelta(event.payload)) return draft;
+    if (event?.type !== "message.delta") return draft;
+    if (isHomechatClarifyDelta(event.payload)) return homechatDraftWithoutClarifyQuestion(draft, event.payload);
     return nextHomechatStreamingText(draft, { text: event.text, retracted: event.payload.retracted === true }, event.replace === true);
   }, "");
 }
 
 export function homechatStreamingTextFromPayloads(payloads: readonly Record<string, unknown>[]): string {
   return payloads.reduce(
-    (draft, payload) => isHomechatClarifyDelta(payload) ? draft : nextHomechatStreamingText(draft, payload),
+    (draft, payload) => isHomechatClarifyDelta(payload)
+      ? homechatDraftWithoutClarifyQuestion(draft, payload)
+      : nextHomechatStreamingText(draft, payload),
     "",
   );
 }
@@ -1426,7 +1449,10 @@ export function reconcileHomechatFinalAnswer(
   if (!cleanFinal) return cleanDraft;
   // HPD-933: a draft built from `replace` snapshots never outranks the answer.
   if (options.finalIsAuthoritative) return cleanFinal;
-  if (cleanFinal === cleanDraft || cleanFinal.startsWith(cleanDraft)) return cleanFinal;
+  // HPD-896/HPD-938: a completed answer that already contains the whole draft
+  // is the answer. Merging the draft in front of it doubled the reply around a
+  // clarify question or the compaction notice ("X" + "QX").
+  if (cleanFinal.includes(cleanDraft)) return cleanFinal;
   if (cleanDraft.includes(cleanFinal) || cleanDraft.endsWith(cleanFinal)) return cleanDraft;
   const merged = mergeHomechatStreamingText(cleanDraft, cleanFinal);
   if (merged.length > cleanFinal.length && merged.startsWith(cleanDraft.slice(0, Math.min(cleanDraft.length, 80)))) {
@@ -1886,7 +1912,13 @@ export function reduceHomechatClientState<
   if (event.type === "message.delta") {
     // HPD-896: a clarify question is the question card's, never reply text.
     if (isHomechatClarifyDelta(event.payload)) {
-      return { ...state, events, runId: event.runId ?? state.runId, slots };
+      return {
+        ...state,
+        events,
+        runId: event.runId ?? state.runId,
+        slots,
+        streamingText: homechatDraftWithoutClarifyQuestion(state.streamingText, event.payload),
+      };
     }
     return {
       ...state,
