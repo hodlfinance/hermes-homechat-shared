@@ -1,4 +1,4 @@
-import type { AppLocale, ConversationSession } from "../core/index";
+import type { AppLocale, ChatMessage, ConversationSession } from "../core/index";
 
 /**
  * HPD-843. Every automation gets its own thread in the left menu.
@@ -100,4 +100,74 @@ export function automationThreadViewAllLabel(locale: AppLocale) {
 export function automationThreadRemovalCopy(locale: AppLocale, title: string) {
   const [remove, cancel, question, message, failed, pending] = removalTranslations[locale] ?? removalTranslations.en;
   return { remove, cancel, title: question.replace("{title}", title), message, failed, pending };
+}
+
+// HPD-924: the accessible name of the top-right button that replaces Help in
+// an open automation thread and holds View all automations and Delete.
+const threadOptions: Record<AppLocale, string> = {
+  en: "Thread options",
+  de: "Thread-Optionen",
+  fr: "Options du fil",
+  es: "Opciones del hilo",
+  it: "Opzioni del thread",
+  "pt-BR": "Opções da conversa",
+  ja: "スレッドのオプション",
+  ko: "스레드 옵션",
+};
+
+export function automationThreadOptionsLabel(locale: AppLocale) {
+  return threadOptions[locale] ?? threadOptions.en;
+}
+
+/**
+ * HPD-924: the left menu's order. Automation threads stand before Pages,
+ * New App or Page follows the Pages, and Suggestions -- only on a surface
+ * that already has it -- is last, after New App or Page.
+ */
+export type MobileDrawerSection = "primary" | "connectGmail" | "automationThreads" | "pages" | "newPage" | "suggestions";
+
+export function mobileDrawerSections(input: { suggestions: boolean; connectGmail: boolean }): MobileDrawerSection[] {
+  const sections: MobileDrawerSection[] = ["primary"];
+  if (input.connectGmail) sections.push("connectGmail");
+  sections.push("automationThreads", "pages", "newPage");
+  if (input.suggestions) sections.push("suggestions");
+  return sections;
+}
+
+/**
+ * HPD-924: which message, if any, the client may acknowledge as read now.
+ *
+ * Only the automation thread on screen, only while the app and its host are in
+ * front, and only the newest message of that conversation the client has
+ * actually rendered -- never a copy drawn before the server answered. A plane
+ * that states no unreadCount has no read cursor, so nothing is sent to it.
+ * The same message is acknowledged once; a later rendered message is a new
+ * acknowledgement.
+ */
+export function automationThreadReadTarget(input: {
+  session: ConversationSession | null | undefined;
+  activeConversationId: string | null | undefined;
+  inFront: boolean;
+  renderedMessages: readonly Pick<ChatMessage, "id" | "conversationSessionId" | "optimistic" | "createdAt">[];
+  acknowledgedMessageId: string | null | undefined;
+}): { conversationId: string; messageId: string } | null {
+  const { session } = input;
+  if (!input.inFront || !isAutomationThread(session)) return null;
+  if (session.id !== input.activeConversationId) return null;
+  if (!Number.isSafeInteger(session.unreadCount)) return null;
+  // Newest by its stored time; on a tie or an unreadable time, the later one
+  // in the transcript.
+  let newest: string | null = null;
+  let newestTime = Number.NEGATIVE_INFINITY;
+  for (const message of input.renderedMessages) {
+    if (message.optimistic || !message.id || message.conversationSessionId !== session.id) continue;
+    const parsed = Date.parse(message.createdAt);
+    const time = Number.isFinite(parsed) ? parsed : newestTime;
+    if (time >= newestTime) {
+      newest = message.id;
+      newestTime = time;
+    }
+  }
+  if (!newest || newest === input.acknowledgedMessageId) return null;
+  return { conversationId: session.id, messageId: newest };
 }

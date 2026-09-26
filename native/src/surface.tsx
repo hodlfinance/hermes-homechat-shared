@@ -23,15 +23,20 @@ import { MobileFinanceActionApprovalCard } from "./mobile-finance-action-approva
 import { workspacePrivacyCopy } from "../ui/workspace-privacy-copy";
 import { openPageStarter, consumePageStarter, pageStarterTranscript, pageStarterPayload, pageStarterAfterNavigation, type PageStarterState } from "../ui/page-starter-state";
 import { pageStarterCopy } from "../ui/page-starter-copy";
-import { MobilePageMenuRow } from "./mobile-page-menu-row";
+import { MobilePageMenuRow, MobileThreadOptionsButton, MobileUnreadBadge } from "./mobile-page-menu-row";
 import { emailMagicLinkTokenFromUrl, solveEmailMagicLinkAbuseChallenge } from "./mobile-email-magic-link";
 import { pageMenuRemovalCopy } from "../ui/page-menu-copy";
 import {
   automationThreadForJob,
   automationThreadListLimit,
+  automationThreadOptionsLabel,
+  automationThreadReadTarget,
   automationThreadRemovalCopy,
+  automationThreadUnreadBadge,
   automationThreadViewAllLabel,
   automationThreads,
+  isAutomationThread,
+  mobileDrawerSections,
 } from "./mobile-automation-threads";
 import { subscribeKeyboardInsetRelease } from "./mobile-keyboard-inset";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -80,6 +85,7 @@ import {
   History,
   KeyRound,
   Download,
+  Ellipsis,
   LogOut,
   Lock,
   LockKeyhole,
@@ -2395,6 +2401,40 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       current = false;
     };
   }, [menuOpen, chatConversationController]);
+  // HPD-924: the open automation thread is read through the newest message
+  // on screen -- only while the app and its host are in front and the menu is
+  // closed. Opening the menu or refreshing its list never marks anything read.
+  // The plane owns the cursor; its answer carries the thread's new count.
+  const [appInFront, setAppInFront] = useState(AppState.currentState === "active");
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => setAppInFront(state === "active"));
+    return () => subscription.remove();
+  }, []);
+  const acknowledgedReadRef = useRef(new Map<string, string>());
+  const threadReadTarget = automationThreadReadTarget({
+    session: chatSessions.find((session) => session.id === activeConversationSessionId),
+    activeConversationId: activeConversationSessionId,
+    inFront: tab === "chat" && hostVisible && appInFront && !menuOpen,
+    renderedMessages: messages,
+    acknowledgedMessageId: activeConversationSessionId ? acknowledgedReadRef.current.get(activeConversationSessionId) : null,
+  });
+  const threadReadTargetKey = threadReadTarget ? `${threadReadTarget.conversationId}/${threadReadTarget.messageId}` : null;
+  useEffect(() => {
+    if (!threadReadTarget) return;
+    const { conversationId, messageId } = threadReadTarget;
+    acknowledgedReadRef.current.set(conversationId, messageId);
+    void hermesApi.markConversationRead(conversationId, messageId).then((updated) => {
+      setChatSessions((current) => current.map((session) => (
+        session.id === updated.id ? { ...session, unreadCount: updated.unreadCount ?? 0 } : session
+      )));
+    }, () => {
+      // Not durable, so the count stays as the plane last said. After a pause
+      // the thread on screen may acknowledge the same message again.
+      setTimeout(() => {
+        if (acknowledgedReadRef.current.get(conversationId) === messageId) acknowledgedReadRef.current.delete(conversationId);
+      }, 15_000);
+    });
+  }, [threadReadTargetKey, hermesApi]);
   const voiceRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const voiceRecorderState = useAudioRecorderState(voiceRecorder);
   const voiceNoteController = useMemo(
@@ -7534,7 +7574,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           isHomeChatActive={tab === "chat" && chatSessions.find((session) => session.id === activeConversationSessionId)?.role !== "chat"}
           bookmarks={[]}
           onRemoveBookmark={archiveNavigationEntry}
-          onRemoveAutomationThread={archiveAutomationThread}
           onNewPage={() => {
             setMenuOpen(false);
             setOpeningDestinationTitle(pageStarterCopy(appLocale).label);
@@ -8026,6 +8065,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   });
   const activeChatSession = chatSessions.find((session) => session.id === activeConversationSessionId) ?? null;
   const isHomeChatActive = tab === "chat" && activeChatSession?.role === "home";
+  const automationThreadHeader = tab === "chat" && activeSubthreadHeader.kind !== "subthread" && isAutomationThread(activeChatSession)
+    ? activeChatSession
+    : null;
   // HPD-606: the card stays pinned under the header of the Home Chat, outside
   // the transcript, until the customer closes it or chooses Later or Never.
   const finCard = finSuggestionsEnabled && finSuggestionsLoaded && isHomeChatActive && !finCardClosed && finCarouselIds
@@ -8124,7 +8166,25 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             </Text>
           ) : null}
         </View>
-        {tab === "chat" && ChatHeaderSupportIcon && activeSubthreadHeader.kind !== "subthread" ? (
+        {automationThreadHeader ? (
+          // HPD-924: an open automation thread shows its options top right in
+          // place of Help (or the privacy lock): View all automations and
+          // Delete, as the menu row offered them before. Home keeps its Help.
+          <MobileThreadOptionsButton
+            key={automationThreadHeader.id}
+            entry={{ entryId: automationThreadHeader.id, mode: "archive" }}
+            title={automationThreadHeader.title}
+            accessibilityLabel={automationThreadOptionsLabel(appLocale)}
+            icon={<Ellipsis size={24} color={palette.ink} />}
+            style={styles.mobilePrivacyButton}
+            pressedStyle={styles.systemRowPressed}
+            color={palette.coral}
+            copy={automationThreadRemovalCopy(appLocale, automationThreadHeader.title)}
+            onRemove={archiveAutomationThread}
+            extraAction={{ label: automationThreadViewAllLabel(appLocale), onPress: () => selectMobileScreen("automations") }}
+          />
+        ) : null}
+        {automationThreadHeader ? null : tab === "chat" && ChatHeaderSupportIcon && activeSubthreadHeader.kind !== "subthread" ? (
           // HPD-837: the host's support glyph in the colour of the other header
           // icon (the menu). With it the header shows no lock; Privacy stays
           // in the left menu.
@@ -8137,7 +8197,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             <ChatHeaderSupportIcon size={24} color={palette.ink} />
           </Pressable>
         ) : null}
-        {tab === "chat" && !ChatHeaderSupportIcon ? (
+        {automationThreadHeader ? null : tab === "chat" && !ChatHeaderSupportIcon ? (
           <Pressable
             style={({ pressed }) => [styles.mobilePrivacyButton, pressed && styles.systemRowPressed]}
             onPress={() => setPrivacyWorkspace(snapshot.workspace.id)}
@@ -8232,7 +8292,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           isHomeChatActive={isHomeChatActive}
           bookmarks={snapshot.bookmarks}
           onRemoveBookmark={archiveNavigationEntry}
-          onRemoveAutomationThread={archiveAutomationThread}
           onNewPage={() => void openPageEntry()}
           chatSessions={chatSessions}
           activeSessionId={activeConversationSessionId}
@@ -9709,7 +9768,6 @@ function MobileNavigationDrawer({
   onOpenSession,
   onOpenBookmark,
   onRemoveBookmark,
-  onRemoveAutomationThread,
   onNewPage,
   onOpenTasks,
   onOpenSuggestions,
@@ -9747,7 +9805,6 @@ function MobileNavigationDrawer({
   onOpenSession: (sessionId: string) => void;
   onOpenBookmark: (href: string) => void;
   onRemoveBookmark: (entry: MobileRemovableNavigationEntry) => Promise<void>;
-  onRemoveAutomationThread: (entry: MobileRemovableNavigationEntry) => Promise<void>;
   onNewPage: () => void;
   onOpenTasks: () => void;
   onOpenSuggestions?: () => void;
@@ -9811,59 +9868,80 @@ function MobileNavigationDrawer({
               />
             );
           })}
-          {onOpenSuggestions ? (
-            <MobileSystemRow
-              accessibilityState={{ selected: tab === "suggestions" }}
-              icon={<Lightbulb size={18} color={tab === "suggestions" ? palette.teal : palette.text} />}
-              label="Suggestions"
-              onPress={onOpenSuggestions}
-              selectedIndicator
-              separator={false}
-            />
-          ) : null}
-          {showConnectGmail ? (
-            <MobileSystemRow
-              icon={<Mail size={18} color={palette.teal} />}
-              label={t.firstConversation.guidedSetup.connectGmail}
-              onPress={onConnectGmail}
-            />
-          ) : null}
-          {bookmarkNavigation.map((bookmark) => (
-            <MobilePageMenuRow
-              key={bookmark.id}
-              entry={{ entryId: bookmark.id, mode: "archive" }}
-              icon={<FileText size={18} color={palette.text} />}
-              color={palette.text}
-              label={bookmark.title}
-              copy={pageMenuRemovalCopy(appLocale, bookmark.title)}
-              onPress={() => onOpenBookmark(bookmark.href)}
-              onRemove={onRemoveBookmark}
-            />
-          ))}
-
-          {/* HPD-843: every automation that has delivered a result has its own
-              thread here, next to New App or Page. Only automations make
-              threads; the customer cannot start one of his own. */}
-          {automationThreads(chatSessions).map((thread) => (
-            <MobilePageMenuRow
-              key={thread.id}
-              entry={{ entryId: thread.id, mode: "archive" }}
-              icon={<CalendarClock size={18} color={thread.id === activeSessionId && tab === "chat" ? palette.teal : palette.text} />}
-              color={thread.id === activeSessionId && tab === "chat" ? palette.teal : palette.text}
-              label={thread.title}
-              copy={automationThreadRemovalCopy(appLocale, thread.title)}
-              onPress={() => onOpenSession(thread.id)}
-              onRemove={onRemoveAutomationThread}
-              extraAction={{ label: automationThreadViewAllLabel(appLocale), onPress: onOpenAutomations }}
-            />
-          ))}
-
-          <MobileSystemRow
-            icon={<Plus size={18} color={palette.text} />}
-            label={pageStarterCopy(appLocale).label}
-            onPress={onNewPage}
-            separator={false}
-          />
+          {/* HPD-924: automation threads before the Pages, New App or Page
+              after them, and Suggestions (only where it exists) last. */}
+          {mobileDrawerSections({ suggestions: Boolean(onOpenSuggestions), connectGmail: showConnectGmail }).map((section) => {
+            if (section === "primary") return null;
+            if (section === "connectGmail") {
+              return (
+                <MobileSystemRow
+                  key={section}
+                  icon={<Mail size={18} color={palette.teal} />}
+                  label={t.firstConversation.guidedSetup.connectGmail}
+                  onPress={onConnectGmail}
+                />
+              );
+            }
+            if (section === "automationThreads") {
+              // HPD-843: every automation that has delivered a result has its
+              // own thread. HPD-924: the row has no ellipsis any more -- View
+              // all automations and Delete sit top right in the open thread --
+              // and it carries the plane's unread count as a blue badge.
+              return automationThreads(chatSessions).map((thread) => {
+                const active = thread.id === activeSessionId && tab === "chat";
+                const badge = automationThreadUnreadBadge(thread.title, thread.unreadCount, appLocale);
+                return (
+                  <MobileSystemRow
+                    key={thread.id}
+                    accessibilityLabel={badge?.accessibilityLabel ?? thread.title}
+                    accessibilityState={{ selected: active }}
+                    icon={<CalendarClock size={18} color={active ? palette.teal : palette.text} />}
+                    label={thread.title}
+                    onPress={() => onOpenSession(thread.id)}
+                    selectedIndicator
+                    separator={false}
+                    trailing={badge ? <MobileUnreadBadge label={badge.label} /> : null}
+                  />
+                );
+              });
+            }
+            if (section === "pages") {
+              return bookmarkNavigation.map((bookmark) => (
+                <MobilePageMenuRow
+                  key={bookmark.id}
+                  entry={{ entryId: bookmark.id, mode: "archive" }}
+                  icon={<FileText size={18} color={palette.text} />}
+                  color={palette.text}
+                  label={bookmark.title}
+                  copy={pageMenuRemovalCopy(appLocale, bookmark.title)}
+                  onPress={() => onOpenBookmark(bookmark.href)}
+                  onRemove={onRemoveBookmark}
+                />
+              ));
+            }
+            if (section === "newPage") {
+              return (
+                <MobileSystemRow
+                  key={section}
+                  icon={<Plus size={18} color={palette.text} />}
+                  label={pageStarterCopy(appLocale).label}
+                  onPress={onNewPage}
+                  separator={false}
+                />
+              );
+            }
+            return onOpenSuggestions ? (
+              <MobileSystemRow
+                key={section}
+                accessibilityState={{ selected: tab === "suggestions" }}
+                icon={<Lightbulb size={18} color={tab === "suggestions" ? palette.teal : palette.text} />}
+                label="Suggestions"
+                onPress={onOpenSuggestions}
+                selectedIndicator
+                separator={false}
+              />
+            ) : null;
+          })}
         </ScrollView>
 
         {/* HPD-462: the entrance to Settings and Account stands where it stood

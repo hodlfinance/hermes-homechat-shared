@@ -1207,6 +1207,11 @@ export interface ConversationSession {
   updatedAt: string;
   /** HPD-843: the job whose own thread this is; absent or null otherwise. */
   automationJobId?: string | null;
+  /**
+   * HPD-924: the plane's account-scoped count of unread assistant messages.
+   * Absent when the plane predates HPD-924; never estimated on the client.
+   */
+  unreadCount?: number;
 }
 
 export type ChatArtifactReference = Record<string, SharedHomechatJsonValue> &

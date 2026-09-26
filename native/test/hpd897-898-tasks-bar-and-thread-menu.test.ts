@@ -44,7 +44,8 @@ test("HPD-898: an automation thread's menu offers View all automations in every 
   assert.equal(automationThreadViewAllLabel("de"), "Alle Automationen anzeigen");
   const labels = (["en", "de", "fr", "es", "it", "pt-BR", "ja", "ko"] as const).map(automationThreadViewAllLabel);
   assert.equal(new Set(labels).size, 8);
-  assert.match(source, /extraAction=\{\{ label: automationThreadViewAllLabel\(appLocale\), onPress: onOpenAutomations \}\}/);
+  // HPD-924: the entry now sits in the open thread's top-right options.
+  assert.match(source, /extraAction=\{\{ label: automationThreadViewAllLabel\(appLocale\), onPress: \(\) => selectMobileScreen\("automations"\) \}\}/);
   const row = readFileSync(new URL("../src/mobile-page-menu-row.tsx", import.meta.url), "utf8");
   assert.match(row, /const options = extraAction \? \[copy\.cancel, extraAction\.label, copy\.remove\] : \[copy\.cancel, copy\.remove\];/);
 });

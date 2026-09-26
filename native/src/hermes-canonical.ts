@@ -71,6 +71,10 @@ export function mobileConversationSessionFromCanonical(
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
     automationJobId: conversation.automationJobId ?? null,
+    // HPD-924: only a count the plane stated; an older plane leaves it absent.
+    ...(Number.isSafeInteger(conversation.unreadCount) && (conversation.unreadCount as number) >= 0
+      ? { unreadCount: conversation.unreadCount }
+      : {}),
   };
 }
 
@@ -258,6 +262,23 @@ export function createNativeR8CanonicalController(
       if (response.conversation.id !== conversationId || response.conversation.status !== "archived") {
         throw new Error("Canonical Hermes did not delete that thread.");
       }
+      return mobileConversationSessionFromCanonical(response.conversation);
+    },
+    /**
+     * HPD-924. Acknowledges the newest message the client rendered in this
+     * conversation. A response for another conversation is refused, so a
+     * crossed reply can never clear a different thread's badge.
+     */
+    markConversationRead: async (
+      conversationId: string,
+      messageId: string,
+      context: MobileHermesRequestContext = {},
+    ) => {
+      const response = await client.markConversationRead(conversationId, {
+        messageId,
+        surface: heyHermesMobileSurface,
+      }, context);
+      assertFullHeyConversation(response.conversation, identity.surface, conversationId);
       return mobileConversationSessionFromCanonical(response.conversation);
     },
     messages: async (

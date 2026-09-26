@@ -14,6 +14,7 @@ import type {
   HermesMessagesResponse,
   HermesRunResponse,
   HermesRunsResponse,
+  MarkHermesConversationReadRequest,
   UpdateHermesJobRequest,
 } from "./hermes-api";
 
@@ -166,6 +167,21 @@ export function createHermesApiClient({ baseUrl, token = "", fetchImpl = fetch }
       request<HermesConversationResponse>(`/hermes/conversations/${encodeURIComponent(conversationId)}`, {
         method: "PATCH",
         body: JSON.stringify({ status: "archived" }),
+        signal: options.signal,
+      }),
+    /**
+     * HPD-924. Acknowledges the newest rendered message of one conversation.
+     * Idempotent: repeating it, or an older acknowledgement arriving late,
+     * leaves the plane's cursor where it is.
+     */
+    markConversationRead: (
+      conversationId: string,
+      body: MarkHermesConversationReadRequest,
+      options: HermesRequestOptions = {},
+    ) =>
+      request<HermesConversationResponse>(`/hermes/conversations/${encodeURIComponent(conversationId)}/read`, {
+        method: "POST",
+        body: JSON.stringify(body),
         signal: options.signal,
       }),
     messages: (

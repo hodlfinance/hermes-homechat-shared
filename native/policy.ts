@@ -12,6 +12,8 @@ const routes: ReadonlyArray<readonly [string, RegExp]> = [
   ["DELETE", /^\/bookmarks\/[^/]+$/],
   ["GET", /^\/hermes\/(?:conversations(?:\/[^/]+(?:\/messages)?)?|runs(?:\/[^/]+(?:\/events)?)?|jobs(?:\/[^/]+(?:\/history)?)?|delegated-tasks(?:\/[^/]+)?)$/],
   ["POST", /^\/hermes\/(?:conversations|runs|runs\/[^/]+\/(?:stop|latency)|jobs|jobs\/[^/]+\/(?:pause|resume|run))$/],
+  // HPD-924: the read acknowledgement for the newest rendered message.
+  ["POST", /^\/hermes\/conversations\/[^/]+\/read$/],
   // HPD-841: the X on a running background task stops it on the plane.
   ["POST", /^\/hermes\/delegated-tasks\/[^/]+\/stop$/],
   // HPD-807: the answer to a clarify question. Without it the HODL transport

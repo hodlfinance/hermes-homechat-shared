@@ -3,19 +3,23 @@ import { ActionSheetIOS, Alert, Platform, Pressable, StyleSheet, Text, View, typ
 import { createMobileRemovalGate, type MobileRemovableNavigationEntry } from "./mobile-swipe-remove-row";
 import { mobileSystemSurfaceMetrics } from "./mobile-system-surface";
 
-/** HPD-619: only removes a bookmark; the caller retains ownership of its content. */
-export function MobilePageMenuRow({
-  entry, label, icon, color, onPress, onRemove, copy, extraAction,
+type MobileEntryActionCopy = { remove: string; cancel: string; title: string; message: string; failed: string; pending: string };
+type MobileEntryExtraAction = { label: string; onPress: () => void };
+
+/**
+ * The action sheet of one removable entry: the optional extra entry (HPD-898)
+ * above the removal, and the removal behind its confirmation (HPD-619). Shared
+ * by a Page row in the menu and, since HPD-924, by the top-right options
+ * button of an open automation thread.
+ */
+function useMobileEntryActions({
+  entry, label, onRemove, copy, extraAction,
 }: {
   entry: MobileRemovableNavigationEntry;
   label: string;
-  icon: ReactNode;
-  color: ColorValue;
-  onPress: () => void;
   onRemove: (entry: MobileRemovableNavigationEntry) => Promise<void>;
-  copy: { remove: string; cancel: string; title: string; message: string; failed: string; pending: string };
-  /** HPD-898: one more entry in the row's menu, above the removal. */
-  extraAction?: { label: string; onPress: () => void };
+  copy: MobileEntryActionCopy;
+  extraAction?: MobileEntryExtraAction;
 }) {
   const callback = useRef(onRemove);
   callback.current = onRemove;
@@ -73,6 +77,25 @@ export function MobilePageMenuRow({
     }
   }
 
+  return { pending, error, openActions };
+}
+
+/** HPD-619: only removes a bookmark; the caller retains ownership of its content. */
+export function MobilePageMenuRow({
+  entry, label, icon, color, onPress, onRemove, copy, extraAction,
+}: {
+  entry: MobileRemovableNavigationEntry;
+  label: string;
+  icon: ReactNode;
+  color: ColorValue;
+  onPress: () => void;
+  onRemove: (entry: MobileRemovableNavigationEntry) => Promise<void>;
+  copy: MobileEntryActionCopy;
+  /** HPD-898: one more entry in the row's menu, above the removal. */
+  extraAction?: MobileEntryExtraAction;
+}) {
+  const { pending, error, openActions } = useMobileEntryActions({ entry, label, onRemove, copy, extraAction });
+
   return <View>
     <View style={styles.row}>
       <Pressable style={styles.open} onPress={onPress} onLongPress={openActions} disabled={pending}
@@ -100,7 +123,60 @@ export function MobilePageMenuRow({
   </View>;
 }
 
+/**
+ * HPD-924: the options of an open automation thread, top right in its header
+ * where Help stands in Home. The same sheet the menu row used to open: View
+ * all automations, then Delete behind its confirmation.
+ */
+export function MobileThreadOptionsButton({
+  entry, title, accessibilityLabel, icon, style, pressedStyle, color, onRemove, copy, extraAction,
+}: {
+  entry: MobileRemovableNavigationEntry;
+  title: string;
+  accessibilityLabel: string;
+  icon: ReactNode;
+  style: object;
+  pressedStyle?: object;
+  color: ColorValue;
+  onRemove: (entry: MobileRemovableNavigationEntry) => Promise<void>;
+  copy: MobileEntryActionCopy;
+  extraAction?: MobileEntryExtraAction;
+}) {
+  const { pending, error, openActions } = useMobileEntryActions({ entry, label: title, onRemove, copy, extraAction });
+  return <View>
+    <Pressable style={({ pressed }) => [style, pressed && pressedStyle]} onPress={openActions} disabled={pending}
+      accessibilityRole="button" accessibilityLabel={accessibilityLabel}
+      accessibilityHint={error ? copy.failed : undefined}
+      accessibilityState={{ disabled: pending, busy: pending }}>
+      {icon}
+    </Pressable>
+    {error ? <Text accessibilityLiveRegion="polite" accessibilityRole="alert" style={[styles.headerError, { color }]}>{copy.failed}</Text> : null}
+  </View>;
+}
+
+// HPD-924: the same blue in Light and Dark (white digits, contrast 4.9:1).
+// The palette's accent turns violet in Dark, so the badge keeps its own blue.
+const unreadBadgeBlue = "#1f6fd1";
+
+/** HPD-924: the unread count beside a thread's name, capped at 99+. The row carries the spoken count. */
+export function MobileUnreadBadge({ label }: { label: string }) {
+  return <View style={styles.badge} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <Text style={styles.badgeText} allowFontScaling maxFontSizeMultiplier={1.6}>{label}</Text>
+  </View>;
+}
+
 const styles = StyleSheet.create({
+  badge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: unreadBadgeBlue,
+  },
+  badgeText: { color: "#ffffff", fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  headerError: { position: "absolute", right: 0, top: "100%", fontSize: 12, width: 180, textAlign: "right" },
   row: { flexDirection: "row", alignItems: "center" },
   open: {
     flex: 1,

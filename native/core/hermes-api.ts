@@ -387,6 +387,18 @@ export type CreateHermesConversationRequest = {
   allowedSurfaces?: HermesSurface[];
 };
 
+/**
+ * HPD-924. The newest message the client has actually rendered in the open
+ * conversation. The plane checks that the message belongs to this account's
+ * accessible conversation and only ever moves the read cursor forward; it
+ * never substitutes the conversation's current latest message. The response is
+ * the conversation with its updated `unreadCount`.
+ */
+export type MarkHermesConversationReadRequest = {
+  messageId: string;
+  surface?: HermesSurface;
+};
+
 export type HermesConversationListResponse = {
   contractVersion: HermesApiContractVersion;
   conversations: HermesApiConversation[];
