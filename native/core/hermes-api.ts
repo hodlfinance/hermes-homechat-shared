@@ -316,6 +316,12 @@ export type HermesApiConversation = {
   safeSummary: string | null;
   activeRunId: string | null;
   messageCount: number;
+  /**
+   * HPD-924: account-scoped assistant messages the server says are unread.
+   * Absent on an older control plane; clients must not derive a replacement
+   * from messageCount or the drawer's local open state.
+   */
+  unreadCount?: number;
   lastMessageAt: string | null;
   createdAt: string;
   updatedAt: string;
