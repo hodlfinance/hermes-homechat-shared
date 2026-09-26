@@ -12,6 +12,33 @@ import type { AppLocale, ConversationSession } from "../core/index";
 /** The conversation list loads at least this many, so no automation thread is cut off. */
 export const automationThreadListLimit = 50;
 
+const unreadMessagesCopy: Record<AppLocale, (count: number) => string> = {
+  en: (count) => `${count} unread ${count === 1 ? "message" : "messages"}`,
+  de: (count) => `${count} ungelesene ${count === 1 ? "Nachricht" : "Nachrichten"}`,
+  fr: (count) => `${count} ${count === 1 ? "message non lu" : "messages non lus"}`,
+  es: (count) => `${count} ${count === 1 ? "mensaje sin leer" : "mensajes sin leer"}`,
+  it: (count) => `${count} ${count === 1 ? "messaggio non letto" : "messaggi non letti"}`,
+  "pt-BR": (count) => `${count} ${count === 1 ? "mensagem não lida" : "mensagens não lidas"}`,
+  ja: (count) => `未読メッセージ ${count} 件`,
+  ko: (count) => `읽지 않은 메시지 ${count}개`,
+};
+
+/**
+ * HPD-924. Use only the server's account-scoped unreadCount. An absent field
+ * on an older plane means no badge, never a local estimate from messageCount.
+ */
+export function automationThreadUnreadBadge(
+  title: string,
+  unreadCount: unknown,
+  locale: AppLocale,
+): { count: number; label: string; accessibilityLabel: string } | null {
+  if (!Number.isSafeInteger(unreadCount) || (unreadCount as number) <= 0) return null;
+  const count = unreadCount as number;
+  const label = count > 99 ? "99+" : String(count);
+  const unread = (unreadMessagesCopy[locale] ?? unreadMessagesCopy.en)(count);
+  return { count, label, accessibilityLabel: `${title}, ${unread}` };
+}
+
 function activityTime(session: ConversationSession) {
   const stamp = session.lastMessageAt ?? session.updatedAt ?? session.createdAt;
   const time = stamp ? Date.parse(stamp) : Number.NaN;
