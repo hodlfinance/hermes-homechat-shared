@@ -82,7 +82,7 @@ export type SharedHomechatRunStatusEvent = SharedHomechatEventBase<
 
 export type SharedHomechatMessageDeltaEvent = SharedHomechatEventBase<
   "message.delta",
-  Record<string, SharedHomechatJsonValue> & { replace?: boolean; text: string }
+  Record<string, SharedHomechatJsonValue> & { replace?: boolean; retracted?: boolean; text: string }
 > & {
   replace?: boolean;
   text: string;
@@ -880,6 +880,8 @@ export function normalizeHomechatRunEvent(input: unknown): SharedHomechatCanonic
     const replace = raw.replace === true || rawPayload.replace === true;
     payload.text = text;
     if (replace) payload.replace = true;
+    // HPD-933: a retraction withdraws the draft; it carries no text of its own.
+    if (raw.retracted === true || rawPayload.retracted === true) payload.retracted = true;
     return { id, runId, messageId, type, text, ...(replace ? { replace: true } : {}), payload: payload as SharedHomechatMessageDeltaEvent["payload"], createdAt };
   }
   if (type === "message.completed") {
@@ -1348,12 +1350,39 @@ export function nextHomechatStreamingText(
   payload: Record<string, unknown>,
   replaceDelta = false,
 ): string {
+  // HPD-933. The runtime streams the answer word by word, but text a model call
+  // wrote before it called a tool was not the answer. The runtime withdraws it
+  // with an empty `retracted` delta when the tool starts; the draft is empty
+  // again until the next call writes. Older readers see an empty delta and keep
+  // their draft, which the next `replace` delta overwrites.
+  if (payload.retracted === true) return "";
   const incoming = homechatStreamingValue(payload.delta) ?? homechatStreamingValue(payload.text) ?? homechatStreamingValue(payload.content) ?? "";
   if (!incoming) return stripHomechatStreamingCursor(current);
   const cleanCurrent = stripHomechatStreamingCursor(current);
   const cleanIncoming = stripHomechatStreamingCursor(incoming);
-  if (replaceDelta) return cleanIncoming;
+  // HPD-933: a `replace` delta is the whole current draft, not a piece to merge.
+  if (replaceDelta || payload.replace === true) return cleanIncoming;
   return mergeHomechatStreamingText(cleanCurrent, cleanIncoming);
+}
+
+/**
+ * HPD-933. True when the runtime sent the draft as whole snapshots (`replace`).
+ * The draft is then only a preview of the answer, and the completed answer is
+ * authoritative: merging the two would bring back text the runtime withdrew.
+ */
+export function homechatDraftIsReplacedSnapshots(
+  payloads: readonly (Record<string, unknown> | undefined)[],
+): boolean {
+  return payloads.some((payload) => payload?.replace === true || payload?.retracted === true);
+}
+
+function homechatRunDraftIsReplacedSnapshots(
+  events: readonly SharedHomechatCanonicalEvent[],
+  runId: string | null | undefined,
+): boolean {
+  return homechatDraftIsReplacedSnapshots(events
+    .filter((event) => event.type === "message.delta" && (!runId || !event.runId || event.runId === runId))
+    .map((event) => ({ ...(event.payload as Record<string, unknown>), ...(event.type === "message.delta" && event.replace ? { replace: true } : {}) })));
 }
 
 /**
@@ -1375,7 +1404,7 @@ export function streamingTextFromHomechatEvents(events: readonly unknown[]): str
   return events.reduce<string>((draft, input) => {
     const event = normalizeHomechatRunEvent(input);
     if (event?.type !== "message.delta" || isHomechatClarifyDelta(event.payload)) return draft;
-    return nextHomechatStreamingText(draft, { text: event.text }, event.replace === true);
+    return nextHomechatStreamingText(draft, { text: event.text, retracted: event.payload.retracted === true }, event.replace === true);
   }, "");
 }
 
@@ -1386,11 +1415,17 @@ export function homechatStreamingTextFromPayloads(payloads: readonly Record<stri
   );
 }
 
-export function reconcileHomechatFinalAnswer(finalAnswer: string, streamedDraft: string): string {
+export function reconcileHomechatFinalAnswer(
+  finalAnswer: string,
+  streamedDraft: string,
+  options: { finalIsAuthoritative?: boolean } = {},
+): string {
   const cleanFinal = stripHomechatStreamingCursor(finalAnswer);
   const cleanDraft = stripHomechatStreamingCursor(streamedDraft);
   if (!cleanDraft) return cleanFinal;
   if (!cleanFinal) return cleanDraft;
+  // HPD-933: a draft built from `replace` snapshots never outranks the answer.
+  if (options.finalIsAuthoritative) return cleanFinal;
   if (cleanFinal === cleanDraft || cleanFinal.startsWith(cleanDraft)) return cleanFinal;
   if (cleanDraft.includes(cleanFinal) || cleanDraft.endsWith(cleanFinal)) return cleanDraft;
   const merged = mergeHomechatStreamingText(cleanDraft, cleanFinal);
@@ -1784,7 +1819,9 @@ export function reduceHomechatClientState<
   if (currentTerminalStatus) {
     if (event.type !== "message.completed" || currentTerminalStatus !== "completed") return state;
     const runId = eventRunId ?? "run";
-    const content = reconcileHomechatFinalAnswer(event.text, state.streamingText);
+    const content = reconcileHomechatFinalAnswer(event.text, state.streamingText, {
+      finalIsAuthoritative: homechatRunDraftIsReplacedSnapshots(state.events, eventRunId),
+    });
     return {
       ...state,
       messages: persistCompletedHomechatMessage(state, {
@@ -1854,15 +1891,22 @@ export function reduceHomechatClientState<
     return {
       ...state,
       events,
-      phase: "streaming",
+      // HPD-933: after a retraction the run is working again, not replying.
+      phase: event.payload.retracted === true ? homechatClientPhaseForStatus("running") : "streaming",
       runId: event.runId ?? state.runId,
       slots,
-      streamingText: nextHomechatStreamingText(state.streamingText, { text: event.text }, event.replace === true),
+      streamingText: nextHomechatStreamingText(
+        state.streamingText,
+        { text: event.text, retracted: event.payload.retracted === true },
+        event.replace === true,
+      ),
     };
   }
   if (event.type === "message.completed") {
     const runId = event.runId ?? state.runId ?? "run";
-    const content = reconcileHomechatFinalAnswer(event.text, state.streamingText);
+    const content = reconcileHomechatFinalAnswer(event.text, state.streamingText, {
+      finalIsAuthoritative: homechatRunDraftIsReplacedSnapshots(events, event.runId ?? state.runId),
+    });
     const completedSlots = slots.byRunId[runId];
     if (completedSlots && event.messageId) {
       slots = putHomechatProductSlots(slots, { messageId: event.messageId, runId, slots: completedSlots });
@@ -2200,7 +2244,9 @@ export function createHomechatClientController<
 
   async function takeEvent(event: SharedHomechatCanonicalEvent) {
     const completedMessage = event.type === "message.completed" && options.messageFromCompletion
-      ? options.messageFromCompletion(event, reconcileHomechatFinalAnswer(event.text, state.streamingText))
+      ? options.messageFromCompletion(event, reconcileHomechatFinalAnswer(event.text, state.streamingText, {
+        finalIsAuthoritative: homechatRunDraftIsReplacedSnapshots(state.events, event.runId ?? state.runId),
+      }))
       : undefined;
     dispatch({ type: "run.event", event, completedMessage });
     await options.onEvent?.(event);

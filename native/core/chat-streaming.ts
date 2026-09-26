@@ -1,4 +1,5 @@
 export {
+  homechatDraftIsReplacedSnapshots as streamingDraftIsReplacedSnapshots,
   homechatStreamingTextFromPayloads as streamingTextFromDeltaPayloads,
   nextHomechatStreamingText as nextStreamingTextFromDeltaPayload,
   reconcileHomechatFinalAnswer as reconcileFinalAnswerWithStreamingDraft,
