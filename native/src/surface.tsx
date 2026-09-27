@@ -2364,7 +2364,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         void hermesApi.run(runId).then((run) => {
           setChatEventsByRunId((current) => mergeChatRunEvents(current, run.id, run.events));
           commitChatRunStatus(run.id, run.status);
-        }).catch(() => undefined);
+        }).catch(() => {
+          // A failed readback may be tried again on the next change of this
+          // chat's events or statuses; the card already shows meanwhile.
+          readBackOpenClarifyRunIdsRef.current.delete(runId);
+        });
       }
     };
     readBackRunsWithOpenClarify();
