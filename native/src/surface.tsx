@@ -326,6 +326,7 @@ import {
 } from "./mobile-attachments";
 import { createMobileConfirmationDecisionGate } from "./mobile-native-confirmation";
 import {
+  mobileChatRunStatusWithOpenClarify,
   mobileChatUserDecisionStatusFromEvent,
   mobileVisibleChatApprovalCards,
   mobileVisibleChatClarifyRequest,
@@ -1790,6 +1791,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
    */
   const explainedRunFailuresRef = useRef<Set<string>>(new Set());
   const [chatRunStatusesById, setChatRunStatusesById] = useState<Record<string, ChatRunStatus>>({});
+  // HPD-961: questions this app answered, hidden before the plane's receipt
+  // (a clarifyResolved status event) reaches the run's events.
+  const [answeredClarifyIds, setAnsweredClarifyIds] = useState<ReadonlySet<string>>(() => new Set());
+  const markClarifyAnswered = useCallback((clarifyId: string) => {
+    setAnsweredClarifyIds((current) => new Set([...current, clarifyId]));
+  }, []);
+  // Runs whose status was read back once because their events proved a wait
+  // this app had not read (HPD-961).
+  const readBackOpenClarifyRunIdsRef = useRef<Set<string>>(new Set());
   const [chatApprovalCards, setChatApprovalCards] = useState<ApprovalCard[]>([]);
   const [delegatedTasks, setDelegatedTasks] = useState<HermesDelegatedTask[]>([]);
   const deliveredDelegationResultIdsRef = useRef<Set<string>>(new Set());
@@ -2338,6 +2348,27 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     }),
     [hermesApi],
   );
+
+  // HPD-961: a run whose events carry an open clarify while this app still
+  // holds another status for it (27.09.2026: "running", never read again once
+  // a follow-up was queued behind it). The card already shows from the event;
+  // its status and receipts are read back once so the chat agrees with the plane.
+  useEffect(() => {
+    const readBackRunsWithOpenClarify = () => {
+      for (const [runId, events] of Object.entries(chatEventsByRunId)) {
+        const known = chatRunStatusesById[runId];
+        if (known === "waiting_for_approval") continue;
+        if (mobileChatRunStatusWithOpenClarify(known, events, { answeredClarifyIds }) !== "waiting_for_approval") continue;
+        if (readBackOpenClarifyRunIdsRef.current.has(runId)) continue;
+        readBackOpenClarifyRunIdsRef.current.add(runId);
+        void hermesApi.run(runId).then((run) => {
+          setChatEventsByRunId((current) => mergeChatRunEvents(current, run.id, run.events));
+          commitChatRunStatus(run.id, run.status);
+        }).catch(() => undefined);
+      }
+    };
+    readBackRunsWithOpenClarify();
+  }, [answeredClarifyIds, chatEventsByRunId, chatRunStatusesById, hermesApi]);
 
   useEffect(() => {
     let disposed = false;
@@ -6320,7 +6351,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
 
   async function submitMobileClarify(runId: string, clarify: ChatClarifyRequest, response: string) {
     if (!response.trim()) return;
-    if (chatRunStatusesById[runId] !== "waiting_for_approval") {
+    // HPD-961: the run's own events may prove the wait this app never read.
+    const waitingStatus = mobileChatRunStatusWithOpenClarify(chatRunStatusesById[runId], chatEventsByRunId[runId] ?? [], { answeredClarifyIds });
+    if (waitingStatus !== "waiting_for_approval") {
       recordDiagnostic("info", "Hermes clarification not open", `run ${runId} is ${chatRunStatusesById[runId] ?? "unknown"}`);
       setChatSessionNotice(userFacingError("This question is no longer open. Refreshing the conversation."));
       if (activeConversationSessionIdRef.current) {
@@ -6335,6 +6368,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     setConfirmationDecisionRuns((current) => ({ ...current, [runId]: true }));
     try {
       await api.resolveChatClarify(runId, { clarifyId: clarify.id, response: response.trim() });
+      markClarifyAnswered(clarify.id);
       commitChatRunStatus(runId, "running");
     } catch (err) {
       const message = displayError(err, "That answer could not be delivered to Hermes.");
@@ -8056,7 +8090,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     ? visibleMobileMessages.find((message) => message.role === "assistant")?.id ?? null
     : null;
   const visibleChatClarifyRequests = Object.entries(chatEventsByRunId).flatMap(([runId, events]) => {
-    const clarify = mobileVisibleChatClarifyRequest(chatRunStatusesById[runId], events);
+    const clarify = mobileVisibleChatClarifyRequest(chatRunStatusesById[runId], events, { answeredClarifyIds });
     return clarify ? [{ runId, clarify }] : [];
   });
   const chatGptPanel = mobileChatGptConnectionCardView({

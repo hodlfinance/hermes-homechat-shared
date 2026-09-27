@@ -55,24 +55,74 @@ export function mobileVisibleChatApprovalCards(input: {
   );
 }
 
+export type MobileClarifyVisibilityOptions = {
+  /** Questions this app answered itself, before the plane's receipt arrived. */
+  answeredClarifyIds?: ReadonlySet<string>;
+  now?: number;
+};
+
+function isFinishedStatus(status: ChatRunStatus | null | undefined) {
+  return status === "completed" || status === "failed" || status === "cancelled";
+}
+
 /**
  * Clarify requests remain in the durable event history after they are answered.
  * Pair them with their clarifyResolved status events before selecting the newest
  * outstanding question, so a later approval in the same run cannot revive an
  * already-answered card.
  */
-export function mobileVisibleChatClarifyRequest(
-  status: ChatRunStatus | null | undefined,
+function newestOpenClarify(
   events: readonly ChatRunEvent[],
+  answeredClarifyIds: ReadonlySet<string> | undefined,
 ): ChatClarifyRequest | null {
-  if (status !== "waiting_for_approval") return null;
   const resolvedIds = new Set(events.flatMap((event) => {
     if (event.type !== "status" || event.payload?.clarifyResolved !== true) return [];
     return nonEmptyString(event.payload.clarifyId) ? [event.payload.clarifyId] : [];
   }));
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const clarify = mobileChatClarifyRequestFromEvent(events[index]!);
-    if (clarify && !resolvedIds.has(clarify.id)) return clarify;
+    if (clarify && !resolvedIds.has(clarify.id)) {
+      return answeredClarifyIds?.has(clarify.id) ? null : clarify;
+    }
   }
   return null;
+}
+
+function clarifyIsOpen(clarify: ChatClarifyRequest, now: number) {
+  const expiresAt = Date.parse(clarify.expiresAt);
+  return Number.isFinite(expiresAt) && expiresAt > now;
+}
+
+/**
+ * HPD-961. The plane writes a clarify event and holds its run on
+ * waiting_for_approval in one transaction, and every answer leaves a
+ * clarifyResolved status event. An unresolved, unexpired clarify in a run's
+ * events therefore proves the run waits, whatever status this app last read:
+ * on 27.09.2026 the app had the clarify of run_QZ35NyyprPeEqL but never read
+ * that run's status again once a follow-up was queued behind it, so the chat
+ * said "Waiting for you" and showed no card. Only a run known to be finished
+ * keeps its own status.
+ */
+export function mobileChatRunStatusWithOpenClarify(
+  status: ChatRunStatus | null | undefined,
+  events: readonly ChatRunEvent[],
+  options: MobileClarifyVisibilityOptions = {},
+): ChatRunStatus | null | undefined {
+  if (status === "waiting_for_approval" || isFinishedStatus(status)) return status;
+  const clarify = newestOpenClarify(events, options.answeredClarifyIds);
+  return clarify && clarifyIsOpen(clarify, options.now ?? Date.now()) ? "waiting_for_approval" : status;
+}
+
+export function mobileVisibleChatClarifyRequest(
+  status: ChatRunStatus | null | undefined,
+  events: readonly ChatRunEvent[],
+  options: MobileClarifyVisibilityOptions = {},
+): ChatClarifyRequest | null {
+  if (isFinishedStatus(status)) return null;
+  const clarify = newestOpenClarify(events, options.answeredClarifyIds);
+  if (!clarify) return null;
+  // A run the plane reports waiting keeps its card, which then says the
+  // question expired; a stale or unknown status needs a question still open.
+  if (status === "waiting_for_approval") return clarify;
+  return clarifyIsOpen(clarify, options.now ?? Date.now()) ? clarify : null;
 }
