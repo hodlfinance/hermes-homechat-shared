@@ -105,4 +105,6 @@ test("the surface shows, answers and reads back the waiting run from its events"
   assert.match(submit, /mobileChatRunStatusWithOpenClarify\(/, "answering must accept a run its events prove waiting");
   assert.match(submit, /markClarifyAnswered\(/, "an answered question must leave the screen at once");
   assert.match(surface, /readBackRunsWithOpenClarify/, "a run shown waiting from its events must have its status read back");
+  const readBack = surface.slice(surface.indexOf("const readBackRunsWithOpenClarify"), surface.indexOf("readBackRunsWithOpenClarify();"));
+  assert.match(readBack, /\.catch\(\(\) => \{[\s\S]*readBackOpenClarifyRunIdsRef\.current\.delete\(runId\)/, "a failed readback must be retried later");
 });
