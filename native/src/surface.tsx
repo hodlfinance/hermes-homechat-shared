@@ -8604,22 +8604,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   }
                 />
               ))}
-              {visibleChatApprovalCards.map((card) => (
-                <MobileChatApprovalCard
-                  key={card.id}
-                  card={card}
-                  pending={Boolean(card.runId && confirmationDecisionRuns[card.runId])}
-                  onDecision={(decision, typedConfirmation) => void submitMobileConfirmation(card, decision, typedConfirmation)}
-                />
-              ))}
-              {visibleChatClarifyRequests.map(({ runId, clarify }) => (
-                <MobileChatClarifyCard
-                  key={`${runId}:${clarify.id}`}
-                  clarify={clarify}
-                  pending={Boolean(confirmationDecisionRuns[runId])}
-                  onAnswer={(response) => void submitMobileClarify(runId, clarify, response)}
-                />
-              ))}
               {openDelegatedTask ? (
                 <MobileDelegatedActivityTimeline
                   locale={appLocale}
@@ -8638,6 +8622,27 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   onVisibleTextLayout={recordFirstVisibleMobileToken}
                 />
               ) : null}
+              {/*
+                HPD-961: a question Hermes waits on follows the words it comes
+                after. Drawn before the live answer bubble, the clarify card of
+                a run that had written a long answer sat above it, out of view.
+              */}
+              {visibleChatApprovalCards.map((card) => (
+                <MobileChatApprovalCard
+                  key={card.id}
+                  card={card}
+                  pending={Boolean(card.runId && confirmationDecisionRuns[card.runId])}
+                  onDecision={(decision, typedConfirmation) => void submitMobileConfirmation(card, decision, typedConfirmation)}
+                />
+              ))}
+              {visibleChatClarifyRequests.map(({ runId, clarify }) => (
+                <MobileChatClarifyCard
+                  key={`${runId}:${clarify.id}`}
+                  clarify={clarify}
+                  pending={Boolean(confirmationDecisionRuns[runId])}
+                  onAnswer={(response) => void submitMobileClarify(runId, clarify, response)}
+                />
+              ))}
               {visibleFailedMessage && !pendingAssistantText ? (
                 <FailedMessageNotice
                   text={visibleFailedMessage.content}
