@@ -10,3 +10,13 @@ export type {
 } from "./host";
 export { MobileFinanceActionApprovalCard, mobileFinanceActionApprovalCardView } from "./src/mobile-finance-action-approval";
 export { createNativeR8Transport } from "./transport";
+export {
+  consumePageStarter,
+  openPageStarter,
+  pageStarterAfterNavigation,
+  pageStarterMatches,
+  pageStarterPayload,
+  pageStarterTranscript,
+} from "./ui/page-starter-state";
+export type { PageStarterScope, PageStarterState } from "./ui/page-starter-state";
+export { pageStarterCopy } from "./ui/page-starter-copy";
