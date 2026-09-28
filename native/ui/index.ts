@@ -55,3 +55,15 @@ export function chatTranscriptScrollDecision({
   if (contentHeight <= viewportHeight + 1) return "top";
   return autoFollow ? "bottom" : "preserve";
 }
+
+// Expose the existing page entry state and copy to native and browser hosts.
+export {
+  consumePageStarter,
+  openPageStarter,
+  pageStarterAfterNavigation,
+  pageStarterMatches,
+  pageStarterPayload,
+  pageStarterTranscript,
+} from "./page-starter-state";
+export type { PageStarterScope, PageStarterState } from "./page-starter-state";
+export { pageStarterCopy } from "./page-starter-copy";
