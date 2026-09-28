@@ -262,6 +262,32 @@ export function looksLikeReplyEmail(value: string) {
   return value.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value);
 }
 
+/** Apple "Hide My Email" relay domain; mail from unregistered senders never arrives there. */
+export const APPLE_PRIVATE_RELAY_DOMAIN = "privaterelay.appleid.com";
+
+export function isApplePrivateRelayEmail(value: string) {
+  return value.trim().toLowerCase().endsWith(`@${APPLE_PRIVATE_RELAY_DOMAIN}`);
+}
+
+/**
+ * HPD-838: the host's own email for the reply field when the Hey server has
+ * none (a HODL user's Hermes account only carries a placeholder address).
+ * Only used for reply_email_required; a server email always wins. The value
+ * stays editable and is validated on submit like typed input. An Apple
+ * private relay address is not prefilled: replies may never arrive there.
+ */
+export function supportReplyEmailPrefill(
+  replyChannel: SupportReplyChannel,
+  fallback: string | null | undefined,
+): Readonly<{ value: string; appleRelayHint: boolean }> {
+  if (replyChannel.kind !== "reply_email_required") return { value: "", appleRelayHint: false };
+  const email = typeof fallback === "string" ? fallback.trim() : "";
+  if (!email) return { value: "", appleRelayHint: false };
+  if (isApplePrivateRelayEmail(email)) return { value: "", appleRelayHint: true };
+  if (!looksLikeReplyEmail(email) || supportReplyDisplayIsPlaceholder(email)) return { value: "", appleRelayHint: false };
+  return { value: email, appleRelayHint: false };
+}
+
 /** Blocks common credential shapes before customer text can enter the delivery path. */
 export function supportProblemContainsLikelySecret(value: string) {
   return [

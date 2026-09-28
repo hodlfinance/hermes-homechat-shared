@@ -13,7 +13,7 @@ const effect = surface.slice(
 
 test("the surface takes a homeRequest from its host", () => {
   assert.match(surface, /homeRequest\?: \{ requestId: string \};/);
-  assert.match(surface, /function NativeR8SurfaceBody\(\{ initialDraft = "", navigationRequest, homeRequest, hostVisible = true \}/);
+  assert.match(surface, /function NativeR8SurfaceBody\(\{ initialDraft = "", navigationRequest, homeRequest, hostVisible = true, supportReplyEmailFallback = null \}/);
 });
 
 test("each new request leaves any page, opens Home and jumps to the newest message", () => {

@@ -63,6 +63,7 @@ function renderSignedInForm(): Node[] {
       };
       if (name.includes("support-request")) return {
         UNAVAILABLE_SUPPORT_REQUEST_CLIENT: {},
+        supportReplyEmailPrefill: () => ({ value: "", appleRelayHint: false }),
         supportRequestCopy: () => ({
           title: "Contact support", subtitle: "Support guidance", account: "Hey account",
           sessionSource: "From the signed-in session", verifiedEmail: "Verified reply email",
