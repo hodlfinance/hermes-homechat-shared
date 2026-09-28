@@ -19,6 +19,7 @@ import {
   supportMailCopy,
   supportRequestCopy,
   supportRequestFailureMessage,
+  supportReplyEmailPrefill,
   supportRequestProblemErrorMessage,
   type SupportContextResult,
   type SupportRequestClient,
@@ -80,6 +81,13 @@ export function MobileSupportRequestForm(props: {
   /** mode "mail": the signed-in account shown on the form; null when signed out. */
   mailAccount?: ProductSupportMailAccount | null;
   openMail?: (mailto: string) => Promise<boolean>;
+  /**
+   * HPD-838: the host's own email for the reply field, used only when the
+   * support context has no email (reply_email_required). Prefilled, editable
+   * and validated on submit; a server email always wins. An Apple private
+   * relay address is not prefilled and shows a hint instead.
+   */
+  replyEmailFallback?: string | null;
 }) {
   if (props.mode === "mail") {
     return (
@@ -304,11 +312,13 @@ function HermesSupportRequestForm({
   mode = "signed_in",
   locale = "en",
   onOpenFallback,
+  replyEmailFallback,
 }: {
   client?: SupportRequestClient;
   mode?: "signed_in" | "anonymous";
   locale?: AppLocale;
   onOpenFallback?: (mailto: string) => void | Promise<void>;
+  replyEmailFallback?: string | null;
 }) {
   const copy = supportRequestCopy(locale);
   const requestGeneration = useRef(0);
@@ -320,7 +330,11 @@ function HermesSupportRequestForm({
   const [submitting, setSubmitting] = useState(false);
   const [supportEmailCopied, setSupportEmailCopied] = useState(false);
   const [referenceCopied, setReferenceCopied] = useState(false);
+  const replyEmailEdited = useRef(false);
   const palette = useMobilePalette();
+  const replyPrefill = contextResult?.status === "ready"
+    ? supportReplyEmailPrefill(contextResult.projection.replyChannel, replyEmailFallback)
+    : { value: "", appleRelayHint: false };
 
   const loadContext = useCallback(async () => {
     const generation = ++requestGeneration.current;
@@ -345,11 +359,23 @@ function HermesSupportRequestForm({
   useEffect(() => {
     setProblem("");
     setReplyEmail("");
+    replyEmailEdited.current = false;
     void loadContext();
     return () => {
       requestGeneration.current += 1;
     };
   }, [loadContext]);
+
+  // HPD-838: prefill the host email once the context asks for one, and when
+  // the host email arrives later, unless the customer already typed.
+  useEffect(() => {
+    if (replyPrefill.value && !replyEmailEdited.current) setReplyEmail(replyPrefill.value);
+  }, [replyPrefill.value]);
+
+  function editReplyEmail(value: string) {
+    replyEmailEdited.current = true;
+    setReplyEmail(value);
+  }
 
   function openFallback() {
     const opening = onOpenFallback
@@ -366,7 +392,8 @@ function HermesSupportRequestForm({
   function startNewRequest() {
     setSubmission(null);
     setProblem("");
-    setReplyEmail("");
+    replyEmailEdited.current = false;
+    setReplyEmail(replyPrefill.value);
     setInputError(null);
     setReferenceCopied(false);
   }
@@ -538,15 +565,19 @@ function HermesSupportRequestForm({
               { backgroundColor: palette.userTint, borderColor: replyEmailError ? palette.coral : palette.lineStrong, color: palette.ink },
             ]}
             value={replyEmail}
-            onChangeText={setReplyEmail}
+            onChangeText={editReplyEmail}
             autoCapitalize="none"
             autoComplete="email"
             keyboardType="email-address"
             editable={!submitDisabled}
             accessibilityLabel={copy.replyEmail}
+            accessibilityHint={replyPrefill.appleRelayHint ? copy.appleRelayHint : undefined}
             accessibilityState={{ disabled: submitDisabled }}
             allowFontScaling
           />
+          {replyPrefill.appleRelayHint ? (
+            <Text style={[styles.muted, { color: palette.secondary }]} testID="support-apple-relay-hint" allowFontScaling>{copy.appleRelayHint}</Text>
+          ) : null}
           {replyEmailError ? (
             <Text style={[styles.error, { color: palette.coral }]} accessibilityRole="alert" accessibilityLiveRegion="polite" allowFontScaling>
               {inputError.reason === "reply_email_invalid" ? copy.invalidEmail : copy.requiredEmail}

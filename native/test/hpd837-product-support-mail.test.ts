@@ -36,7 +36,7 @@ test("mail mode renders only the product form: no account row, no reference, no 
 test("the Hermes help screen stays as it is: Hermes form, legal links and temporary support access", () => {
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   const section = surface.slice(surface.indexOf('{visibleSettingsSection === "support" ? ('), surface.indexOf('{visibleSettingsSection === "support" ? (') + 900);
-  assert.match(section, /<MobileSupportRequestForm locale=\{appLocale\} client=\{supportRequestClient\} \/>/);
+  assert.match(section, /<MobileSupportRequestForm locale=\{appLocale\} client=\{supportRequestClient\} replyEmailFallback=\{supportReplyEmailFallback\} \/>/);
   assert.match(section, /<MobileLegalSupportLinks locale=\{appLocale\} \/>/);
   assert.match(section, /<SupportAccessPanel/);
   // Its address stays the Hermes one.

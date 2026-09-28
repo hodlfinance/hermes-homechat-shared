@@ -1584,6 +1584,12 @@ type NativeR8SurfaceProps = {
    * HODL tab, although the surface stays mounted. Defaults to true.
    */
   hostVisible?: boolean;
+  /**
+   * HPD-838: the host's own sign-in email for the Hermes support form. Used
+   * only when the Hey server knows no reply email for this account (a HODL
+   * user's Hermes account carries a placeholder); a server email wins.
+   */
+  supportReplyEmailFallback?: string | null;
 };
 
 function NativeR8Surface(props: NativeR8SurfaceProps = {}) {
@@ -1594,7 +1600,7 @@ function NativeR8Surface(props: NativeR8SurfaceProps = {}) {
   );
 }
 
-function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest, hostVisible = true }: NativeR8SurfaceProps = {}) {
+function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest, hostVisible = true, supportReplyEmailFallback = null }: NativeR8SurfaceProps = {}) {
   const systemColorScheme = useColorScheme();
   const reduceMotion = useReduceMotion();
   const hostAppLocale = host.presentation?.appLocale;
@@ -9211,7 +9217,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 ) : null}
                 {visibleSettingsSection === "support" ? (
                   <View style={styles.systemSurfaceEdgeToEdge}>
-                    <MobileSupportRequestForm locale={appLocale} client={supportRequestClient} />
+                    <MobileSupportRequestForm locale={appLocale} client={supportRequestClient} replyEmailFallback={supportReplyEmailFallback} />
                     <MobileLegalSupportLinks locale={appLocale} />
                     <SupportAccessPanel
                       locale={appLocale}
