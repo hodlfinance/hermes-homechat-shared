@@ -33,6 +33,7 @@ export * from "./ranked-task-automations";
 export * from "./ranked-task-projection";
 export * from "./ranked-task-refresh";
 export * from "./chat-run-activity";
+export * from "./chat-user-decision";
 export * from "./run-activity-verbs";
 export * from "./delegated-activity-timeline";
 export * from "./steady-line";
