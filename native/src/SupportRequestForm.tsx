@@ -19,7 +19,9 @@ import {
   supportMailCopy,
   supportRequestCopy,
   supportRequestFailureMessage,
+  supportReplyEmailBlocksSubmit,
   supportReplyEmailPrefill,
+  supportReplyEmailRelayUser,
   supportRequestProblemErrorMessage,
   type SupportContextResult,
   type SupportRequestClient,
@@ -335,6 +337,9 @@ function HermesSupportRequestForm({
   const replyPrefill = contextResult?.status === "ready"
     ? supportReplyEmailPrefill(contextResult.projection.replyChannel, replyEmailFallback)
     : { value: "", appleRelayHint: false };
+  const relayUser = contextResult?.status === "ready" && mode === "signed_in"
+    ? supportReplyEmailRelayUser(contextResult.projection.replyChannel, replyEmailFallback)
+    : false;
 
   const loadContext = useCallback(async () => {
     const generation = ++requestGeneration.current;
@@ -407,6 +412,7 @@ function HermesSupportRequestForm({
           replyEmail,
           projection: contextResult.projection,
           allowAlternateReplyEmail: contextResult.projection.replyChannel.kind === "verified_product_email",
+          requireNonRelayReplyEmail: relayUser,
         });
     if (!userInput.ok) {
       setInputError(userInput.error);
@@ -515,6 +521,7 @@ function HermesSupportRequestForm({
   }
 
   const submitDisabled = submitting;
+  const sendBlocked = submitDisabled || supportReplyEmailBlocksSubmit(relayUser, replyEmail);
 
   return (
     <MobileSystemSection title={copy.title}>
@@ -548,12 +555,17 @@ function HermesSupportRequestForm({
             keyboardType="email-address"
             editable={!submitDisabled}
             accessibilityLabel={copy.alternateEmail}
-            accessibilityHint={copy.alternateHint}
+            accessibilityHint={relayUser ? copy.appleRelayHint : copy.alternateHint}
             accessibilityState={{ disabled: submitDisabled }}
             allowFontScaling
           />
+          {relayUser ? (
+            <Text style={[styles.muted, { color: palette.secondary }]} testID="support-apple-relay-hint" allowFontScaling>{copy.appleRelayHint}</Text>
+          ) : null}
           {replyEmailError ? (
-            <Text style={[styles.error, { color: palette.coral }]} accessibilityRole="alert" accessibilityLiveRegion="polite" allowFontScaling>{copy.invalidEmail}</Text>
+            <Text style={[styles.error, { color: palette.coral }]} accessibilityRole="alert" accessibilityLiveRegion="polite" allowFontScaling>
+              {supportReplyEmailErrorMessage(inputError.reason, copy)}
+            </Text>
           ) : null}
         </View>
       ) : (
@@ -580,7 +592,7 @@ function HermesSupportRequestForm({
           ) : null}
           {replyEmailError ? (
             <Text style={[styles.error, { color: palette.coral }]} accessibilityRole="alert" accessibilityLiveRegion="polite" allowFontScaling>
-              {inputError.reason === "reply_email_invalid" ? copy.invalidEmail : copy.requiredEmail}
+              {supportReplyEmailErrorMessage(inputError.reason, copy)}
             </Text>
           ) : null}
         </View>
@@ -624,14 +636,14 @@ function HermesSupportRequestForm({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={submitLabel}
-          accessibilityState={{ busy: submitting, disabled: submitDisabled }}
-          disabled={submitDisabled}
+          accessibilityState={{ busy: submitting, disabled: sendBlocked }}
+          disabled={sendBlocked}
           onPress={() => void submit()}
           style={({ pressed }) => [
             styles.primaryButton,
             { backgroundColor: palette.accent },
             pressed && styles.primaryButtonPressed,
-            submitDisabled && styles.primaryButtonDisabled,
+            sendBlocked && styles.primaryButtonDisabled,
           ]}
         >
           {submitting ? <ActivityIndicator color={palette.accentText} /> : null}
@@ -764,3 +776,11 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
 });
+
+function supportReplyEmailErrorMessage(
+  reason: SupportRequestInputError["reason"],
+  copy: ReturnType<typeof supportRequestCopy>,
+) {
+  if (reason === "reply_email_apple_relay") return copy.appleRelayHint;
+  return reason === "reply_email_invalid" ? copy.invalidEmail : copy.requiredEmail;
+}

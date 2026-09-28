@@ -109,7 +109,8 @@ export type SupportRequestInputError = Readonly<{
     | "problem_too_long"
     | "problem_sensitive"
     | "reply_email_required"
-    | "reply_email_invalid";
+    | "reply_email_invalid"
+    | "reply_email_apple_relay";
 }>;
 
 export type BuildSupportRequestInputResult =
@@ -270,6 +271,26 @@ export function isApplePrivateRelayEmail(value: string) {
 }
 
 /**
+ * HPD-838 (decision Justus): a user whose login or server email is an Apple
+ * private relay address must give a normal reply email. True when the host
+ * fallback or the server-provided (masked) email is on the relay domain.
+ */
+export function supportReplyEmailRelayUser(
+  replyChannel: SupportReplyChannel,
+  fallback: string | null | undefined,
+) {
+  if (typeof fallback === "string" && isApplePrivateRelayEmail(fallback)) return true;
+  return replyChannel.kind === "verified_product_email" && isApplePrivateRelayEmail(replyChannel.display);
+}
+
+/** For a relay user the form cannot be sent while the reply field is empty or a relay address. */
+export function supportReplyEmailBlocksSubmit(relayUser: boolean, replyEmail: string) {
+  if (!relayUser) return false;
+  const email = replyEmail.trim();
+  return !email || isApplePrivateRelayEmail(email);
+}
+
+/**
  * HPD-838: the host's own email for the reply field when the Hey server has
  * none (a HODL user's Hermes account only carries a placeholder address).
  * Only used for reply_email_required; a server email always wins. The value
@@ -280,7 +301,8 @@ export function supportReplyEmailPrefill(
   replyChannel: SupportReplyChannel,
   fallback: string | null | undefined,
 ): Readonly<{ value: string; appleRelayHint: boolean }> {
-  if (replyChannel.kind !== "reply_email_required") return { value: "", appleRelayHint: false };
+  const appleRelayHint = supportReplyEmailRelayUser(replyChannel, fallback);
+  if (replyChannel.kind !== "reply_email_required") return { value: "", appleRelayHint };
   const email = typeof fallback === "string" ? fallback.trim() : "";
   if (!email) return { value: "", appleRelayHint: false };
   if (isApplePrivateRelayEmail(email)) return { value: "", appleRelayHint: true };
@@ -302,6 +324,8 @@ export function buildSupportRequestUserInput(input: {
   replyEmail: string;
   projection: SupportSignedInProjection;
   allowAlternateReplyEmail?: boolean;
+  /** HPD-838: relay user; a non-relay reply email is required in every branch. */
+  requireNonRelayReplyEmail?: boolean;
 }): BuildSupportRequestInputResult {
   const problem = input.problem.trim();
   if (!problem) return { ok: false, error: { field: "problem", reason: "problem_required" } };
@@ -313,6 +337,16 @@ export function buildSupportRequestUserInput(input: {
   }
 
   const replyEmail = input.replyEmail.trim().toLowerCase();
+  if (input.requireNonRelayReplyEmail === true) {
+    if (!replyEmail) return { ok: false, error: { field: "replyEmail", reason: "reply_email_required" } };
+    if (isApplePrivateRelayEmail(replyEmail)) {
+      return { ok: false, error: { field: "replyEmail", reason: "reply_email_apple_relay" } };
+    }
+    if (!looksLikeReplyEmail(replyEmail)) {
+      return { ok: false, error: { field: "replyEmail", reason: "reply_email_invalid" } };
+    }
+    return { ok: true, value: { problem, replyEmail } };
+  }
   if (input.projection.replyChannel.kind === "verified_product_email") {
     if (!replyEmail || input.allowAlternateReplyEmail !== true) return { ok: true, value: { problem } };
     if (!looksLikeReplyEmail(replyEmail)) {
