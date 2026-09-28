@@ -78,6 +78,8 @@
     "./native/mobile-notification-target": "./native/src/mobile-notification-target.ts",
     "./native/mobile-session-storage": "./native/src/mobile-session-storage.ts",
     "./native/mobile-automation-card": "./native/src/mobile-automation-card.ts",
+    "./native/automation-thread-navigation": "./native/src/mobile-automation-threads.ts",
+    "./native/fin-suggestions": "./native/src/fin-suggestions-contract.ts",
     "./native/mobile-reduce-motion-store": "./native/src/mobile-reduce-motion-store.ts",
     "./native/hermes-canonical": "./native/src/hermes-canonical.ts",
     "./native/appI18n": "./native/src/appI18n.ts",

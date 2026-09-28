@@ -217,9 +217,10 @@ test("HPD-924: an older read answer that arrives after a newer acknowledgement l
   assert.equal(stale, sessions, "a stale answer changes nothing");
   const current = applyAutomationThreadReadAnswer(sessions, { id: "news", unreadCount: 0 }, { messageId: "m4", acknowledgedMessageId: "m4" });
   assert.deepEqual(current.map((session) => [session.id, session.unreadCount]), [["news", 0], ["report", 4]]);
-  // An answer without a count reads as zero; other threads keep theirs.
-  const absent = applyAutomationThreadReadAnswer([thread("news", { unreadCount: 3 })], { id: "news" }, { messageId: "m4", acknowledgedMessageId: "m4" });
-  assert.equal(absent[0]?.unreadCount, 0);
+  // An answer without the server count cannot establish that unread messages were cleared.
+  const beforeAbsent = [thread("news", { unreadCount: 3 })];
+  const absent = applyAutomationThreadReadAnswer(beforeAbsent, { id: "news" }, { messageId: "m4", acknowledgedMessageId: "m4" });
+  assert.equal(absent, beforeAbsent);
   // The surface asks the helper with the acknowledgement current when the answer lands.
   assert.match(surface, /applyAutomationThreadReadAnswer\(current, updated, \{\s*messageId,\s*acknowledgedMessageId: acknowledgedReadRef\.current\.get\(conversationId\),\s*\}\)/);
 });

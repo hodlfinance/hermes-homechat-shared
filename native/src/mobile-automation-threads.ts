@@ -1,5 +1,17 @@
 import type { AppLocale, ChatMessage, ConversationSession } from "../core/index";
 
+/** Fields the host must preserve from its canonical conversation response. */
+export type AutomationThreadSession = Pick<
+  ConversationSession,
+  "id" | "title" | "role" | "updatedAt" | "createdAt"
+> & Partial<Pick<ConversationSession, "status" | "automationJobId" | "unreadCount" | "lastMessageAt">>;
+
+/** A host may acknowledge only a final message it has rendered in this thread. */
+export type AutomationThreadRenderedMessage = Pick<
+  ChatMessage,
+  "id" | "conversationSessionId" | "optimistic" | "createdAt"
+>;
+
 /**
  * HPD-843. Every automation gets its own thread in the left menu.
  *
@@ -39,18 +51,18 @@ export function automationThreadUnreadBadge(
   return { count, label, accessibilityLabel: `${title}, ${unread}` };
 }
 
-function activityTime(session: ConversationSession) {
+function activityTime(session: AutomationThreadSession) {
   const stamp = session.lastMessageAt ?? session.updatedAt ?? session.createdAt;
   const time = stamp ? Date.parse(stamp) : Number.NaN;
   return Number.isFinite(time) ? time : 0;
 }
 
-export function isAutomationThread(session: ConversationSession | null | undefined): session is ConversationSession {
+export function isAutomationThread<Session extends AutomationThreadSession>(session: Session | null | undefined): session is Session {
   return Boolean(session && session.status === "active" && session.role !== "home" && session.automationJobId);
 }
 
 /** Active automation threads, newest activity first. */
-export function automationThreads(sessions: readonly ConversationSession[]): ConversationSession[] {
+export function automationThreads<Session extends AutomationThreadSession>(sessions: readonly Session[]): Session[] {
   return sessions
     .filter(isAutomationThread)
     .map((session, index) => ({ session, index, time: activityTime(session) }))
@@ -59,10 +71,10 @@ export function automationThreads(sessions: readonly ConversationSession[]): Con
 }
 
 /** The open thread of one automation, or null while its next result will make one. */
-export function automationThreadForJob(
-  sessions: readonly ConversationSession[],
+export function automationThreadForJob<Session extends AutomationThreadSession>(
+  sessions: readonly Session[],
   jobId: string | null | undefined,
-): ConversationSession | null {
+): Session | null {
   if (!jobId) return null;
   return automationThreads(sessions).find((session) => session.automationJobId === jobId) ?? null;
 }
@@ -145,10 +157,10 @@ export function mobileDrawerSections(input: { suggestions: boolean; connectGmail
  * acknowledgement.
  */
 export function automationThreadReadTarget(input: {
-  session: ConversationSession | null | undefined;
+  session: AutomationThreadSession | null | undefined;
   activeConversationId: string | null | undefined;
   inFront: boolean;
-  renderedMessages: readonly Pick<ChatMessage, "id" | "conversationSessionId" | "optimistic" | "createdAt">[];
+  renderedMessages: readonly AutomationThreadRenderedMessage[];
   acknowledgedMessageId: string | null | undefined;
 }): { conversationId: string; messageId: string } | null {
   const { session } = input;
@@ -178,13 +190,15 @@ export function automationThreadReadTarget(input: {
  * one still current may set the count, so an older answer arriving last
  * cannot put back a badge the newer one cleared.
  */
-export function applyAutomationThreadReadAnswer(
-  sessions: ConversationSession[],
-  updated: Pick<ConversationSession, "id" | "unreadCount">,
+export function applyAutomationThreadReadAnswer<Session extends AutomationThreadSession>(
+  sessions: Session[],
+  updated: Pick<AutomationThreadSession, "id" | "unreadCount">,
   acknowledgement: { messageId: string; acknowledgedMessageId: string | null | undefined },
-): ConversationSession[] {
+): Session[] {
   if (acknowledgement.acknowledgedMessageId !== acknowledgement.messageId) return sessions;
+  const count = updated.unreadCount;
+  if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0) return sessions;
   return sessions.map((session) => (
-    session.id === updated.id ? { ...session, unreadCount: updated.unreadCount ?? 0 } : session
+    session.id === updated.id ? { ...session, unreadCount: count } : session
   ));
 }
