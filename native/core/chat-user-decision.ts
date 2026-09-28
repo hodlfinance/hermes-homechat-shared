@@ -43,13 +43,16 @@ export function chatUserDecisionStatusFromEvent(
   return chatClarifyRequestFromEvent(event) ? "waiting_for_approval" : null;
 }
 
-/** Resolve the event's status after a decision delta, including replay on reload. */
-export function chatRunStatusFromEvent(event: ChatRunEvent): ChatRunStatus | null {
+/**
+ * Resolve a decision delta or a status proven by the original gateway event.
+ * Canonical conversion defaults diagnostic statuses to `running`, so callers
+ * must pass the original status instead of trusting the converted payload.
+ */
+export function chatRunStatusFromEvent(event: ChatRunEvent, originalStatus: unknown): ChatRunStatus | null {
   const decision = chatUserDecisionStatusFromEvent(event);
   if (decision) return decision;
   if (event.type !== "status") return null;
-  const status = String(event.payload.status || "running");
-  return isChatRunStatus(status) ? status : null;
+  return typeof originalStatus === "string" && isChatRunStatus(originalStatus) ? originalStatus : null;
 }
 
 function isChatRunStatus(value: string): value is ChatRunStatus {

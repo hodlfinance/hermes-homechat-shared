@@ -23,7 +23,7 @@ function question(runId: string, id: string): ChatRunEvent {
 
 test("the shared public core reveals a clarify before the next status poll", () => {
   const delta = question("run-a", "clarify-a");
-  assert.equal(chatRunStatusFromEvent(delta), "waiting_for_approval");
+  assert.equal(chatRunStatusFromEvent(delta, undefined), "waiting_for_approval");
   assert.equal(chatRunStatusWithOpenClarify("running", [delta], { now }), "waiting_for_approval");
   assert.deepEqual(visibleChatClarifyRequests(
     { "run-a": "running", "run-b": "completed" },
@@ -36,7 +36,9 @@ test("resolution removes only the answered run's card after replay", () => {
   const resolved = event("run-a", "resolved", "status", {
     status: "running", clarifyId: "clarify-a", clarifyResolved: true,
   });
-  assert.equal(chatRunStatusFromEvent(resolved), "running");
+  assert.equal(chatRunStatusFromEvent(resolved, "running"), "running");
+  assert.equal(chatRunStatusFromEvent(resolved, "activity_detail"), null);
+  assert.equal(chatRunStatusFromEvent(resolved, undefined), null);
   assert.deepEqual(visibleChatClarifyRequests(
     { "run-a": "waiting_for_approval", "run-b": "waiting_for_approval" },
     { "run-a": [question("run-a", "clarify-a"), resolved], "run-b": [question("run-b", "clarify-b")] },
