@@ -196,7 +196,9 @@ export function applyAutomationThreadReadAnswer<Session extends AutomationThread
   acknowledgement: { messageId: string; acknowledgedMessageId: string | null | undefined },
 ): Session[] {
   if (acknowledgement.acknowledgedMessageId !== acknowledgement.messageId) return sessions;
+  const count = updated.unreadCount;
+  if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0) return sessions;
   return sessions.map((session) => (
-    session.id === updated.id ? { ...session, unreadCount: updated.unreadCount ?? 0 } : session
+    session.id === updated.id ? { ...session, unreadCount: count } : session
   ));
 }

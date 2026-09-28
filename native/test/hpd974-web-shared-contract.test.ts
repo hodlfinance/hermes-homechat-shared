@@ -72,6 +72,10 @@ test("Web read acknowledgement requires the visible rendered message and ignores
   });
   assert.equal(current[0]?.unreadCount, 0);
   assert.equal(current[0]?.surfaceOrigin, "finhermes");
+  assert.equal(applyAutomationThreadReadAnswer(current, { id: thread.id }, {
+    messageId: second.id,
+    acknowledgedMessageId: second.id,
+  }), current, "an answer without the server count cannot clear a badge");
   assert.equal(applyAutomationThreadReadAnswer(current, { id: thread.id, unreadCount: 2 }, {
     messageId: first.id,
     acknowledgedMessageId: second.id,
