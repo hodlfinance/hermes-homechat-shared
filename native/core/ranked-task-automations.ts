@@ -47,7 +47,7 @@ export interface ManagedAutomationEditableSnapshot {
  * attention and tells them nothing.
  */
 const scannerDefaultSnapshot = freezeSnapshot({
-  name: "Ranked Tasks email scanner",
+  name: "E-Mail-Scanner",
   schedule: "0 8,17 * * *",
   prompt: [
     "Triage the customer's new email in this order. The order is the point: no step is taken before the one above it.",
@@ -100,7 +100,7 @@ const scannerDefaultSnapshot = freezeSnapshot({
  * providers, and an instruction that names one of them makes the others invisible.
  */
 const rankerDefaultSnapshot = freezeSnapshot({
-  name: "Ranked Tasks ranker",
+  name: "Tasks Ranker",
   schedule: "15 8,17 * * *",
   prompt: [
     "Rank the customer's normal Kanban cards using this automation's configured sources and tools. Never create a Ranked-only task or a second task source.",
@@ -213,6 +213,37 @@ export const rankedTaskAutomationTemplates = Object.freeze({
     defaultSnapshot: rankerDefaultSnapshot,
   }),
 }) satisfies Readonly<Record<string, RankedTaskAutomationTemplateContract>>;
+
+/**
+ * HPD-1012 (Justus, 2026-09-30): the two standard automations were called
+ * "Ranked Tasks email scanner" and "Ranked Tasks ranker"; they are now
+ * "E-Mail-Scanner" and "Tasks Ranker", in Hey and in Fin. Same change as
+ * hey-hermes packages/core/src/ranked-task-automations.ts (PR #1429).
+ *
+ * A record or job written before the rename still carries the old default and
+ * reads under the new name. Only the exact old default is mapped; a name the
+ * customer chose is never touched.
+ */
+export const legacyRankedTaskAutomationNames: Readonly<Record<RankedTaskAutomationRole, string>> = Object.freeze({
+  email_scanner: "Ranked Tasks email scanner",
+  ranker: "Ranked Tasks ranker",
+});
+
+const currentNameForLegacyDefault: ReadonlyMap<string, string> = new Map([
+  [legacyRankedTaskAutomationNames.email_scanner, scannerDefaultSnapshot.name],
+  [legacyRankedTaskAutomationNames.ranker, rankerDefaultSnapshot.name],
+]);
+
+export function currentRankedTaskAutomationName(name: string): string {
+  return currentNameForLegacyDefault.get(name) ?? name;
+}
+
+export function withCurrentRankedTaskAutomationName(
+  snapshot: ManagedAutomationEditableSnapshot,
+): ManagedAutomationEditableSnapshot {
+  const name = currentRankedTaskAutomationName(snapshot.name);
+  return name === snapshot.name ? snapshot : freezeSnapshot({ ...snapshot, name });
+}
 
 export interface RankedTaskAutomationMetadata {
   readonly templateId: string;
@@ -510,9 +541,9 @@ export function applyRankedTaskAutomationUpdate(
  */
 export const rankedTaskAutomationLabels = Object.freeze({
   title: "Ranked Tasks automations",
-  description: "The email scanner and ranker are separate editable Hermes automations.",
-  scanner: "Email scanner",
-  ranker: "Ranker",
+  description: "E-Mail-Scanner and Tasks Ranker are separate editable Hermes automations.",
+  scanner: "E-Mail-Scanner",
+  ranker: "Tasks Ranker",
   enabled: "Enabled",
   paused: "Paused",
   edit: "Edit",
