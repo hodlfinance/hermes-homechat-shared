@@ -110,6 +110,7 @@ import {
 } from "lucide-react-native";
 import { accountPageCopy, chatRouteAutomationFollowState, heyChatRouteChoices, heyOfferedChatRoutes, personalAccessPresentation } from "../core/index";
 import { createMobileLiveVoiceController, liveVoiceActive, liveVoiceCopy, liveVoiceStartVisible, type NativeLiveVoiceState } from "./mobile-live-voice";
+import { MobileLiveVoiceBar } from "./mobile-live-voice-bar";
 import type {
   AlphaAccount,
   ApprovalCard,
@@ -8447,16 +8448,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
               />
             ) : null}
             <View style={styles.chatNoticeStack}>
-              {liveVoiceState.phase !== "idle" ? (
-                <View style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8, gap: 12 }} accessibilityLiveRegion="polite">
-                  <Text style={{ flex: 1, color: liveVoiceState.phase === "error" ? palette.coral : palette.secondary }}>{liveVoiceText.status}</Text>
-                  {liveVoiceConnected ? (
-                    <Pressable onPress={() => void liveVoiceController.end()} accessibilityRole="button" accessibilityLabel={liveVoiceText.end} testID="live-voice-end" hitSlop={10}>
-                      <Text style={{ color: palette.coral, fontWeight: "600" }}>{liveVoiceText.end}</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              ) : null}
               {error ? <Notice locale={appLocale} tone="error" text={error} onDismiss={dismissAppError} /> : null}
               {visibleSessionNotice ? <Notice locale={appLocale} tone="info" text={visibleSessionNotice} onDismiss={dismissSessionNotice} /> : null}
               {secureSecretEntryReceipt?.conversationSessionId === activeConversationSessionId ? (
@@ -8742,6 +8733,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             ))}
             </ScrollView> : null}
             <View style={styles.chatComposerDock}>
+              {liveVoiceConnected ? (
+                <MobileLiveVoiceBar brand={<LogoMark />} phase={liveVoiceState.phase}
+                  statusLabel={liveVoiceText.status} endLabel={liveVoiceText.end} reduceMotion={reduceMotion}
+                  onEnd={() => void liveVoiceController.end()} />
+              ) : null}
+              {liveVoiceState.phase === "error" ? (
+                <Text style={styles.voiceFailureText} accessibilityRole="alert">{liveVoiceText.status}</Text>
+              ) : null}
               {copyNotice ? <Text style={styles.copyNotice}>{staticUiMessage(appLocale, copyNotice)}</Text> : null}
               {attachmentNotice ? <Text style={styles.attachmentNotice} accessibilityRole="alert">{staticUiMessage(appLocale, attachmentNotice)}</Text> : null}
               {pendingAttachments.length ? (
