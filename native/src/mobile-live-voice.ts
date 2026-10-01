@@ -37,7 +37,7 @@ export function createMobileLiveVoiceController(port: NativeLiveVoicePort | unde
       // A cancelled handshake can still return a handle. Keep ownership until
       // that handle and its cleanup have finished, before permitting Start.
       await current.opening;
-      await current.handle?.end().catch(() => undefined);
+      await current.handle?.end().catch(() => { current.terminal = { phase: "error" }; });
       current.handle = null;
       if (operation === current) { operation = null; publish(current.terminal); }
     })();
