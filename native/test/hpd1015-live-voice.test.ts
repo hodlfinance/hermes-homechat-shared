@@ -21,13 +21,76 @@ test("double Start and End during handshake close the late connection once", asy
   const input = { token: "test-session", conversationId: "home", onConversationChanged() { changed++; } };
   const opening = controller.start(input);
   await controller.start(input);
-  await controller.end();
+  const ending = controller.end();
   assert.equal(operation.signal.aborted, true);
+  assert.equal(controller.state().phase, "ending");
+  await controller.start(input);
   operation.onState({ phase: "speaking" }); operation.onConversationChanged();
   resolve({ async end() { ended++; } });
-  await opening;
+  await Promise.all([opening, ending]);
   assert.equal(starts, 1); assert.equal(ended, 1); assert.equal(changed, 0);
   assert.equal(controller.state().phase, "idle");
+});
+
+const deferred = () => {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => { resolve = done; });
+  return { promise, resolve };
+};
+
+test("delayed handle cleanup blocks another Start and stale callbacks cannot change a later session", async () => {
+  const cleanup = deferred();
+  let starts = 0, openHandles = 0, maximumOpen = 0, ends = 0;
+  const callbacks: Parameters<NativeLiveVoicePort["start"]>[0][] = [];
+  const controller = createMobileLiveVoiceController({ async start(input) {
+    callbacks.push(input); starts++; openHandles++; maximumOpen = Math.max(maximumOpen, openHandles);
+    const first = starts === 1;
+    return { async end() { ends++; if (first) await cleanup.promise; openHandles--; } };
+  } });
+  const input = { token: "session", conversationId: "home", onConversationChanged() {} };
+  await controller.start(input);
+  const ending = controller.end();
+  const repeatedEnd = controller.end();
+  await controller.start(input);
+  assert.equal(starts, 1); assert.equal(openHandles, 1);
+  assert.equal(liveVoiceStartVisible("", true, controller.state().phase), false);
+  callbacks[0]!.onState({ phase: "listening" });
+  assert.equal(controller.state().phase, "ending");
+  cleanup.resolve(); await Promise.all([ending, repeatedEnd]);
+  await controller.start(input);
+  callbacks[1]!.onState({ phase: "speaking" }); callbacks[0]!.onState({ phase: "idle" });
+  assert.equal(controller.state().phase, "speaking");
+  assert.equal(maximumOpen, 1); assert.equal(ends, 1);
+  await controller.end();
+  assert.equal(openHandles, 0); assert.equal(ends, 2);
+});
+
+test("terminal callback during handshake retains ownership through late handle cleanup", async () => {
+  const ready = deferred(), cleanup = deferred();
+  let starts = 0, ends = 0;
+  let first!: Parameters<NativeLiveVoicePort["start"]>[0];
+  const controller = createMobileLiveVoiceController({ async start(input) {
+    starts++;
+    if (starts === 1) {
+      first = input; input.onState({ phase: "error" }); await ready.promise;
+      return { async end() { ends++; await cleanup.promise; } };
+    }
+    return { async end() { ends++; } };
+  } });
+  const input = { token: "session", conversationId: "home", onConversationChanged() {} };
+  const opening = controller.start(input);
+  await Promise.resolve();
+  assert.equal(controller.state().phase, "ending");
+  await controller.start(input); assert.equal(starts, 1);
+  ready.resolve(); await ready.promise; await Promise.resolve();
+  await controller.start(input); assert.equal(starts, 1);
+  cleanup.resolve(); await opening;
+  assert.equal(controller.state().phase, "error"); assert.equal(ends, 1);
+  await controller.start(input);
+  first.onState({ phase: "error" });
+  assert.equal(controller.state().phase, "listening");
+  assert.equal(starts, 2);
+  await controller.end();
 });
 
 test("provider failure releases the failed start; a later account can start", async () => {
