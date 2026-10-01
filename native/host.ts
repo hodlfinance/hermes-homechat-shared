@@ -8,6 +8,7 @@ import type { MobilePurchasesController } from "./src/revenuecat-purchases";
 import type { NativeSessionSecureStore } from "./src/mobile-session-storage";
 import type { MobilePalette } from "./src/mobile-palette";
 import type { MobileFinanceCitation } from "./src/mobile-finance-artifacts";
+import type { NativeLiveVoicePort } from "./src/mobile-live-voice";
 
 export type NativeAudioStatus = {
   playing: boolean; didJustFinish: boolean; isBuffering: boolean; currentTime: number;
@@ -154,6 +155,8 @@ export type NativeR8Transport = {
   }): Promise<unknown | null>;
 };
 export type NativeR8Host = {
+  /** HPD-1015: opt-in live voice supplied by the owning product host. */
+  liveVoice?: NativeLiveVoicePort;
   apiBaseUrl: string;
   storageNamespace: string;
   identity: {
