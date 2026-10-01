@@ -10,6 +10,7 @@ export type {
 } from "./host";
 export { MobileFinanceActionApprovalCard, mobileFinanceActionApprovalCardView } from "./src/mobile-finance-action-approval";
 export { createNativeR8Transport } from "./transport";
+export type { NativeLiveVoicePort, NativeLiveVoiceHandle, NativeLiveVoiceState, NativeLiveVoicePhase } from "./src/mobile-live-voice";
 export {
   consumePageStarter,
   openPageStarter,

@@ -95,6 +95,7 @@ import {
   Menu,
   MessageSquare,
   Mic,
+  AudioLines,
   Plus,
   PlugZap,
   RefreshCcw,
@@ -108,6 +109,7 @@ import {
   UserPlus,
 } from "lucide-react-native";
 import { accountPageCopy, chatRouteAutomationFollowState, heyChatRouteChoices, heyOfferedChatRoutes, personalAccessPresentation } from "../core/index";
+import { createMobileLiveVoiceController, liveVoiceActive, liveVoiceCopy, liveVoiceStartVisible, type NativeLiveVoiceState } from "./mobile-live-voice";
 import type {
   AlphaAccount,
   ApprovalCard,
@@ -1915,6 +1917,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     phase: "idle",
   });
   const [voiceNoteDraft, setVoiceNoteDraft] = useState<MobileVoiceNoteState>(initialMobileVoiceNoteState);
+  const liveVoiceController = useMemo(() => createMobileLiveVoiceController(host.liveVoice), []);
+  const [liveVoiceState, setLiveVoiceState] = useState<NativeLiveVoiceState>({ phase: "idle" });
+  const liveVoiceConnected = liveVoiceActive(liveVoiceState.phase);
+  const liveVoiceText = liveVoiceCopy(appLocale, liveVoiceState.phase);
+  useEffect(() => liveVoiceController.subscribe(setLiveVoiceState), [liveVoiceController]);
+  useEffect(() => {
+    void liveVoiceController.end();
+  }, [activeConversationSessionId, token, tab, hostVisible, liveVoiceController]);
+  useEffect(() => () => { void liveVoiceController.end(); }, [liveVoiceController]);
   const [readAloudState, setReadAloudState] = useState<MobileReadAloudState>(initialMobileReadAloudState);
   const [diagnosticLog, setDiagnosticLog] = useState<MobileLogEntry[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -2448,6 +2459,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // closed. Opening the menu or refreshing its list never marks anything read.
   // The plane owns the cursor; its answer carries the thread's new count.
   const [appInFront, setAppInFront] = useState(AppState.currentState === "active");
+  useEffect(() => { if (!appInFront) void liveVoiceController.end(); }, [appInFront, liveVoiceController]);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => setAppInFront(state === "active"));
     return () => subscription.remove();
@@ -2597,6 +2609,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }, [recordDiagnostic]);
 
   const logout = useCallback(async (notice?: string) => {
+    void liveVoiceController.end();
     refreshGenerationRef.current += 1;
     voiceOperationGenerationRef.current += 1;
     readAloudStorageGenerationRef.current += 1;
@@ -2716,7 +2729,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     setDismissedAppErrorKey(null);
     setDismissedSessionNoticeKey(null);
     setAppError(notice || null);
-  }, [commitReadAloudState, commitVoiceNoteDraft, homeChatRefreshSingleFlight, queuedFollowUpOwner, recordDiagnostic, selectActiveConversationSession, setAppError, setSessionNotice, stopReadAloud, token, voiceNoteController, voiceRecorder]);
+  }, [commitReadAloudState, commitVoiceNoteDraft, homeChatRefreshSingleFlight, queuedFollowUpOwner, recordDiagnostic, selectActiveConversationSession, setAppError, setSessionNotice, stopReadAloud, token, voiceNoteController, voiceRecorder, liveVoiceController]);
 
   const refresh = useCallback((afterCurrent = false) => {
     if (!token) return Promise.resolve();
@@ -7278,6 +7291,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }
 
   async function startVoiceNote() {
+    if (liveVoiceActive(liveVoiceController.state().phase)) return;
     if (voiceControllerBusy || voiceRecordingActive || voiceNoteDraftRef.current.phase !== "idle") return;
     // The button that leads here is disabled by the same decision, so this is
     // the last line of defence and never what the customer runs into.
@@ -8029,12 +8043,28 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       runStatus: queued.runId ? chatRunStatusesById[queued.runId] ?? null : null,
     }),
   );
-  const voiceButtonDisabled = mobileVoiceButtonDisabled({
+  const voiceButtonDisabled = liveVoiceConnected || mobileVoiceButtonDisabled({
     activeRunId: activeChatRunId,
     busy,
     composerVoiceButtonDisabled: composerController.view.voiceButtonDisabled,
     voiceRecordingActive,
   });
+  const liveVoiceStartButton = liveVoiceStartVisible(input, Boolean(host.liveVoice), liveVoiceState.phase) && !voiceRecordingActive && voiceNoteDraft.phase === "idle" ? (
+    <Pressable
+      style={[styles.composerIconButton, (!chatConfigured || voiceBusy || attachmentBusy) && styles.disabledButton]}
+      disabled={!chatConfigured || voiceBusy || attachmentBusy || !activeConversationSessionId}
+      onPress={() => {
+        if (!token || !activeConversationSessionId) return;
+        stopReadAloud();
+        void liveVoiceController.start({ token, conversationId: activeConversationSessionId,
+          onConversationChanged: () => { void refresh(true); },
+        });
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={liveVoiceText.start}
+      testID="live-voice-start"
+    ><AudioLines size={19} color={palette.ink} /></Pressable>
+  ) : null;
   // HPD-440: a pending line is only true while a run is actually being watched.
   // It is set by whichever session owns the live presentation and cleared by the
   // same owner, so a session that loses ownership mid-run leaves its line
@@ -8417,6 +8447,16 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
               />
             ) : null}
             <View style={styles.chatNoticeStack}>
+              {liveVoiceState.phase !== "idle" ? (
+                <View style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8, gap: 12 }} accessibilityLiveRegion="polite">
+                  <Text style={{ flex: 1, color: liveVoiceState.phase === "error" ? palette.coral : palette.secondary }}>{liveVoiceText.status}</Text>
+                  {liveVoiceConnected ? (
+                    <Pressable onPress={() => void liveVoiceController.end()} accessibilityRole="button" accessibilityLabel={liveVoiceText.end} testID="live-voice-end" hitSlop={10}>
+                      <Text style={{ color: palette.coral, fontWeight: "600" }}>{liveVoiceText.end}</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
               {error ? <Notice locale={appLocale} tone="error" text={error} onDismiss={dismissAppError} /> : null}
               {visibleSessionNotice ? <Notice locale={appLocale} tone="info" text={visibleSessionNotice} onDismiss={dismissSessionNotice} /> : null}
               {secureSecretEntryReceipt?.conversationSessionId === activeConversationSessionId ? (
@@ -8782,6 +8822,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                       : <Mic size={18} color={palette.ink} />}
                   </Pressable>
                 ) : null}
+                {attachmentVoiceComposer.showVoiceButton && pendingAttachments.length && composerActions.stopAction !== "read_aloud" ? liveVoiceStartButton : null}
                 {voiceRecordingActive ? (
                   <Pressable
                     style={styles.sendButton}
@@ -8864,6 +8905,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                           : <Mic size={18} color={palette.ink} />}
                       </Pressable>
                     )}
+                    {!input.trim() && !attachmentVoiceComposer.showAttachmentSend ? liveVoiceStartButton : null}
                   </>
                 )}
               </View>
