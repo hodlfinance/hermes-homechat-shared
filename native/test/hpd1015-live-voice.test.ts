@@ -93,6 +93,35 @@ test("terminal callback during handshake retains ownership through late handle c
   await controller.end();
 });
 
+test("unconfirmed End stays visible without a replay; only a deliberate Start opens another session", async () => {
+  let rejectClose!: (reason: Error) => void;
+  const cleanup = new Promise<void>((_resolve, reject) => { rejectClose = reject; });
+  let starts = 0, ends = 0, changed = 0;
+  const callbacks: Parameters<NativeLiveVoicePort["start"]>[0][] = [];
+  const phases: string[] = [];
+  const controller = createMobileLiveVoiceController({ async start(input) {
+    callbacks.push(input); const first = ++starts === 1;
+    return { async end() { ends++; if (first) await cleanup; } };
+  } });
+  controller.subscribe(next => phases.push(next.phase));
+  const input = { token: "session", conversationId: "home", onConversationChanged() { changed++; } };
+  await controller.start(input);
+  const ending = controller.end(), repeatedEnd = controller.end();
+  assert.equal(controller.state().phase, "ending");
+  await controller.start(input); assert.equal(starts, 1);
+  rejectClose(new Error("Provider detail must not appear in presentation."));
+  await Promise.all([ending, repeatedEnd]);
+  assert.deepEqual(controller.state(), { phase: "error" });
+  assert.equal(phases.at(-1), "error");
+  await controller.end(); assert.equal(controller.state().phase, "error");
+  assert.equal(starts, 1); assert.equal(ends, 1);
+  await controller.start(input);
+  callbacks[0]!.onState({ phase: "idle" }); callbacks[0]!.onConversationChanged();
+  assert.equal(controller.state().phase, "listening");
+  assert.equal(starts, 2); assert.equal(changed, 0);
+  await controller.end(); assert.equal(ends, 2);
+});
+
 test("provider failure releases the failed start; a later account can start", async () => {
   let fail = true;
   const tokens: string[] = [];
