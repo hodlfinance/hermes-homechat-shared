@@ -1,6 +1,7 @@
 import { HEY_LEGAL_LINKS } from "../core/index";
 import type { AppLocale, EntitlementStatus, WorkspaceRuntimeAccess } from "../core/index";
 import type { MobilePurchasePlan } from "./revenuecat-purchases";
+import { hasValidMobileProductAccess } from "./mobile-product-access";
 
 export const IOS_APP_STORE_SUBSCRIPTIONS_URL = "https://apps.apple.com/account/subscriptions";
 
@@ -333,8 +334,8 @@ export function shouldShowIosPaywallOnboarding(input: {
   entitlementStatus: EntitlementStatus;
   runtimeAccess: WorkspaceRuntimeAccess;
 }) {
-  if (input.comped || input.runtimeAccess === "enabled") return false;
-  return !["active", "trialing", "grace_period"].includes(input.entitlementStatus);
+  // Runtime access defaults to enabled even for accounts that have never bought.
+  return !hasValidMobileProductAccess({ status: input.entitlementStatus, comped: input.comped });
 }
 
 /** What the Store itself is doing, so the price line never claims progress that stopped. */

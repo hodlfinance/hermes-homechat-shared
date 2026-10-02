@@ -30,6 +30,19 @@ export function isMobileAccountFullyReady(
   );
 }
 
+export function mobileProductAccessScreen(input: {
+  standalone: boolean;
+  ios: boolean;
+  showPaywallOnboarding: boolean;
+  snapshot: Pick<AppSnapshot, "me" | "workspace" | "entitlement">;
+  status: WorkspaceStatusTruthView | null;
+}): "purchase" | "preparing" | "home" {
+  if (!input.standalone) return "home";
+  // Buying access must remain possible before the private runtime is ready.
+  if (input.ios && input.showPaywallOnboarding) return "purchase";
+  return isMobileAccountFullyReady(input.snapshot, input.status) ? "home" : "preparing";
+}
+
 /**
  * HPD-823: which copy the pending-access modal shows. "capacity" only while
  * the status truth carries `server.capacityRefusal`; otherwise the unchanged
