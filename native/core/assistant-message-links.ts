@@ -10,6 +10,8 @@ const fencedCodePattern = /(```[\s\S]*?```)/g;
 const boldRunPattern = /(\*\*(?!\s)(?:[^*]|\*(?!\*))+(?<!\s)\*\*)/g;
 const wholeBoldRunPattern = /^\*\*(?!\s)(?:[^*]|\*(?!\*))+(?<!\s)\*\*$/;
 const inlineCodePattern = /(`[^`\n]*`)/g;
+// An exact private Browser handoff is an app action, even when Hermes formats it as code.
+const singleBrowserHandoffCodePattern = /^`(\/api\/workspace\/preview\/4321\/browser\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})`$/;
 const htmlAnchorPattern = /<a\b[^>]*\bhref=(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/gi;
 const preserveMarkdownLinkPattern =
   /(!?\[[^\]\n]+\]\([^)]+\)|!?\[[^\]\n]+\](?:\[[^\]\n]*\])?|<https?:\/\/[^>\s]+>|<www\.[^>\s]+>)/g;
@@ -129,7 +131,11 @@ function preserveCode(markdown: string, transform: (text: string) => string) {
       if (fencedPart.startsWith("```")) return fencedPart;
       return fencedPart
         .split(inlineCodePattern)
-        .map((part) => (part.startsWith("`") && part.endsWith("`") ? part : transform(part)))
+        .map((part) => {
+          if (!part.startsWith("`") || !part.endsWith("`")) return transform(part);
+          const href = singleBrowserHandoffCodePattern.exec(part)?.[1];
+          return href ? `[${href}](${href})` : part;
+        })
         .join("");
     })
     .join("");
