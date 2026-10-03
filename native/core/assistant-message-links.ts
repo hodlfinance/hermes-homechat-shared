@@ -22,6 +22,11 @@ const referenceDefinitionPattern = /^\s*\[([^\]\n]+)\]:\s+(\S+)(?:\s+.*)?$/;
 const bareAssistantLinkPattern =
   /(?:https?:\/\/[^\s<>"'`]+|www\.[^\s<>"'`]+|\/(?:api|app|pages|pricing|support|contact|about|privacy|terms)(?:[/?#][^\s<>"'`]*)?)/g;
 
+// Native classifies code before its link renderer; normalize only this app action first.
+export function normalizeAssistantBrowserHandoffMarkdown(markdown: string) {
+  return preserveCode(markdown, (text) => text);
+}
+
 export function normalizeAssistantMarkdownLinks(markdown: string) {
   return preserveCode(markdown, (text) =>
     text

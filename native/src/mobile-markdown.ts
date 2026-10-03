@@ -1,3 +1,5 @@
+import { normalizeAssistantBrowserHandoffMarkdown } from "../core/assistant-message-links";
+
 export type MobileMarkdownInlineSegment = {
   kind: "plain" | "bold" | "italic" | "inline_code";
   text: string;
@@ -171,6 +173,7 @@ function tableBlockAt(lines: string[], start: number) {
 }
 
 export function mobileMarkdownBlocks(text: string): MobileMarkdownBlock[] {
+  text = normalizeAssistantBrowserHandoffMarkdown(text);
   const blocks: MobileMarkdownBlock[] = [];
   const fence = /^```([^\n`]*)\n([\s\S]*?)\n?```[ \t]*$/gm;
   let cursor = 0;
