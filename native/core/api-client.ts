@@ -181,6 +181,11 @@ export interface ApiClientOptions {
 }
 
 /** A non-2xx API response whose stable code survives the transport boundary. */
+export const nativeAuthSessionTimeoutMs = 30_000;
+export const nativeAuthSessionTimeoutCode = "native_auth_session_timeout";
+export const nativeAuthSessionTimeoutMessage =
+  "Hey Hermes did not answer in time, so sign-in did not finish. Nothing was changed. Try again.";
+
 export class ApiError extends Error {
   readonly name = "ApiError";
 
@@ -497,6 +502,28 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     return (await res.json()) as T;
   }
 
+  async function requestWithDeadline<T>(path: string, init: RequestInit, timeoutMs: number): Promise<T> {
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        controller?.abort();
+        reject(new ApiError(nativeAuthSessionTimeoutMessage, 0, nativeAuthSessionTimeoutCode));
+      }, timeoutMs);
+    });
+    try {
+      // The race also covers a fetch implementation that ignores the signal.
+      return await Promise.race([request<T>(path, { ...init, signal: controller?.signal }), deadline]);
+    } catch (error) {
+      if (controller?.signal.aborted) {
+        throw new ApiError(nativeAuthSessionTimeoutMessage, 0, nativeAuthSessionTimeoutCode);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   function errorMessageFromResponseBody(body: string, status: number, statusText: string) {
     const fallback = `Request failed with ${status}${statusText ? ` ${statusText}` : ""}`;
     const text = body.trim();
@@ -581,8 +608,14 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
         method: "POST",
         body: JSON.stringify(body),
       }),
-    nativeAuthSession: (body: HeyNativeAuthSessionRequest) =>
-      request<HeyNativeAuthSession>("/auth/native/session", { method: "POST", body: JSON.stringify(body) }),
+    // HPD-1042: the last step of a native sign-in must end. Without a deadline a
+    // stalled request kept the sign-in buttons busy with no message.
+    nativeAuthSession: (body: HeyNativeAuthSessionRequest, options: { timeoutMs?: number } = {}) =>
+      requestWithDeadline<HeyNativeAuthSession>(
+        "/auth/native/session",
+        { method: "POST", body: JSON.stringify(body) },
+        options.timeoutMs ?? nativeAuthSessionTimeoutMs,
+      ),
     redeemInvite: (body: RedeemAccountInviteRequest) =>
       request<RedeemAccountInviteResponse>("/invites/redeem", { method: "POST", body: JSON.stringify(body) }),
     completePasswordReset: (body: CompletePasswordResetRequest) =>
