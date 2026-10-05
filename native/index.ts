@@ -10,7 +10,10 @@ export type {
 } from "./host";
 export { MobileFinanceActionApprovalCard, mobileFinanceActionApprovalCardView } from "./src/mobile-finance-action-approval";
 export { createNativeR8Transport } from "./transport";
-export type { NativeLiveVoicePort, NativeLiveVoiceHandle, NativeLiveVoiceState, NativeLiveVoicePhase } from "./src/mobile-live-voice";
+export type { NativeLiveVoicePort, NativeLiveVoiceHandle, NativeLiveVoiceState, NativeLiveVoicePhase, NativeLiveVoiceLimit } from "./src/mobile-live-voice";
+// HPD-1041: the Expo-free live voice client and WebRTC adapter (host injects react-native-webrtc).
+export { createLiveVoicePort, createWebRtcLiveVoicePlatform, startLiveVoice, createLiveVoiceLink, LiveVoiceStartError } from "./src/live-voice-client";
+export type { LiveVoiceBinding, LiveVoicePlatform, LiveVoiceConnection, LiveVoiceWebRtcModules } from "./src/live-voice-client";
 export {
   consumePageStarter,
   openPageStarter,

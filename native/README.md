@@ -57,3 +57,16 @@ installed by each native host. They are not root package peers: even optional
 React Native peers make npm include mobile SDK dependencies in server-only
 workspace production/audit graphs. Core and server policy consumers must not
 acquire the native SDK through this package.
+
+## Live voice (HPD-1015, HPD-1041)
+
+`host.liveVoice` is optional. `native/live-voice` (also exported from
+`native`) provides the Expo-free client: `createLiveVoicePort({ baseUrl,
+fetchImpl, platform, binding })` with `createWebRtcLiveVoicePlatform(modules)`.
+The host injects react-native-webrtc, its microphone permission request, a
+UUIDv4 source and optional audio-route steps; this package imports none of
+them. HODL uses the binding `{ surface: "finhermes", channel: "hodl_mobile" }`
+through its BFF; `native/policy` permits only `POST /voice/realtime/calls` and
+`GET`/`DELETE /voice/realtime/calls/<uuidv4>`. The Plane owns the provider
+call, the delegated Hermes runs and the voice time limit; the client shows
+`endedReason` (`call_limit`, `daily_limit`) as a notice under the composer.

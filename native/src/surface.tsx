@@ -109,7 +109,7 @@ import {
   UserPlus,
 } from "lucide-react-native";
 import { accountPageCopy, chatRouteAutomationFollowState, heyChatRouteChoices, heyOfferedChatRoutes, personalAccessPresentation } from "../core/index";
-import { createMobileLiveVoiceController, liveVoiceActive, liveVoiceCopy, liveVoiceStartVisible, type NativeLiveVoiceState } from "./mobile-live-voice";
+import { createMobileLiveVoiceController, liveVoiceActive, liveVoiceCopy, liveVoiceNotice, liveVoiceStartVisible, type NativeLiveVoiceState } from "./mobile-live-voice";
 import { MobileLiveVoiceBar } from "./mobile-live-voice-bar";
 import type {
   AlphaAccount,
@@ -8745,8 +8745,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   statusLabel={liveVoiceText.status} endLabel={liveVoiceText.end} reduceMotion={reduceMotion}
                   onEnd={() => void liveVoiceController.end()} />
               ) : null}
-              {liveVoiceState.phase === "error" ? (
-                <Text style={styles.voiceFailureText} accessibilityRole="alert">{liveVoiceText.status}</Text>
+              {liveVoiceNotice(appLocale, liveVoiceState) ? (
+                <Text style={styles.voiceFailureText} accessibilityRole="alert">{liveVoiceNotice(appLocale, liveVoiceState)}</Text>
               ) : null}
               {copyNotice ? <Text style={styles.copyNotice}>{staticUiMessage(appLocale, copyNotice)}</Text> : null}
               {attachmentNotice ? <Text style={styles.attachmentNotice} accessibilityRole="alert">{staticUiMessage(appLocale, attachmentNotice)}</Text> : null}

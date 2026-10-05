@@ -22,6 +22,11 @@ const routes: ReadonlyArray<readonly [string, RegExp]> = [
   ["PATCH", /^\/hermes\/(?:conversations|jobs)\/[^/]+$/],
   ["DELETE", /^\/hermes\/jobs\/[^/]+$/],
   ["POST", /^\/voice\/(?:transcriptions|speech)$/],
+  // HPD-1041: HODL live voice. Start (SDP offer), status and end of one call;
+  // the session id is the client's random UUIDv4.
+  ["POST", /^\/voice\/realtime\/calls$/],
+  ["GET", /^\/voice\/realtime\/calls\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i],
+  ["DELETE", /^\/voice\/realtime\/calls\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i],
   ["GET", /^\/ai-connection\/claude$/],
   ["POST", /^\/ai-connection\/(?:chatgpt|claude)\/(?:start|complete)$/],
   ["POST", /^\/plugins\/[^/]+\/operations\/[^/]+$/],
