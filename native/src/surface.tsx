@@ -489,6 +489,7 @@ import {
   type MobileAccountActionState,
 } from "./mobile-account-action";
 import { MobileSystemRow, MobileSystemSection } from "./mobile-system-surface";
+import { ServerAccessSection } from "./ServerAccessSection";
 import {
   MobileSwipeRemoveRow,
   type MobileRemovableNavigationEntry,
@@ -9438,6 +9439,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                       onRunHandover={() => void runAdminHandoverCheck()}
                       onSaveAdminKey={() => void saveAdminPublicKey()}
                     />
+                    {/* HPD-1027 S4: only the server Owner sees SSH keys, root login and server facts. */}
+                    {serverIdentity?.serverOwner === true ? (
+                      <ServerAccessSection client={api} locale={appLocale} formatDate={formatSecurityDateValue} />
+                    ) : null}
                     {host.session.mode === "standalone" && isOwner ? (
                       <>
                         <MobileSystemSection
