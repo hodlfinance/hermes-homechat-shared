@@ -118,6 +118,13 @@ test("blocking paths before the first root grant: reason, and whether removal is
 test("the app screen offers the remove action for each blocking path", () => {
   const section = readFileSync(new URL("../src/ServerAccessSection.tsx", import.meta.url), "utf8");
   assert.match(section, /serverBlockingRows\(access, copy\)/);
-  assert.match(section, /onPress=\{\(\) => void removeBlocking\(row\.path\)\}/);
+  // A confirm with the exact path comes first; only its destructive button removes.
+  assert.match(section, /onPress=\{\(\) => confirmRemoveBlocking\(row\.path\)\}/);
+  assert.match(section, /Alert\.alert\(copy\.blockingConfirm\(path\)[\s\S]*?style: "destructive", onPress: \(\) => void removeBlocking\(path\)/);
   assert.match(section, /await client\.removeServerBlockingPath\(path\)/);
+});
+
+test("the remove confirm names the path and says it cannot be undone", () => {
+  assert.equal(serverAccessCopy("en").blockingConfirm("/var/log/x.gz"), "Delete /var/log/x.gz? This cannot be undone.");
+  assert.match(serverAccessCopy("de").blockingConfirm("/var/log/x.gz"), /^\/var\/log\/x\.gz löschen\? Das lässt sich nicht rückgängig machen\.$/);
 });
