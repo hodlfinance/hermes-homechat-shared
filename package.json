@@ -38,6 +38,7 @@
     "./native/mobile-product-access": "./native/src/mobile-product-access.ts",
     "./native/mobile-attachments": "./native/src/mobile-attachments.ts",
     "./native/surface": "./native/src/surface.tsx",
+    "./native/live-voice": "./native/src/live-voice-client.ts",
     "./native/SecureSecretEntryForm": "./native/src/SecureSecretEntryForm.tsx",
     "./native/mobile-guided-setup-action": "./native/src/mobile-guided-setup-action.ts",
     "./native/PluginCatalogScreen": "./native/src/PluginCatalogScreen.tsx",

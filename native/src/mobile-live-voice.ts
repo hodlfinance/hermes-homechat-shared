@@ -1,7 +1,9 @@
 import type { AppLocale } from "../core/types";
 
 export type NativeLiveVoicePhase = "idle" | "connecting" | "listening" | "waiting" | "speaking" | "ending" | "error";
-export type NativeLiveVoiceState = { phase: NativeLiveVoicePhase };
+/** HPD-1041: the voice time limit that ended or refused a call. */
+export type NativeLiveVoiceLimit = "call_limit" | "daily_limit";
+export type NativeLiveVoiceState = { phase: NativeLiveVoicePhase; endedReason?: NativeLiveVoiceLimit };
 export type NativeLiveVoiceHandle = { end(): Promise<void> };
 /** Optional product service. Shared owns presentation, not audio or provider authority. */
 export type NativeLiveVoicePort = {
@@ -72,8 +74,11 @@ export function createMobileLiveVoiceController(port: NativeLiveVoicePort | unde
             onConversationChanged() { if (operation === current && !current.abort.signal.aborted) input.onConversationChanged(); },
           });
           if (!current.abort.signal.aborted && operation === current && state.phase === "connecting") publish({ phase: "listening" });
-        } catch {
-          if (operation === current && !current.abort.signal.aborted) void close(current, { phase: "error" });
+        } catch (error) {
+          // HPD-1041: a start refused by the daily voice limit says so.
+          const limit = (error as { limit?: unknown } | null)?.limit;
+          const reason = limit === "daily_limit" || limit === "call_limit" ? { endedReason: limit as NativeLiveVoiceLimit } : {};
+          if (operation === current && !current.abort.signal.aborted) void close(current, { phase: "error", ...reason });
         }
       });
       await current.opening;
@@ -92,6 +97,24 @@ const copy = {
   ja: ["音声会話を開始", "終了", "接続中…", "聞いています", "Hermesが作業中", "話しています", "音声会話を利用できません。入力するか、もう一度お試しください。", "終了中…"],
   ko: ["음성 대화 시작", "종료", "연결 중…", "듣고 있어요", "Hermes가 작업 중이에요", "말하고 있어요", "음성 대화를 사용할 수 없습니다. 입력하거나 다시 시도하세요.", "종료 중…"],
 } satisfies Record<AppLocale, string[]>;
+
+// HPD-1041: [call limit reached, daily voice time used up].
+const limitCopy = {
+  en: ["The voice call reached its time limit. You can keep typing or start a new call.", "Today's voice time is used up. You can keep typing; voice is available again tomorrow."],
+  de: ["Das Sprachgespräch hat sein Zeitlimit erreicht. Du kannst schreiben oder ein neues Gespräch starten.", "Die Sprachzeit für heute ist aufgebraucht. Du kannst weiter schreiben; morgen geht Sprache wieder."],
+  fr: ["La conversation vocale a atteint sa durée maximale. Vous pouvez écrire ou en démarrer une nouvelle.", "Le temps vocal du jour est épuisé. Vous pouvez continuer à écrire ; la voix revient demain."],
+  es: ["La conversación de voz alcanzó su límite de tiempo. Puedes escribir o iniciar una nueva.", "El tiempo de voz de hoy se ha agotado. Puedes seguir escribiendo; la voz vuelve mañana."],
+  it: ["La conversazione vocale ha raggiunto il limite di tempo. Puoi scrivere o avviarne una nuova.", "Il tempo vocale di oggi è esaurito. Puoi continuare a scrivere; la voce torna domani."],
+  "pt-BR": ["A conversa por voz atingiu o limite de tempo. Você pode escrever ou iniciar uma nova.", "O tempo de voz de hoje acabou. Você pode continuar escrevendo; a voz volta amanhã."],
+  ja: ["音声会話が時間の上限に達しました。入力を続けるか、新しい会話を開始できます。", "今日の音声時間を使い切りました。入力は引き続き使えます。音声は明日また使えます。"],
+  ko: ["음성 대화가 시간 제한에 도달했습니다. 계속 입력하거나 새 대화를 시작할 수 있어요.", "오늘의 음성 시간을 모두 사용했습니다. 계속 입력할 수 있고, 음성은 내일 다시 사용할 수 있어요."],
+} satisfies Record<AppLocale, string[]>;
+
+/** The notice shown under the composer after a call, or null. */
+export function liveVoiceNotice(locale: AppLocale, state: NativeLiveVoiceState): string | null {
+  if (state.endedReason) return limitCopy[locale][state.endedReason === "daily_limit" ? 1 : 0]!;
+  return state.phase === "error" ? liveVoiceCopy(locale, "error").status : null;
+}
 
 export function liveVoiceCopy(locale: AppLocale, phase: NativeLiveVoicePhase) {
   const text = copy[locale];
