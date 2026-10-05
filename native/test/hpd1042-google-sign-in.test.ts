@@ -170,3 +170,46 @@ test("surface wiring: both modes run the bounded attempt and always re-enable th
     );
   }
 });
+
+test("the native session call has a deadline and ends with a clear, coded error", async () => {
+  const { ApiError, createApiClient, nativeAuthSessionTimeoutCode, nativeAuthSessionTimeoutMs } = await import("../core/index");
+  assert.equal(nativeAuthSessionTimeoutMs, 30_000);
+  let aborted = false;
+  const client = createApiClient({
+    baseUrl: "https://example.invalid/api",
+    fetchImpl: ((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => {
+        aborted = true;
+        reject(Object.assign(new Error("The operation was aborted."), { name: "AbortError" }));
+      });
+    })) as unknown as typeof fetch,
+  });
+  const body = { challengeId: "c", idToken: "t", mode: "login", nonce: "n", provider: "google", surface: "ios" } as const;
+  await assert.rejects(client.nativeAuthSession(body, { timeoutMs: 20 }), (error: unknown) => {
+    assert.ok(error instanceof ApiError);
+    assert.equal(error.code, nativeAuthSessionTimeoutCode);
+    assert.match(error.message, /did not answer in time/);
+    return true;
+  });
+  assert.equal(aborted, true);
+
+  // A fetch that ignores the signal still ends at the deadline.
+  const deaf = createApiClient({ baseUrl: "https://example.invalid/api", fetchImpl: (() => new Promise(() => {})) as unknown as typeof fetch });
+  await assert.rejects(deaf.nativeAuthSession(body, { timeoutMs: 20 }), (error: unknown) => (error as { code?: string }).code === nativeAuthSessionTimeoutCode);
+
+  // A prompt answer is returned unchanged.
+  const fast = createApiClient({
+    baseUrl: "https://example.invalid/api",
+    fetchImpl: (async () => new Response(JSON.stringify({ token: "session-token" }), { status: 200 })) as unknown as typeof fetch,
+  });
+  assert.deepEqual(await fast.nativeAuthSession(body, { timeoutMs: 1_000 }), { token: "session-token" });
+});
+
+test("a timed-out session call reaches the sign-in message and frees the buttons", () => {
+  const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  const start = surface.indexOf("async function signInWithGoogle(");
+  const flow = surface.slice(start, surface.indexOf("async function signInWithApple(", start));
+  assert.match(flow, /await completeNativeSignIn\("google"[\s\S]*?catch \(caught\) \{\s*setAppError\(userFacingError\(displayError\(caught/);
+  const apple = surface.slice(surface.indexOf("async function signInWithApple("), surface.indexOf("async function reauthenticateAccountDeletionWithGoogle("));
+  assert.match(apple, /finally \{\s*setNativeAuthBusy\(null\);/);
+});
