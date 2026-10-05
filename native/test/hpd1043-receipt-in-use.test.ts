@@ -16,17 +16,20 @@ test("HPD-1043: RevenueCat's receipt-in-use refusal is recognized in every shape
   assert.equal(isMobileReceiptAlreadyInUse(null), false);
 });
 
-test("HPD-1043: every app language explains the other Hey account and names the restore button", () => {
+test("HPD-1043: every app language explains the other Hey account without sending the user to Restore", () => {
   const seen = new Set<string>();
   for (const locale of appLocales) {
     const message = iosReceiptInUseMessage(locale);
-    assert.ok(!message.includes("{restore}"), locale);
-    assert.ok(message.includes(iosPaywallCopy(locale).restore), `${locale} names its own restore button`);
+    // Restore Purchases fails with the same refusal, so it is never offered.
+    assert.ok(!message.includes(iosPaywallCopy(locale).restore), `${locale} does not offer restore`);
     assert.ok(message.includes("Hey"), `${locale} names Hey`);
     assert.ok(!/already another active subscriber/i.test(message), locale);
     assert.ok(!seen.has(message), `${locale} is translated`);
     seen.add(message);
   }
-  assert.match(iosReceiptInUseMessage("en"), /another Hey account.*Restore Purchases.*Hey Support/);
-  assert.match(iosReceiptInUseMessage("de"), /anderen Hey-Konto.*Käufe wiederherstellen.*Hey-Support/);
+  assert.match(iosReceiptInUseMessage("en"), /another Hey account.*Sign in with the Hey account that bought it, or contact Hey Support/);
+  assert.match(iosReceiptInUseMessage("de"), /anderen Hey-Konto.*Hey-Support/);
+  // French uses "tu", like the rest of the paywall.
+  assert.match(iosReceiptInUseMessage("fr"), /Connecte-toi.*contacte/);
+  assert.doesNotMatch(iosReceiptInUseMessage("fr"), /\b(vous|Connectez|contactez)\b/);
 });
