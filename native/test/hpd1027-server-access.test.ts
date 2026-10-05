@@ -9,6 +9,7 @@ import {
   serverAccessErrorMessage,
   serverAccessRows,
   serverAccessStatus,
+  serverBlockingRows,
   serverHermesSwitchedOff,
 } from "../src/server-access";
 
@@ -87,4 +88,36 @@ test("Hermes switched off by the Owner is shown", () => {
 test("the app shows the section to the server Owner only", () => {
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   assert.match(surface, /serverIdentity\?\.serverOwner === true \? \(\s*<ServerAccessSection client=\{api\}/);
+});
+
+test("blocking paths before the first root grant: reason, and whether removal is already requested", () => {
+  const copy = serverAccessCopy("de");
+  const access = {
+    ssh: {
+      ...applied.ssh,
+      delivery: "blocked" as const,
+      deliveryReason: "guest_scan_incomplete",
+      endpoint: null,
+      blockingPaths: [
+        { path: "/var/log/broken.log.gz", why: "unreadable" as const },
+        { path: "/opt/hey-hermes/customer/workspace/old.env", why: "shared_ai_key" as const },
+      ],
+      pendingRemovals: ["/var/log/broken.log.gz"],
+    },
+  };
+  assert.deepEqual(serverBlockingRows(access, copy), [
+    { path: "/var/log/broken.log.gz", reason: copy.blockingUnreadable, pending: true },
+    { path: "/opt/hey-hermes/customer/workspace/old.env", reason: copy.blockingSharedKey, pending: false },
+  ]);
+  assert.deepEqual(serverBlockingRows(applied, copy), []);
+  assert.deepEqual(serverBlockingRows(null, copy), []);
+  assert.equal(serverAccessErrorMessage("blocking_path_not_found", copy), copy.errors.blocking_path_not_found);
+  assert.match(serverAccessStatus({ ssh: { ...access.ssh, deliveryReason: "shared_ai_key_not_revoked" } }, null, copy).text, /nichts tun/);
+});
+
+test("the app screen offers the remove action for each blocking path", () => {
+  const section = readFileSync(new URL("../src/ServerAccessSection.tsx", import.meta.url), "utf8");
+  assert.match(section, /serverBlockingRows\(access, copy\)/);
+  assert.match(section, /onPress=\{\(\) => void removeBlocking\(row\.path\)\}/);
+  assert.match(section, /await client\.removeServerBlockingPath\(path\)/);
 });

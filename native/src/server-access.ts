@@ -44,6 +44,13 @@ export interface ServerAccessCopy {
   loadFailed: string;
   errors: Record<string, string>;
   units: { day: string; hour: string; minute: string };
+  blockingTitle: string;
+  blockingIntro: string;
+  blockingUnreadable: string;
+  blockingSharedKey: string;
+  blockingRemove: string;
+  blockingRemoving: string;
+  blockingRequested: string;
 }
 
 const en: ServerAccessCopy = {
@@ -75,6 +82,9 @@ const en: ServerAccessCopy = {
     guest_scan_incomplete: "The safety check of your server did not finish. It runs again shortly.",
     guest_scan_missing: "The safety check of your server has not run yet.",
     customer_root_off: "Root access over SSH is not switched on for your server yet.",
+    shared_ai_key_not_revoked: "Our old shared AI key is not retired yet. Root opens once it is; nothing to do on your side.",
+    runtime_not_fresh: "Your server needs one restart with its own AI key. Root opens after that.",
+    guest_scan_stale: "The safety check of your server runs again shortly.",
   },
   endpoint: "Log in with",
   hostKeys: "Server key fingerprints",
@@ -95,9 +105,17 @@ const en: ServerAccessCopy = {
     ssh_key_not_found: "That key was already removed.",
     server_owner_required: "Only the server Owner can manage SSH keys.",
     firecracker_server_required: "SSH keys need your own Hey Hermes server.",
+    blocking_path_not_found: "That file no longer blocks root. The list is up to date now.",
     generic: "That did not work. Try again.",
   },
   units: { day: "d", hour: "h", minute: "min" },
+  blockingTitle: "What keeps root closed",
+  blockingIntro: "Remove these files to open root login. The next safety check runs a few minutes later.",
+  blockingUnreadable: "The safety check could not read this file.",
+  blockingSharedKey: "This file still holds our shared AI key.",
+  blockingRemove: "Remove",
+  blockingRemoving: "Removing…",
+  blockingRequested: "Removal requested. It happens with the next safety check.",
 };
 
 const de: ServerAccessCopy = {
@@ -129,6 +147,9 @@ const de: ServerAccessCopy = {
     guest_scan_incomplete: "Die Sicherheitsprüfung Deines Servers wurde nicht fertig. Sie läuft gleich erneut.",
     guest_scan_missing: "Die Sicherheitsprüfung Deines Servers ist noch nicht gelaufen.",
     customer_root_off: "Der root-Zugang über SSH ist für Deinen Server noch nicht eingeschaltet.",
+    shared_ai_key_not_revoked: "Unser alter gemeinsamer KI-Schlüssel ist noch nicht stillgelegt. root öffnet sich danach; Du musst nichts tun.",
+    runtime_not_fresh: "Dein Server braucht einen Neustart mit seinem eigenen KI-Schlüssel. Danach öffnet sich root.",
+    guest_scan_stale: "Die Sicherheitsprüfung Deines Servers läuft gleich erneut.",
   },
   endpoint: "Anmelden mit",
   hostKeys: "Fingerabdrücke der Serverschlüssel",
@@ -149,9 +170,17 @@ const de: ServerAccessCopy = {
     ssh_key_not_found: "Dieser Schlüssel wurde schon entfernt.",
     server_owner_required: "Nur der Owner des Servers kann SSH-Schlüssel verwalten.",
     firecracker_server_required: "SSH-Schlüssel brauchen Deinen eigenen Hey-Hermes-Server.",
+    blocking_path_not_found: "Diese Datei sperrt root nicht mehr. Die Liste ist jetzt aktuell.",
     generic: "Das hat nicht geklappt. Versuche es noch einmal.",
   },
   units: { day: "T", hour: "Std", minute: "Min" },
+  blockingTitle: "Was den root-Zugang noch sperrt",
+  blockingIntro: "Entferne diese Dateien, um die root-Anmeldung zu öffnen. Die nächste Sicherheitsprüfung läuft ein paar Minuten später.",
+  blockingUnreadable: "Die Sicherheitsprüfung konnte diese Datei nicht lesen.",
+  blockingSharedKey: "Diese Datei enthält noch unseren gemeinsamen KI-Schlüssel.",
+  blockingRemove: "Entfernen",
+  blockingRemoving: "Wird entfernt…",
+  blockingRequested: "Entfernen angefordert. Es geschieht mit der nächsten Sicherheitsprüfung.",
 };
 
 // The other app languages fall back to English until their copy is reviewed.
@@ -233,4 +262,20 @@ export function serverAccessRows(
 
 export function serverHermesSwitchedOff(access: Pick<ServerAccessView, "hermes"> | null) {
   return access?.hermes.state === "disabled-by-owner";
+}
+
+export interface ServerBlockingRow {
+  path: string;
+  reason: string;
+  pending: boolean;
+}
+
+/** HPD-1027 S4: before the first root grant, each blocking path with its reason and whether removal is requested. */
+export function serverBlockingRows(access: Pick<ServerAccessView, "ssh"> | null, copy: ServerAccessCopy): ServerBlockingRow[] {
+  const pending = new Set(access?.ssh.pendingRemovals ?? []);
+  return (access?.ssh.blockingPaths ?? []).map((entry) => ({
+    path: entry.path,
+    reason: entry.why === "shared_ai_key" ? copy.blockingSharedKey : copy.blockingUnreadable,
+    pending: pending.has(entry.path),
+  }));
 }
