@@ -84,6 +84,8 @@
     "./native/mobile-reduce-motion-store": "./native/src/mobile-reduce-motion-store.ts",
     "./native/hermes-canonical": "./native/src/hermes-canonical.ts",
     "./native/appI18n": "./native/src/appI18n.ts",
+    "./native/server-access": "./native/src/server-access.ts",
+    "./native/ServerAccessSection": "./native/src/ServerAccessSection.tsx",
     "./native/mobile-ai-access-brand-marks": "./native/src/mobile-ai-access-brand-marks.tsx",
     "./native/assets.d": "./native/src/assets.d.ts",
     "./native/mobile-account-action": "./native/src/mobile-account-action.ts",

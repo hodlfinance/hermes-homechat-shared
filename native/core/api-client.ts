@@ -128,6 +128,9 @@ import type {
   WorkspaceManagementAgentStatus,
   WorkspaceRuntimeSettings,
   WorkspaceServerIdentity,
+  ServerAccessView,
+  ServerOwnerSshKey,
+  ServerOwnerSshKeyListing,
   ProviderStatusView,
   SubscriptionStateView,
   TopUpSummary,
@@ -730,6 +733,16 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     workspaceRuntimeSettings: () => request<WorkspaceRuntimeSettings>("/workspace/runtime-settings"),
     /** The name of the customer's own server, and the few facts that identify it. */
     workspaceServerIdentity: () => request<WorkspaceServerIdentity>("/workspace/server-identity"),
+    /** HPD-1027 S4: the server Owner's SSH public keys, customer root and server facts. */
+    serverOwnerSshKeys: () => request<ServerOwnerSshKeyListing>("/workspace/server/ssh-keys"),
+    addServerOwnerSshKey: (body: { publicKey: string; label?: string }) =>
+      request<ServerOwnerSshKeyListing & { key: ServerOwnerSshKey; created: boolean }>("/workspace/server/ssh-keys", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    revokeServerOwnerSshKey: (keyId: string) =>
+      request<ServerOwnerSshKeyListing>(`/workspace/server/ssh-keys/${encodeURIComponent(keyId)}`, { method: "DELETE" }),
+    serverAccess: () => request<ServerAccessView>("/workspace/server/access"),
     heyHermesAdapter: () => request<HeyHermesAdapterManifest>("/workspace/hey-hermes-adapter"),
     materializeHeyHermesAdapter: () =>
       request<HeyHermesAdapterMaterialization | null>("/workspace/hey-hermes-adapter/materialize", { method: "POST" }),

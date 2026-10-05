@@ -1268,6 +1268,8 @@ interface WorkspaceServerIdentityBase {
   allocatedMemoryMib: number | null;
   allocatedPersistentStorageGib: number | null;
   network: "private_managed" | null;
+  /** HPD-1027: true only for the workspace's own account on its active Firecracker server. */
+  serverOwner?: boolean;
 }
 
 export type WorkspaceServerIdentity = WorkspaceServerIdentityBase & (
@@ -2966,4 +2968,45 @@ export interface AppSnapshot {
   restoreJobs: RestoreJob[];
   auditLogs: AuditLogEntry[];
   recentMessages: ChatMessage[];
+}
+
+/** HPD-1027 S4: the server Owner's SSH keys (public keys only) and customer root. */
+export interface ServerOwnerSshKey {
+  id: string;
+  algorithm: string;
+  fingerprintSha256: string;
+  label: string | null;
+  createdAt: string;
+}
+
+/** Where the Owner's key set stands on the server. */
+export type ServerOwnerSshDelivery = "off" | "no_keys" | "pending" | "blocked" | "applied" | "not_yet_available";
+
+export interface ServerOwnerSshKeyListing {
+  serverOwner: true;
+  keys: ServerOwnerSshKey[];
+  keySetDigest: string;
+  /** A full export is encrypted to ed25519/RSA keys only. */
+  fullExportEligible: boolean;
+  maxKeys: number;
+  delivery: ServerOwnerSshDelivery;
+  deliveryReason?: string | null;
+}
+
+export interface ServerAccessView {
+  serverOwner: true;
+  ssh: {
+    delivery: ServerOwnerSshDelivery;
+    deliveryReason: string | null;
+    endpoint: { host: string; port: number; command: string } | null;
+    hostKeys: Array<{ algorithm: string; fingerprintSha256: string }>;
+  };
+  server: {
+    operatingSystem: string | null;
+    kernel: string | null;
+    bootedAt: string | null;
+    uptimeSeconds: number | null;
+    checkedAt: string | null;
+  };
+  hermes: { state: "enabled" | "disabled-by-owner" | "unknown" };
 }
