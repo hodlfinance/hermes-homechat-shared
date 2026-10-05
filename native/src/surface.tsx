@@ -214,6 +214,11 @@ import {
 import { AccountDeletionSection } from "./AccountDeletionSection";
 import { accountDeletionNativeReauthenticationCopy } from "./account-deletion";
 import { mobileNativeAuthChallengeRefreshDelayMs } from "./mobile-native-auth-challenge";
+import {
+  googleAuthRequestMatchesChallenge,
+  googleSignInOutcomeMessage,
+  runGoogleIdTokenSignIn,
+} from "./mobile-google-sign-in";
 import { PluginCatalogScreen } from "./PluginCatalogScreen";
 import {
   SecureConnectionCredentialForm,
@@ -1642,7 +1647,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
   const [googleChallenge, setGoogleChallenge] = useState<{ id: string; mode: "link" | "login"; nonce: string } | null>(null);
   const [googleChallengeVersion, setGoogleChallengeVersion] = useState(0);
-  const nativeAuthModeRef = useRef<"link" | "login">("login");
   const [accountDeletionNativeReauthenticationRequired, setAccountDeletionNativeReauthenticationRequired] = useState(false);
   const [googleDeletionChallenge, setGoogleDeletionChallenge] = useState<{ expiresAt: string; id: string; nonce: string } | null>(null);
   const [googleDeletionChallengeVersion, setGoogleDeletionChallengeVersion] = useState(0);
@@ -2312,12 +2316,17 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   );
   const googleClientId = nativeAuthConfig?.providers.google?.clientId;
   const googleAuthHookClientId = googleClientId ?? GOOGLE_AUTH_CONFIG_PENDING_CLIENT_ID;
-  const [googleAuthRequest, googleAuthResponse, promptGoogleAuth] = Google.useIdTokenAuthRequest({
+  // HPD-1042: the sign-in flow exchanges the code itself (runGoogleIdTokenSignIn)
+  // so a failed exchange or a stalled Google sheet ends in a message instead of
+  // an endless wait. The hook only builds the request and opens the sheet.
+  const [googleAuthRequest, , promptGoogleAuth] = Google.useIdTokenAuthRequest({
     clientId: googleAuthHookClientId,
     extraParams: googleChallenge ? { nonce: googleChallenge.nonce } : undefined,
     iosClientId: googleAuthHookClientId,
     selectAccount: true,
+    shouldAutoExchangeCode: false,
   });
+  const googleSignInReady = googleAuthRequestMatchesChallenge(googleAuthRequest, googleChallenge);
   const [googleDeletionAuthRequest, googleDeletionAuthResponse, promptGoogleDeletionAuth] = Google.useIdTokenAuthRequest({
     clientId: googleAuthHookClientId,
     extraParams: googleDeletionChallenge ? { nonce: googleDeletionChallenge.nonce } : undefined,
@@ -5003,42 +5012,31 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     if (mode === "reauthenticate") setAccountDeletionNativeReauthenticationRequired(false);
   }
 
-  useEffect(() => {
-    if (!googleAuthResponse) return;
-    if (googleAuthResponse.type !== "success") {
-      setNativeAuthBusy(null);
-      setGoogleChallengeVersion((current) => current + 1);
-      return;
-    }
-    const idToken = googleAuthResponse.params.id_token;
-    if (!idToken) {
-      setNativeAuthBusy(null);
-      setAppError("Google did not return a valid Hey Hermes identity.");
-      return;
-    }
-    if (!googleChallenge || googleChallenge.mode !== nativeAuthModeRef.current) {
-      setNativeAuthBusy(null);
-      setAppError("This Google sign-in attempt expired. Start again.");
-      return;
-    }
-    void completeNativeSignIn("google", idToken, googleChallenge, nativeAuthModeRef.current)
-      .catch((caught) => setAppError(userFacingError(displayError(caught, "Google sign-in failed."))))
-      .finally(() => {
-        setNativeAuthBusy(null);
-        setGoogleChallengeVersion((current) => current + 1);
-      });
-  }, [googleAuthResponse]);
-
   async function signInWithGoogle(mode: "link" | "login" = "login") {
-    if (!googleAuthRequest || !googleChallenge || googleChallenge.mode !== mode || nativeAuthBusy) return;
-    nativeAuthModeRef.current = mode;
+    if (!googleAuthRequest || !googleChallenge || googleChallenge.mode !== mode || !googleSignInReady || nativeAuthBusy) return;
+    // Freeze the request and challenge of this attempt: a challenge refresh that
+    // lands mid-flow rebuilds the hook request with a new nonce and verifier.
+    const attemptChallenge = googleChallenge;
+    const attemptRequest = googleAuthRequest;
     setNativeAuthBusy("google");
     setAppError(null);
     try {
-      await promptGoogleAuth();
+      const outcome = await runGoogleIdTokenSignIn({
+        dismissBrowser: () => WebBrowser.dismissAuthSession?.(),
+        fetchImpl: (input, init) => fetch(input, init),
+        prompt: () => promptGoogleAuth(),
+        request: attemptRequest,
+      });
+      if (outcome.kind !== "id_token") {
+        setAppError(googleSignInOutcomeMessage(outcome));
+        return;
+      }
+      await completeNativeSignIn("google", outcome.idToken, attemptChallenge, mode);
     } catch (caught) {
-      setNativeAuthBusy(null);
       setAppError(userFacingError(displayError(caught, "Google sign-in failed.")));
+    } finally {
+      setNativeAuthBusy(null);
+      setGoogleChallengeVersion((current) => current + 1);
     }
   }
 
@@ -7905,9 +7903,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   </Text>
                   {nativeAuthConfig?.providers.google ? (
                     <Pressable
-                      style={[styles.secondaryButtonWide, (!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "login" || Boolean(nativeAuthBusy)) && styles.disabledButton]}
+                      style={[styles.secondaryButtonWide, (!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "login" || !googleSignInReady || Boolean(nativeAuthBusy)) && styles.disabledButton]}
                       onPress={() => void signInWithGoogle()}
-                      disabled={!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "login" || Boolean(nativeAuthBusy)}
+                      disabled={!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "login" || !googleSignInReady || Boolean(nativeAuthBusy)}
                     >
                       {nativeAuthBusy === "google" ? <ActivityIndicator color={palette.teal} /> : <Text style={styles.secondaryButtonText}>G</Text>}
                       <Text style={styles.secondaryButtonText}>
@@ -9305,9 +9303,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                         <View style={[styles.systemSurfaceNotice, styles.nativeAuthGroup]}>
                           {nativeAuthConfig?.providers.google ? (
                             <Pressable
-                              style={[styles.secondaryButtonWide, (!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "link" || Boolean(nativeAuthBusy)) && styles.disabledButton]}
+                              style={[styles.secondaryButtonWide, (!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "link" || !googleSignInReady || Boolean(nativeAuthBusy)) && styles.disabledButton]}
                               onPress={() => void signInWithGoogle("link")}
-                              disabled={!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "link" || Boolean(nativeAuthBusy)}
+                              disabled={!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "link" || !googleSignInReady || Boolean(nativeAuthBusy)}
                             >
                               <Text style={styles.secondaryButtonText}>{t.systemPages.account.linkGoogle}</Text>
                             </Pressable>

@@ -74,11 +74,12 @@ export type NativeR8Platform = {
     AppleAuthenticationButtonType: { CONTINUE: string | number; SIGN_UP: string | number };
   };
   Google: {
-    useIdTokenAuthRequest(options: { clientId: string; extraParams?: { nonce: string }; iosClientId: string; selectAccount: boolean }): [NativeGoogleRequest | null, NativeGoogleResponse, () => Promise<unknown>];
+    useIdTokenAuthRequest(options: { clientId: string; extraParams?: { nonce: string }; iosClientId: string; selectAccount: boolean; shouldAutoExchangeCode?: boolean }): [NativeGoogleRequest | null, NativeGoogleResponse, () => Promise<unknown>];
   };
   WebBrowser: {
     maybeCompleteAuthSession(): unknown; openBrowserAsync(url: string): Promise<unknown>;
     openAuthSessionAsync(url: string, redirect: string): Promise<NativeBrowserResult>;
+    dismissAuthSession?(): void;
   };
   createAudioPlayer(source: string): NativeAudioPlayer;
   RecordingPresets: { HIGH_QUALITY: unknown };
