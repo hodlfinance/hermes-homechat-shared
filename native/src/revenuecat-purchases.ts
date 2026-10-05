@@ -78,6 +78,23 @@ const planDetails: Record<MobileRevenueCatPackageId, Pick<MobilePurchasePlan, "d
   personal_monthly: { displayName: "Personal" },
 };
 
+/**
+ * HPD-1043: RevenueCat's RECEIPT_ALREADY_IN_USE_ERROR (code "7" in
+ * react-native-purchases' PURCHASES_ERROR_CODE). The receipt of this Apple ID
+ * belongs to another App User ID and the project's transfer rule did not move
+ * it. Matched by code, readable code, or the SDK's own sentence, because the
+ * shared package has no direct dependency on the SDK enum.
+ */
+export function isMobileReceiptAlreadyInUse(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; readableErrorCode?: unknown; userInfo?: { readableErrorCode?: unknown }; message?: unknown };
+  if (candidate.code === "7" || candidate.code === 7) return true;
+  if (candidate.readableErrorCode === "RECEIPT_ALREADY_IN_USE_ERROR" ||
+      candidate.userInfo?.readableErrorCode === "RECEIPT_ALREADY_IN_USE_ERROR") return true;
+  return typeof candidate.message === "string" &&
+    /already another active subscriber using the same receipt/i.test(candidate.message);
+}
+
 export function mobilePurchasePlanLabel(plan: string) {
   if (plan === "personal") return "Personal";
   if (plan === "trial") return "Trial";

@@ -438,6 +438,7 @@ import { shareSecurityAuditReceiptFile } from "./mobile-security-receipt";
 import { gmailOAuthDiagnostic, runMobileGmailOAuth } from "./mobile-gmail-oauth";
 import {
   assertProductLocalSubscriptionState,
+  isMobileReceiptAlreadyInUse,
   mobilePersonalPurchaseCanStart,
   mobileSubscriptionAuthorityConfirmed,
   type MobilePurchasePlan,
@@ -446,6 +447,7 @@ import {
 import {
   iosPaywallCopy,
   iosPaywallView,
+  iosReceiptInUseMessage,
   openIosSubscriptionManagement,
   type IosPaywallStoreState,
 } from "./ios-paywall";
@@ -3244,6 +3246,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         return;
       }
       setMobilePurchasePhase("error");
+      if (isMobileReceiptAlreadyInUse(caught)) {
+        setMobilePurchaseNotice(iosReceiptInUseMessage(appLocale));
+        return;
+      }
       const detail = userFacingError(displayError(caught, "Purchase status could not be confirmed."));
       setMobilePurchaseNotice(`${staticUiMessage(appLocale, detail)} ${staticUiCopy(appLocale)["Check App Store subscriptions before trying again."]}`);
     }
@@ -3270,7 +3276,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       setMobilePurchasePhase("ready");
     } catch (caught) {
       setMobilePurchasePhase("error");
-      setMobilePurchaseNotice(userFacingError(displayError(caught, "App Store purchases could not be restored.")));
+      setMobilePurchaseNotice(isMobileReceiptAlreadyInUse(caught)
+        ? iosReceiptInUseMessage(appLocale)
+        : userFacingError(displayError(caught, "App Store purchases could not be restored.")));
     }
   }
 
