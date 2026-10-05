@@ -2993,6 +2993,18 @@ export interface ServerOwnerSshKeyListing {
   deliveryReason?: string | null;
 }
 
+export interface ServerBlockingPath {
+  path: string;
+  /** "unreadable": the safety check could not read it; "shared_ai_key": it still holds our shared AI key. */
+  why: "unreadable" | "shared_ai_key";
+}
+
+export interface ServerBlockingPathRemoval {
+  requested: string;
+  blocking: ServerBlockingPath[];
+  pending: string[];
+}
+
 export interface ServerAccessView {
   serverOwner: true;
   ssh: {
@@ -3000,6 +3012,10 @@ export interface ServerAccessView {
     deliveryReason: string | null;
     endpoint: { host: string; port: number; command: string } | null;
     hostKeys: Array<{ algorithm: string; fingerprintSha256: string }>;
+    /** Before the first root grant: what blocks it and the Owner can have removed. */
+    blockingPaths?: ServerBlockingPath[];
+    /** Paths the Owner asked to remove that the server has not removed yet. */
+    pendingRemovals?: string[];
   };
   server: {
     operatingSystem: string | null;

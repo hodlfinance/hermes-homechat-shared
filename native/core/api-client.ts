@@ -129,6 +129,7 @@ import type {
   WorkspaceRuntimeSettings,
   WorkspaceServerIdentity,
   ServerAccessView,
+  ServerBlockingPathRemoval,
   ServerOwnerSshKey,
   ServerOwnerSshKeyListing,
   ProviderStatusView,
@@ -743,6 +744,12 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     revokeServerOwnerSshKey: (keyId: string) =>
       request<ServerOwnerSshKeyListing>(`/workspace/server/ssh-keys/${encodeURIComponent(keyId)}`, { method: "DELETE" }),
     serverAccess: () => request<ServerAccessView>("/workspace/server/access"),
+    /** HPD-1027 S4: ask for one blocking path (from serverAccess) to be removed before the first root grant. */
+    removeServerBlockingPath: (path: string) =>
+      request<ServerBlockingPathRemoval>("/workspace/server/access/blocking-paths/remove", {
+        method: "POST",
+        body: JSON.stringify({ path }),
+      }),
     heyHermesAdapter: () => request<HeyHermesAdapterManifest>("/workspace/hey-hermes-adapter"),
     materializeHeyHermesAdapter: () =>
       request<HeyHermesAdapterMaterialization | null>("/workspace/hey-hermes-adapter/materialize", { method: "POST" }),

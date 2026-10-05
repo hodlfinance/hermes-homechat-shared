@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { KeyRound, Server, Trash2 } from "lucide-react-native";
+import { AlertTriangle, KeyRound, Server, Trash2 } from "lucide-react-native";
 import { apiErrorCode } from "../core/api-client";
 import type { AppLocale } from "../core/index";
 import type { ServerAccessView, ServerOwnerSshKeyListing } from "../core/types";
@@ -11,6 +11,7 @@ import {
   serverAccessCopy,
   serverAccessErrorMessage,
   serverAccessRows,
+  serverBlockingRows,
   serverAccessStatus,
   serverHermesSwitchedOff,
 } from "./server-access";
@@ -21,6 +22,7 @@ export interface ServerAccessClient {
   addServerOwnerSshKey: (body: { publicKey: string; label?: string }) => Promise<ServerOwnerSshKeyListing>;
   revokeServerOwnerSshKey: (keyId: string) => Promise<ServerOwnerSshKeyListing>;
   serverAccess: () => Promise<ServerAccessView>;
+  removeServerBlockingPath: (path: string) => Promise<unknown>;
 }
 
 /**
@@ -47,6 +49,8 @@ export function ServerAccessSection({
   const [addError, setAddError] = useState<string | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [revokeError, setRevokeError] = useState<{ id: string; message: string } | null>(null);
+  const [removingPath, setRemovingPath] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<{ path: string; message: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -100,6 +104,22 @@ export function ServerAccessSection({
     }
   };
 
+  const removeBlocking = async (path: string) => {
+    if (removingPath) return;
+    setRemovingPath(path);
+    setRemoveError(null);
+    try {
+      await client.removeServerBlockingPath(path);
+      void load();
+    } catch (error) {
+      setRemoveError({ path, message: serverAccessErrorMessage(apiErrorCode(error), copy) });
+      void load();
+    } finally {
+      setRemovingPath(null);
+    }
+  };
+
+  const blocking = serverBlockingRows(access, copy);
   const status = serverAccessStatus(access, keys, copy);
   const toneColor = status.tone === "teal" ? palette.teal : status.tone === "amber" ? palette.amber : palette.muted;
   const rows = serverAccessRows(access, copy, formatDate);
@@ -129,6 +149,25 @@ export function ServerAccessSection({
           />
         ))}
       </MobileSystemSection>
+      {blocking.length ? (
+        <MobileSystemSection title={copy.blockingTitle} footer={copy.blockingIntro} testID="server-access-blocking">
+          {blocking.map((row) => (
+            <MobileSystemRow
+              key={row.path}
+              accessibilityHint={copy.blockingRemove}
+              detail={row.path}
+              disabled={row.pending}
+              error={removeError?.path === row.path ? removeError.message : null}
+              icon={<AlertTriangle size={17} color={palette.amber} />}
+              label={row.reason}
+              onPress={() => void removeBlocking(row.path)}
+              pending={removingPath === row.path}
+              status={row.pending ? copy.blockingRequested : null}
+              trailing={row.pending ? null : <Trash2 size={16} color={palette.muted} />}
+            />
+          ))}
+        </MobileSystemSection>
+      ) : null}
       <MobileSystemSection
         title={copy.keysTitle}
         footer={keys && !keys.fullExportEligible ? copy.exportHint : keys ? copy.keyLimit(keys.maxKeys) : undefined}
