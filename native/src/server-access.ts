@@ -51,6 +51,8 @@ export interface ServerAccessCopy {
   blockingRemove: string;
   blockingRemoving: string;
   blockingRequested: string;
+  blockingConfirm: (path: string) => string;
+  blockingConfirmCancel: string;
 }
 
 const en: ServerAccessCopy = {
@@ -116,6 +118,8 @@ const en: ServerAccessCopy = {
   blockingRemove: "Remove",
   blockingRemoving: "Removing…",
   blockingRequested: "Removal requested. It happens with the next safety check.",
+  blockingConfirm: (path) => `Delete ${path}? This cannot be undone.`,
+  blockingConfirmCancel: "Cancel",
 };
 
 const de: ServerAccessCopy = {
@@ -181,6 +185,8 @@ const de: ServerAccessCopy = {
   blockingRemove: "Entfernen",
   blockingRemoving: "Wird entfernt…",
   blockingRequested: "Entfernen angefordert. Es geschieht mit der nächsten Sicherheitsprüfung.",
+  blockingConfirm: (path) => `${path} löschen? Das lässt sich nicht rückgängig machen.`,
+  blockingConfirmCancel: "Abbrechen",
 };
 
 // The other app languages fall back to English until their copy is reviewed.

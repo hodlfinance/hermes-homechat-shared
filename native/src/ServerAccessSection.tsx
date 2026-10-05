@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { AlertTriangle, KeyRound, Server, Trash2 } from "lucide-react-native";
 import { apiErrorCode } from "../core/api-client";
 import type { AppLocale } from "../core/index";
@@ -119,6 +119,15 @@ export function ServerAccessSection({
     }
   };
 
+  // Removing deletes a file on the Owner's server for good: ask once, with the exact path.
+  const confirmRemoveBlocking = (path: string) => {
+    if (removingPath) return;
+    Alert.alert(copy.blockingConfirm(path), undefined, [
+      { text: copy.blockingConfirmCancel, style: "cancel" },
+      { text: copy.blockingRemove, style: "destructive", onPress: () => void removeBlocking(path) },
+    ]);
+  };
+
   const blocking = serverBlockingRows(access, copy);
   const status = serverAccessStatus(access, keys, copy);
   const toneColor = status.tone === "teal" ? palette.teal : status.tone === "amber" ? palette.amber : palette.muted;
@@ -160,7 +169,7 @@ export function ServerAccessSection({
               error={removeError?.path === row.path ? removeError.message : null}
               icon={<AlertTriangle size={17} color={palette.amber} />}
               label={row.reason}
-              onPress={() => void removeBlocking(row.path)}
+              onPress={() => confirmRemoveBlocking(row.path)}
               pending={removingPath === row.path}
               status={row.pending ? copy.blockingRequested : null}
               trailing={row.pending ? null : <Trash2 size={16} color={palette.muted} />}
