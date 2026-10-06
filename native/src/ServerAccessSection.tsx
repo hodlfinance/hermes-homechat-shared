@@ -12,6 +12,7 @@ import {
   serverAccessErrorMessage,
   serverAccessRows,
   serverBlockingRows,
+  serverAccessSwitchedOff,
   serverAccessStatus,
   serverHermesSwitchedOff,
 } from "./server-access";
@@ -43,6 +44,7 @@ export function ServerAccessSection({
   const [keys, setKeys] = useState<ServerOwnerSshKeyListing | null>(null);
   const [access, setAccess] = useState<ServerAccessView | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [loadErrorCode, setLoadErrorCode] = useState<string | null>(null);
   const [publicKey, setPublicKey] = useState("");
   const [label, setLabel] = useState("");
   const [adding, setAdding] = useState(false);
@@ -58,8 +60,10 @@ export function ServerAccessSection({
       setKeys(nextKeys);
       setAccess(nextAccess);
       setLoadError(false);
-    } catch {
+      setLoadErrorCode(null);
+    } catch (error) {
       setLoadError(true);
+      setLoadErrorCode(apiErrorCode(error));
     }
   }, [client]);
 
@@ -133,6 +137,9 @@ export function ServerAccessSection({
   const toneColor = status.tone === "teal" ? palette.teal : status.tone === "amber" ? palette.amber : palette.muted;
   const rows = serverAccessRows(access, copy, formatDate);
   const atLimit = keys ? keys.keys.length >= keys.maxKeys : false;
+
+  // Switched off for this workspace: the screen shows nothing at all.
+  if (serverAccessSwitchedOff(access, keys, loadErrorCode)) return null;
 
   return (
     <>

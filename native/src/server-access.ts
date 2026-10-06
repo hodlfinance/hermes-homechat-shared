@@ -266,6 +266,23 @@ export function serverAccessRows(
   return rows;
 }
 
+/**
+ * HPD-1027 S4: whether the server access screen shows at all. Only for the Owner, only while customer
+ * SSH is switched on for the workspace (server-identity ownerAccessAvailable), and never once the
+ * Plane says it is off (delivery "off" or the routes answer owner_access_unavailable).
+ */
+export function serverAccessVisible(identity: { serverOwner?: boolean; ownerAccessAvailable?: boolean } | null | undefined) {
+  return identity?.serverOwner === true && identity.ownerAccessAvailable === true;
+}
+
+export function serverAccessSwitchedOff(
+  access: Pick<ServerAccessView, "ssh"> | null,
+  keys: Pick<ServerOwnerSshKeyListing, "delivery"> | null,
+  errorCode: string | null,
+) {
+  return errorCode === "owner_access_unavailable" || access?.ssh.delivery === "off" || keys?.delivery === "off";
+}
+
 export function serverHermesSwitchedOff(access: Pick<ServerAccessView, "hermes"> | null) {
   return access?.hermes.state === "disabled-by-owner";
 }
