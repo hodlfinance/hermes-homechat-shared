@@ -2,6 +2,7 @@ import { isPreinstalledR8Suggestion } from "../policy";
 import { heyActivityStepText, heyActivityVerbText, markdownLinkDestination, modelComparisonPresentation, modelComparisonCopy } from "../core/index";
 import { adminUiCopy, notificationDeliveryNotice } from "../core/admin-ui-copy";
 import { connectionUiMessage, connectionPermissionLines as localizedConnectionPermissionLines } from "../core/connection-ui-copy";
+import { mobileChatCardCopy } from "./chat-card-copy";
 import { staticUiCopy, staticUiMessage } from "./static-ui-copy";
 import { supportAccessCopy, supportAccessOpenCount } from "../core/support-request";
 import { capabilityCopy, capabilityStatusCopy } from "../core/capability-copy";
@@ -7680,7 +7681,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     return () => { active = false; };
   }, [token, snapshot?.workspace.id, homeRequest?.requestId]);
 
-  const presentedChatTitle = host.presentation?.chatTitle || mobileScreenTitle(tab, settingsSection, t);
+  const presentedChatTitle = host.presentation?.chatTitle || mobileScreenTitle(tab, settingsSection, t, appLocale);
   const ChatHeaderSupportIcon = host.presentation?.chatHeaderSupportIcon;
   const presentedAccountLabel = host.presentation?.accountLabel?.trim()
     || snapshot?.me.email
@@ -7782,7 +7783,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       <View style={styles.externalOpeningBody} accessibilityLiveRegion="polite">
         {openingDestinationTitle || tab !== "chat" ? (
           <View style={styles.openingDestinationState}>
-            <Text style={styles.chatHeaderTitle}>{openingDestinationTitle || mobileScreenTitle(tab, settingsSection, t)}</Text>
+            <Text style={styles.chatHeaderTitle}>{openingDestinationTitle || mobileScreenTitle(tab, settingsSection, t, appLocale)}</Text>
             <Text style={[styles.muted, styles.openingDestinationMessage]}>
               {retry ? sessionFailureCopy?.body || message : message}
             </Text>
@@ -8348,7 +8349,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           {activeSubthreadHeader.kind === "subthread" ? (
             <Text style={styles.subthreadHeaderTitle} numberOfLines={1}>{activeSubthreadHeader.label}</Text>
           ) : (
-            <Text style={styles.chatHeaderTitle}>{tab === "chat" ? presentedChatTitle : mobileScreenTitle(tab, settingsSection, t)}</Text>
+            <Text style={styles.chatHeaderTitle}>{tab === "chat" ? presentedChatTitle : mobileScreenTitle(tab, settingsSection, t, appLocale)}</Text>
           )}
           {activeSubthreadHeader.kind === "subthread" || tab !== "chat" || showPresentedChatSubtitle ? (
             <Text style={styles.chatHeaderSubtitle} numberOfLines={1}>
@@ -8783,6 +8784,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
               {visibleChatApprovalCards.map((card) => (
                 <MobileChatApprovalCard
                   key={card.id}
+                  locale={appLocale}
                   card={card}
                   pending={Boolean(card.runId && confirmationDecisionRuns[card.runId])}
                   onDecision={(decision, typedConfirmation) => void submitMobileConfirmation(card, decision, typedConfirmation)}
@@ -8791,6 +8793,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
               {visibleChatClarifyRequests.map(({ runId, clarify }) => (
                 <MobileChatClarifyCard
                   key={`${runId}:${clarify.id}`}
+                  locale={appLocale}
                   clarify={clarify}
                   pending={Boolean(confirmationDecisionRuns[runId])}
                   onAnswer={(response) => void submitMobileClarify(runId, clarify, response)}
@@ -9969,9 +9972,9 @@ function LogoMark() {
   return <Image source={brandIcon} style={styles.brandMark as ImageStyle} accessibilityIgnoresInvertColors />;
 }
 
-function mobileScreenTitle(tab: Tab, settingsSection: SettingsSection | null, copy: ReturnType<typeof mobileText>) {
+function mobileScreenTitle(tab: Tab, settingsSection: SettingsSection | null, copy: ReturnType<typeof mobileText>, locale: AppLocale) {
   if (tab === "chat") return copy.nav.chat;
-  if (tab === "suggestions") return "Suggestions";
+  if (tab === "suggestions") return staticUiCopy(locale)["Suggestions"];
   if (tab === "tasks") return copy.nav.tasks;
   if (tab === "automations") return copy.nav.automations;
   if (tab === "ai_access") return copy.nav.aiAccess;
@@ -10176,7 +10179,7 @@ function MobileNavigationDrawer({
                 key={section}
                 accessibilityState={{ selected: tab === "suggestions" }}
                 icon={<Lightbulb size={18} color={tab === "suggestions" ? palette.teal : palette.text} />}
-                label="Suggestions"
+                label={staticUiCopy(appLocale)["Suggestions"]}
                 onPress={onOpenSuggestions}
                 selectedIndicator
                 separator={false}
@@ -10636,7 +10639,7 @@ function MessageBubble({
         ? <Text style={textStyle} selectable>{message.content}</Text>
         : (
           <View onLayout={onVisibleTextLayout} style={interimMark ? styles.interimReplyText : undefined}>
-            <LinkedMessageText citations={citations} onCitationPress={pressCitation} text={assistantText} />
+            <LinkedMessageText locale={locale} citations={citations} onCitationPress={pressCitation} text={assistantText} />
           </View>
         )}
       <AssistantMessageImages images={agentImages} locale={locale} readImage={readImage} />
@@ -10672,10 +10675,12 @@ function MessageBubble({
 }
 
 function MobileChatApprovalCard({
+  locale,
   card,
   pending,
   onDecision,
 }: {
+  locale: AppLocale;
   card: ApprovalCard;
   pending: boolean;
   onDecision: (decision: "approved" | "denied", typedConfirmation?: string) => void;
@@ -10684,33 +10689,35 @@ function MobileChatApprovalCard({
   const expired = !Number.isFinite(Date.parse(card.expiresAt)) || Date.parse(card.expiresAt) <= Date.now();
   const confirmationMatches = !card.requiresTypedConfirmation || typedConfirmation.trim() === card.requiresTypedConfirmation;
   const approveDisabled = pending || expired || !confirmationMatches;
+  const cardCopy = mobileChatCardCopy(locale);
+  const typeToApprove = cardCopy.approvalTypeToApprove.split("{value}").join(card.requiresTypedConfirmation ?? "");
   return (
     <View style={[styles.message, styles.assistantMessage]} accessibilityRole="summary">
       <Text style={styles.rowTitle}>{card.title}</Text>
       {card.summary ? <Text style={styles.muted}>{card.summary}</Text> : null}
-      {card.preview.markdown ? <LinkedMessageText text={card.preview.markdown} /> : null}
+      {card.preview.markdown ? <LinkedMessageText locale={locale} text={card.preview.markdown} /> : null}
       {card.preview.fields?.map((field) => (
         <Text key={`${field.label}:${field.value}`} style={styles.muted}>{field.label}: {field.value}</Text>
       ))}
-      <Text style={styles.muted}>Target: {card.target.label}</Text>
-      <Text style={styles.muted}>Action: {card.action.label}</Text>
-      {card.permissions.length ? <Text style={styles.muted}>Permission: {card.permissions.join(" · ")}</Text> : null}
-      {card.dataLeavingWorkspace.length ? <Text style={styles.muted}>Data leaving workspace: {card.dataLeavingWorkspace.join(" · ")}</Text> : null}
-      {card.secretsUsed.length ? <Text style={styles.muted}>Credentials: {card.secretsUsed.map((secret) => `${secret.kind}: ${secret.hint}`).join(" · ")}</Text> : null}
-      <Text style={styles.muted}>{expired ? "This approval has expired." : `Expires: ${new Date(card.expiresAt).toLocaleString()}`}</Text>
+      <Text style={styles.muted}>{cardCopy.approvalTarget}: {card.target.label}</Text>
+      <Text style={styles.muted}>{cardCopy.approvalAction}: {card.action.label}</Text>
+      {card.permissions.length ? <Text style={styles.muted}>{cardCopy.approvalPermission}: {card.permissions.join(" · ")}</Text> : null}
+      {card.dataLeavingWorkspace.length ? <Text style={styles.muted}>{cardCopy.approvalDataLeaving}: {card.dataLeavingWorkspace.join(" · ")}</Text> : null}
+      {card.secretsUsed.length ? <Text style={styles.muted}>{cardCopy.approvalCredentials}: {card.secretsUsed.map((secret) => `${secret.kind}: ${secret.hint}`).join(" · ")}</Text> : null}
+      <Text style={styles.muted}>{expired ? cardCopy.approvalExpired : `${cardCopy.approvalExpires}: ${new Date(card.expiresAt).toLocaleString(locale)}`}</Text>
       {card.requiresTypedConfirmation ? (
         <TextInput
           value={typedConfirmation}
           onChangeText={setTypedConfirmation}
-          placeholder={`Type ${card.requiresTypedConfirmation} to approve`}
+          placeholder={typeToApprove}
           autoCapitalize="characters"
           autoCorrect={false}
           editable={!pending && !expired}
           style={[styles.input, styles.cardInput]}
-          accessibilityLabel={`Type ${card.requiresTypedConfirmation} to approve`}
+          accessibilityLabel={typeToApprove}
         />
       ) : null}
-      <View style={styles.confirmationActions} accessibilityLabel="Confirmation choices">
+      <View style={styles.confirmationActions} accessibilityLabel={cardCopy.confirmationChoices}>
         <Pressable
           style={[styles.confirmationPrimaryButton, approveDisabled && styles.disabledButton]}
           onPress={() => onDecision("approved", typedConfirmation)}
@@ -10736,26 +10743,29 @@ function MobileChatApprovalCard({
 }
 
 function MobileChatClarifyCard({
+  locale,
   clarify,
   pending,
   onAnswer,
 }: {
+  locale: AppLocale;
   clarify: ChatClarifyRequest;
   pending: boolean;
   onAnswer: (response: string) => void;
 }) {
   const [other, setOther] = useState("");
   const expired = !Number.isFinite(Date.parse(clarify.expiresAt)) || Date.parse(clarify.expiresAt) <= Date.now();
+  const cardCopy = mobileChatCardCopy(locale);
   return (
     <View style={[styles.message, styles.assistantMessage]} accessibilityRole="summary">
-      <Text style={styles.rowTitle}>Hermes needs one detail</Text>
+      <Text style={styles.rowTitle}>{cardCopy.clarifyTitle}</Text>
       <Text style={styles.muted}>{clarify.question}</Text>
       {expired ? (
-        <Text style={styles.muted} accessibilityRole="alert">This question has expired. Type your answer in the message field instead.</Text>
+        <Text style={styles.muted} accessibilityRole="alert">{cardCopy.clarifyExpired}</Text>
       ) : pending ? (
-        <Text style={styles.muted} accessibilityRole="alert">Sending your answer…</Text>
+        <Text style={styles.muted} accessibilityRole="alert">{cardCopy.clarifySending}</Text>
       ) : null}
-      <View style={styles.confirmationActions} accessibilityLabel="Clarification choices">
+      <View style={styles.confirmationActions} accessibilityLabel={cardCopy.clarifyChoices}>
         {clarify.choices.map((choice) => (
           <Pressable
             key={choice}
@@ -10774,21 +10784,21 @@ function MobileChatClarifyCard({
           <TextInput
             value={other}
             onChangeText={setOther}
-            placeholder="Other answer"
+            placeholder={cardCopy.otherAnswer}
             placeholderTextColor={palette.muted}
             editable={!pending && !expired}
             style={[styles.input, styles.cardInput]}
-            accessibilityLabel="Other answer"
+            accessibilityLabel={cardCopy.otherAnswer}
           />
           <Pressable
             style={[styles.confirmationPrimaryButton, (pending || expired || !other.trim()) && styles.disabledButton]}
             onPress={() => onAnswer(other)}
             disabled={pending || expired || !other.trim()}
             accessibilityRole="button"
-            accessibilityLabel="Send answer"
+            accessibilityLabel={cardCopy.sendAnswer}
           >
             {pending ? <ActivityIndicator size="small" color={palette.surface} /> : null}
-            <Text style={styles.confirmationPrimaryText}>Send answer</Text>
+            <Text style={styles.confirmationPrimaryText}>{cardCopy.sendAnswer}</Text>
           </Pressable>
         </>
       ) : null}
@@ -11064,10 +11074,12 @@ function MobileMarkdownInlineText({
 }
 
 function LinkedMessageText({
+  locale,
   text,
   citations,
   onCitationPress,
 }: {
+  locale: AppLocale;
   text: string;
   citations?: readonly MobileFinanceCitation[];
   onCitationPress?: (citation: MobileFinanceCitation) => void;
@@ -11089,7 +11101,7 @@ function LinkedMessageText({
         <View
           key={`table-${blockIndex}`}
           style={styles.markdownTableViewport}
-          accessibilityLabel="Table"
+          accessibilityLabel={mobileChatCardCopy(locale).table}
         >
           <View style={styles.markdownTable}>
             {[block.header, ...block.rows].map((row, rowIndex) => (
@@ -11169,7 +11181,7 @@ function PendingAssistantMessage({ locale,
     <View style={[styles.message, styles.assistantMessage, styles.pendingMessage]}>
       {assistantView.visibleText ? (
         <View style={styles.pendingMessageHead} onLayout={onVisibleTextLayout}>
-          <LinkedMessageText text={assistantView.visibleText} />
+          <LinkedMessageText locale={locale} text={assistantView.visibleText} />
         </View>
       ) : null}
       {activityView ? (

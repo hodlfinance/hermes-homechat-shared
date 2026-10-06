@@ -42,19 +42,19 @@ test("the mobile cards expose complete approval metadata, typed confirmation, ch
   const approvalCard = surfaceSource.slice(approvalStart, clarifyStart);
   const clarifyCard = surfaceSource.slice(clarifyStart, clarifyEnd);
 
-  assert.match(approvalCard, /Target: \{card\.target\.label\}/);
-  assert.match(approvalCard, /Action: \{card\.action\.label\}/);
+  assert.match(approvalCard, /\{cardCopy\.approvalTarget\}: \{card\.target\.label\}/);
+  assert.match(approvalCard, /\{cardCopy\.approvalAction\}: \{card\.action\.label\}/);
   assert.match(approvalCard, /card\.preview\.fields\?\.map/);
-  assert.match(approvalCard, /Permission:/);
-  assert.match(approvalCard, /Data leaving workspace:/);
-  assert.match(approvalCard, /Credentials:/);
+  assert.match(approvalCard, /\{cardCopy\.approvalPermission\}:/);
+  assert.match(approvalCard, /\{cardCopy\.approvalDataLeaving\}:/);
+  assert.match(approvalCard, /\{cardCopy\.approvalCredentials\}:/);
   assert.match(approvalCard, /requiresTypedConfirmation/);
   assert.match(approvalCard, /typedConfirmation\.trim\(\) === card\.requiresTypedConfirmation/);
   assert.match(surfaceSource, /loadMobileChatSession\(refreshSessionId, \{ force: true, preserveDraft: true \}\)/);
 
   assert.match(clarifyCard, /clarify\.choices\.map/);
   assert.match(clarifyCard, /clarify\.allowOther \|\| !clarify\.choices\.length/);
-  assert.match(clarifyCard, /placeholder="Other answer"/);
+  assert.match(clarifyCard, /placeholder=\{cardCopy\.otherAnswer\}/);
   assert.doesNotMatch(clarifyCard, /<ScrollView/);
   assert.match(surfaceSource, /api\.resolveChatClarify\(runId, \{ clarifyId: clarify\.id, response: response\.trim\(\) \}\)/);
 });

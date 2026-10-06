@@ -260,7 +260,18 @@ const catalog: Record<AppLocale, typeof en> = { en,
 };
 export function supportAccessCopy(locale: AppLocale) { return catalog[locale]; }
 
-const oneOpen: Partial<Record<AppLocale, string>> = { fr: "{count} ouvert", es: "{count} abierto", it: "{count} aperto", "pt-BR": "{count} aberto" };
+// Singular form for a count of one. Japanese and Korean do not inflect, so
+// they repeat their openCount template; the table is complete by type.
+const oneOpen: Record<AppLocale, string> = {
+  en: "{count} open",
+  de: "{count} offen",
+  fr: "{count} ouvert",
+  es: "{count} abierto",
+  it: "{count} aperto",
+  "pt-BR": "{count} aberto",
+  ja: "有効：{count}件",
+  ko: "열림: {count}개",
+};
 export function supportAccessOpenCount(locale: AppLocale, count: number): string {
   const copy = supportAccessCopy(locale);
   // HPD-838: the Hermes engine in React Native 0.77 (HODL) has no

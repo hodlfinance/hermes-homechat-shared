@@ -40,14 +40,14 @@ test("cardInput stops growth while the shared row style keeps it for the compose
 });
 
 test("expired and pending are stated above the choices, not hidden below the field", () => {
-  const notice = clarifyCard.indexOf("This question has expired.");
-  const sending = clarifyCard.indexOf("Sending your answer");
+  const notice = clarifyCard.indexOf("cardCopy.clarifyExpired");
+  const sending = clarifyCard.indexOf("cardCopy.clarifySending");
   const choices = clarifyCard.indexOf("clarify.choices.map");
-  const field = clarifyCard.indexOf('placeholder="Other answer"');
+  const field = clarifyCard.indexOf("placeholder={cardCopy.otherAnswer}");
   assert.ok(notice > 0 && sending > 0 && choices > 0 && field > 0);
   assert.ok(notice < choices && sending < choices, "state must precede the choices");
   assert.ok(notice < field, "state must precede the answer field");
-  assert.equal(clarifyCard.split("This question has expired.").length - 1, 1, "stated exactly once");
+  assert.equal(clarifyCard.split("cardCopy.clarifyExpired").length - 1, 1, "stated exactly once");
 });
 
 test("a clarify tap that cannot be delivered says why", () => {
@@ -74,4 +74,29 @@ test("an approval tap that cannot be delivered says why", () => {
     submitApproval.indexOf("confirmationDecisionGate.claim(runId)") <
       submitApproval.indexOf("api.decideApproval("),
   );
+});
+
+test("i18n: the chat cards and chat screen-reader labels carry no fixed English", async () => {
+  const { mobileChatCardCopy } = await import("../src/chat-card-copy.ts");
+  const { appLocales } = await import("../core/index.ts");
+  const english = mobileChatCardCopy("en");
+  for (const locale of appLocales) {
+    const copy = mobileChatCardCopy(locale);
+    for (const key of Object.keys(english) as (keyof typeof english)[]) {
+      assert.ok(copy[key]?.trim(), `${locale}.${key} is filled`);
+    }
+    assert.ok(copy.approvalTypeToApprove.includes("{value}"), `${locale} keeps the {value} slot`);
+  }
+  for (const literal of [
+    ">Hermes needs one detail<",
+    "This question has expired.",
+    ">Sending your answer…<",
+    'accessibilityLabel="Clarification choices"',
+    'accessibilityLabel="Confirmation choices"',
+    'accessibilityLabel="Table"',
+    'label="Suggestions"',
+    "This approval has expired.",
+  ]) {
+    assert.ok(!surface.includes(literal), `surface.tsx still contains ${literal}`);
+  }
 });
