@@ -23,7 +23,6 @@ export type MobileChatCardCopy = Readonly<{
   /** `{value}` is the exact word the user must type. */
   approvalTypeToApprove: string;
   table: string;
-  suggestions: string;
 }>;
 
 const chatCardCopyByLocale: Record<AppLocale, MobileChatCardCopy> = {
@@ -44,7 +43,6 @@ const chatCardCopyByLocale: Record<AppLocale, MobileChatCardCopy> = {
     approvalExpires: "Expires",
     approvalTypeToApprove: "Type {value} to approve",
     table: "Table",
-    suggestions: "Suggestions",
   },
   de: {
     clarifyTitle: "Hermes braucht noch eine Angabe",
@@ -63,7 +61,6 @@ const chatCardCopyByLocale: Record<AppLocale, MobileChatCardCopy> = {
     approvalExpires: "Läuft ab",
     approvalTypeToApprove: "Zum Freigeben {value} eingeben",
     table: "Tabelle",
-    suggestions: "Vorschläge",
   },
   fr: {
     clarifyTitle: "Hermes a besoin d’une précision",
@@ -82,7 +79,6 @@ const chatCardCopyByLocale: Record<AppLocale, MobileChatCardCopy> = {
     approvalExpires: "Expire",
     approvalTypeToApprove: "Saisissez {value} pour approuver",
     table: "Tableau",
-    suggestions: "Suggestions",
   },
   es: {
     clarifyTitle: "Hermes necesita un dato más",
@@ -101,7 +97,6 @@ const chatCardCopyByLocale: Record<AppLocale, MobileChatCardCopy> = {
     approvalExpires: "Caduca",
     approvalTypeToApprove: "Escribe {value} para aprobar",
     table: "Tabla",
-    suggestions: "Sugerencias",
   },
   it: {
     clarifyTitle: "Hermes ha bisogno di un dettaglio",
@@ -120,7 +115,6 @@ const chatCardCopyByLocale: Record<AppLocale, MobileChatCardCopy> = {
     approvalExpires: "Scade",
     approvalTypeToApprove: "Digita {value} per approvare",
     table: "Tabella",
-    suggestions: "Suggerimenti",
   },
   "pt-BR": {
     clarifyTitle: "O Hermes precisa de mais um detalhe",
@@ -139,7 +133,6 @@ const chatCardCopyByLocale: Record<AppLocale, MobileChatCardCopy> = {
     approvalExpires: "Expira",
     approvalTypeToApprove: "Digite {value} para aprovar",
     table: "Tabela",
-    suggestions: "Sugestões",
   },
   ja: {
     clarifyTitle: "Hermes から確認したいことが 1 つあります",
@@ -158,10 +151,9 @@ const chatCardCopyByLocale: Record<AppLocale, MobileChatCardCopy> = {
     approvalExpires: "有効期限",
     approvalTypeToApprove: "承認するには {value} と入力してください",
     table: "表",
-    suggestions: "提案",
   },
   ko: {
-    clarifyTitle: "Hermes가 한 가지를 확인하려고 합니다",
+    clarifyTitle: "Hermes에게 한 가지 정보가 필요합니다",
     clarifyExpired: "이 질문은 만료되었습니다. 대신 메시지 입력란에 답변을 입력하세요.",
     clarifySending: "답변을 보내는 중…",
     clarifyChoices: "답변 선택지",
@@ -174,10 +166,9 @@ const chatCardCopyByLocale: Record<AppLocale, MobileChatCardCopy> = {
     approvalDataLeaving: "워크스페이스 밖으로 나가는 데이터",
     approvalCredentials: "인증 정보",
     approvalExpired: "이 승인은 만료되었습니다.",
-    approvalExpires: "만료",
+    approvalExpires: "만료 시각",
     approvalTypeToApprove: "승인하려면 {value}을(를) 입력하세요",
     table: "표",
-    suggestions: "제안",
   },
 };
 

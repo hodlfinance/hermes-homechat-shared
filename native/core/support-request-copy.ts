@@ -403,7 +403,7 @@ const mailCopy: Record<AppLocale, typeof mailEn> = {
     "subject": "{product} Support",
   },
   fr: {
-    "subtitle": "Une demande d’assistance {product} normale — pas un chat IA.",
+    "subtitle": "Une demande d’assistance normale à {product}, pas un chat IA.",
     "boundary": "{product} ajoute la version de l’app, la plateforme, votre identifiant de compte {product}, l’e-mail du compte et l’e-mail de réponse saisi. Ne collez ni mots de passe ni jetons.",
     "boundaryNoEmail": "{product} ajoute la version de l’app, la plateforme, votre identifiant de compte {product} et l’e-mail de réponse saisi. Ne collez ni mots de passe ni jetons.",
     "boundarySignedOut": "{product} ajoute la version de l’app, la plateforme et l’e-mail de réponse saisi. Aucun compte n’est envoyé. Ne collez ni mots de passe ni jetons.",
@@ -489,9 +489,9 @@ const mailCopy: Record<AppLocale, typeof mailEn> = {
   },
   ko: {
     "subtitle": "일반적인 {product} 지원 요청입니다. AI 채팅이 아닙니다.",
-    "boundary": "{product}는 앱 버전, 플랫폼, {product} 계정 ID, 계정 이메일, 입력한 회신 이메일을 추가합니다. 비밀번호나 토큰을 붙여 넣지 마세요.",
-    "boundaryNoEmail": "{product}는 앱 버전, 플랫폼, {product} 계정 ID, 입력한 회신 이메일을 추가합니다. 비밀번호나 토큰을 붙여 넣지 마세요.",
-    "boundarySignedOut": "{product}는 앱 버전, 플랫폼, 입력한 회신 이메일을 추가합니다. 계정 정보는 전송되지 않습니다. 비밀번호나 토큰을 붙여 넣지 마세요.",
+    "boundary": "{product}에서 앱 버전, 플랫폼, {product} 계정 ID, 계정 이메일, 입력한 회신 이메일을 추가합니다. 비밀번호나 토큰을 붙여 넣지 마세요.",
+    "boundaryNoEmail": "{product}에서 앱 버전, 플랫폼, {product} 계정 ID, 입력한 회신 이메일을 추가합니다. 비밀번호나 토큰을 붙여 넣지 마세요.",
+    "boundarySignedOut": "{product}에서 앱 버전, 플랫폼, 입력한 회신 이메일을 추가합니다. 계정 정보는 전송되지 않습니다. 비밀번호나 토큰을 붙여 넣지 마세요.",
     "account": "{product} 계정",
     "accountEmail": "계정 이메일",
     "sessionSource": "로그인된 세션에서 가져온 정보이며 여기서 변경할 수 없습니다.",

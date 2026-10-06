@@ -9974,7 +9974,7 @@ function LogoMark() {
 
 function mobileScreenTitle(tab: Tab, settingsSection: SettingsSection | null, copy: ReturnType<typeof mobileText>, locale: AppLocale) {
   if (tab === "chat") return copy.nav.chat;
-  if (tab === "suggestions") return mobileChatCardCopy(locale).suggestions;
+  if (tab === "suggestions") return staticUiCopy(locale)["Suggestions"];
   if (tab === "tasks") return copy.nav.tasks;
   if (tab === "automations") return copy.nav.automations;
   if (tab === "ai_access") return copy.nav.aiAccess;
@@ -10179,7 +10179,7 @@ function MobileNavigationDrawer({
                 key={section}
                 accessibilityState={{ selected: tab === "suggestions" }}
                 icon={<Lightbulb size={18} color={tab === "suggestions" ? palette.teal : palette.text} />}
-                label={mobileChatCardCopy(appLocale).suggestions}
+                label={staticUiCopy(appLocale)["Suggestions"]}
                 onPress={onOpenSuggestions}
                 selectedIndicator
                 separator={false}
