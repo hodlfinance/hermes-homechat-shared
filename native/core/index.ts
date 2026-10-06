@@ -2,6 +2,7 @@ export * from "./types";
 export * from "./product";
 export * from "./budget";
 export * from "./api-client";
+export * from "./assistant-message-images";
 export * from "./assistant-message-links";
 export * from "./chat-send-reliability";
 export * from "./chat-streaming";

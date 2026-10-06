@@ -8,6 +8,8 @@ import { capabilityCopy, capabilityStatusCopy } from "../core/capability-copy";
 import { MobilePrivacySheet } from "./MobilePrivacySheet";
 import { MobileDelegatedActivityTimeline, useSteadyLine } from "./mobile-delegated-activity";
 import { FinanceArtifactCard } from "./FinanceArtifactCard";
+import { AssistantMessageImages, type AssistantImageReader } from "./AssistantMessageImages";
+import { assistantMessageImages } from "../core/assistant-message-images";
 import { FinanceCitationSheet } from "./FinanceCitationSheet";
 import {
   mobileCitationSegments,
@@ -2348,6 +2350,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       token: token || "missing",
     }),
     [token],
+  );
+  // HPD-1062: the images an agent made, read through the same canonical client.
+  const readAssistantImage = useCallback<AssistantImageReader>(
+    (runId, imageId, signal) => hermesApi.runImage(runId, imageId, { signal }),
+    [hermesApi],
   );
   const openDelegatedRunEvents = useCallback(
     (runId: string, cursor: string | null, signal?: AbortSignal) =>
@@ -8650,6 +8657,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                     openConversationId: activeConversationSessionId,
                   })}
                   showAssistantIdentity={message.id === firstVisibleAssistantMessageId}
+                  readImage={readAssistantImage}
                   onVisibleTextLayout={
                     message.role === "assistant" && message.runId === chatLatencyRef.current?.runId
                       ? recordFirstVisibleMobileToken
@@ -10390,9 +10398,12 @@ function MessageBubble({
   interimMark = null,
   showAssistantIdentity,
   onVisibleTextLayout,
+  readImage,
 }: {
   message: ChatMessage;
   locale: AppLocale;
+  /** HPD-1062: reads one agent image of this message. */
+  readImage?: AssistantImageReader;
   copy: ReturnType<typeof mobileText>["chat"];
   /** HPD-871: set while the run that posted this text has not answered. */
   interimMark?: MobileInterimReplyMark | null;
@@ -10412,6 +10423,7 @@ function MessageBubble({
   const financeReferences = isUser
     ? []
     : uniqueMobileFinanceArtifactReferences(message.artifactReferences);
+  const agentImages = isUser ? [] : assistantMessageImages(message.artifactReferences);
   const citations = financeReferences.length
     ? mobileFinanceCitations(financeReferences, assistantText).filter((citation) =>
         mobileFinanceCitationAction(citation, Boolean(readFinanceSourceDocument)) !== "plain")
@@ -10506,6 +10518,7 @@ function MessageBubble({
             <LinkedMessageText citations={citations} onCitationPress={pressCitation} text={assistantText} />
           </View>
         )}
+      <AssistantMessageImages images={agentImages} locale={locale} readImage={readImage} />
       {financeReferences.map((reference) => (
         <FinanceArtifactCard
           key={`${reference.id}:${reference.version}`}
