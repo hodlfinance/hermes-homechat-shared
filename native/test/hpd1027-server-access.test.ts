@@ -11,6 +11,8 @@ import {
   serverAccessStatus,
   serverBlockingRows,
   serverHermesSwitchedOff,
+  serverAccessSwitchedOff,
+  serverAccessVisible,
 } from "../src/server-access";
 
 // HPD-1027 S4: the Owner's server access screen model, shared by app and web.
@@ -87,7 +89,7 @@ test("Hermes switched off by the Owner is shown", () => {
 
 test("the app shows the section to the server Owner only", () => {
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
-  assert.match(surface, /serverIdentity\?\.serverOwner === true \? \(\s*<ServerAccessSection client=\{api\}/);
+  assert.match(surface, /serverAccessVisible\(serverIdentity\) \? \(\s*<ServerAccessSection client=\{api\}/);
 });
 
 test("blocking paths before the first root grant: reason, and whether removal is already requested", () => {
@@ -127,4 +129,18 @@ test("the app screen offers the remove action for each blocking path", () => {
 test("the remove confirm names the path and says it cannot be undone", () => {
   assert.equal(serverAccessCopy("en").blockingConfirm("/var/log/x.gz"), "Delete /var/log/x.gz? This cannot be undone.");
   assert.match(serverAccessCopy("de").blockingConfirm("/var/log/x.gz"), /^\/var\/log\/x\.gz löschen\? Das lässt sich nicht rückgängig machen\.$/);
+});
+
+test("nothing shows while customer SSH is switched off for the workspace", () => {
+  assert.equal(serverAccessVisible({ serverOwner: true, ownerAccessAvailable: true }), true);
+  assert.equal(serverAccessVisible({ serverOwner: true, ownerAccessAvailable: false }), false);
+  assert.equal(serverAccessVisible({ serverOwner: true }), false);
+  assert.equal(serverAccessVisible({ serverOwner: false, ownerAccessAvailable: true }), false);
+  assert.equal(serverAccessVisible(null), false);
+  assert.equal(serverAccessSwitchedOff(null, null, "owner_access_unavailable"), true);
+  assert.equal(serverAccessSwitchedOff(null, { delivery: "off" }, null), true);
+  assert.equal(serverAccessSwitchedOff({ ssh: { ...applied.ssh, delivery: "off" } }, null, null), true);
+  assert.equal(serverAccessSwitchedOff(applied, { delivery: "applied" }, null), false);
+  const section = readFileSync(new URL("../src/ServerAccessSection.tsx", import.meta.url), "utf8");
+  assert.match(section, /if \(serverAccessSwitchedOff\(access, keys, loadErrorCode\)\) return null;/);
 });

@@ -1270,6 +1270,8 @@ interface WorkspaceServerIdentityBase {
   network: "private_managed" | null;
   /** HPD-1027: true only for the workspace's own account on its active Firecracker server. */
   serverOwner?: boolean;
+  /** HPD-1027 S4: the Owner screens exist only while customer SSH is switched on for this workspace. */
+  ownerAccessAvailable?: boolean;
 }
 
 export type WorkspaceServerIdentity = WorkspaceServerIdentityBase & (
