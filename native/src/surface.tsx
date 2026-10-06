@@ -26,7 +26,7 @@ import { workspacePrivacyCopy } from "../ui/workspace-privacy-copy";
 import { openPageStarter, consumePageStarter, pageStarterTranscript, pageStarterPayload, pageStarterAfterNavigation, type PageStarterState } from "../ui/page-starter-state";
 import { pageStarterCopy } from "../ui/page-starter-copy";
 import { MobilePageMenuRow, MobileThreadOptionsButton, MobileUnreadBadge } from "./mobile-page-menu-row";
-import { emailMagicLinkTokenFromUrl, solveEmailMagicLinkAbuseChallenge } from "./mobile-email-magic-link";
+import { EmailMagicLinkAbuseError, emailMagicLinkTokenFromUrl, requestEmailMagicLinkWithAbuseProof } from "./mobile-email-magic-link";
 import { pageMenuRemovalCopy } from "../ui/page-menu-copy";
 import {
   applyAutomationThreadReadAnswer,
@@ -1652,6 +1652,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [emailSignupEmail, setEmailSignupEmail] = useState("");
   const [emailMagicLinkPhase, setEmailMagicLinkPhase] = useState<"idle" | "sending" | "sent" | "completing">("idle");
   const emailMagicLinkConsumedRef = useRef<string | null>(null);
+  // The one in-flight link request: its abort handle, a generation so a
+  // superseded run never touches the screen, and whether iOS suspended it.
+  const emailMagicLinkRunRef = useRef<{ controller: AbortController; generation: number; suspended: boolean } | null>(null);
+  const emailMagicLinkGenerationRef = useRef(0);
+  const requestEmailMagicLinkRef = useRef<(restart?: boolean) => Promise<void>>(async () => undefined);
   const [accountDeletionEmailReauthenticationAccountId, setAccountDeletionEmailReauthenticationAccountId] = useState<string | null>(null);
   const [nativeAuthConfig, setNativeAuthConfig] = useState<HeyNativeAuthConfig | null>(null);
   const [nativeAuthBusy, setNativeAuthBusy] = useState<"apple" | "google" | null>(null);
@@ -5162,27 +5167,69 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     });
   }
 
-  async function requestEmailMagicLink() {
+  async function requestEmailMagicLink(restart = false) {
     const signupEmail = emailSignupEmail.trim();
-    if (!signupEmail || emailMagicLinkPhase === "sending") return;
+    if (!signupEmail || (emailMagicLinkPhase === "sending" && !restart)) return;
+    emailMagicLinkRunRef.current?.controller.abort();
+    const generation = ++emailMagicLinkGenerationRef.current;
+    const controller = new AbortController();
+    emailMagicLinkRunRef.current = { controller, generation, suspended: false };
     setEmailMagicLinkPhase("sending");
     setAppError(null);
+    const current = () => emailMagicLinkGenerationRef.current === generation;
     try {
       const publicAuth = createApiClient({ baseUrl: API_BASE, token: "email-signup" });
-      const challenge = await publicAuth.emailMagicLinkAbuseChallenge({ surface: "ios" });
-      const abuseProof = await solveEmailMagicLinkAbuseChallenge(challenge);
-      await publicAuth.startEmailMagicLink({
-        abuseProof,
-        email: signupEmail,
-        surface: "ios",
-        website: "",
+      // Bounded: one fresh challenge after an expiry, 30 s overall, abortable.
+      await requestEmailMagicLinkWithAbuseProof({
+        fetchChallenge: () => publicAuth.emailMagicLinkAbuseChallenge({ surface: "ios" }),
+        start: (abuseProof) => publicAuth.startEmailMagicLink({
+          abuseProof,
+          email: signupEmail,
+          surface: "ios",
+          website: "",
+        }),
+        signal: controller.signal,
       });
+      if (!current()) return;
+      emailMagicLinkRunRef.current = null;
       setEmailMagicLinkPhase("sent");
     } catch (caught) {
+      if (!current()) return;
+      emailMagicLinkRunRef.current = null;
       setEmailMagicLinkPhase("idle");
+      if (caught instanceof EmailMagicLinkAbuseError) {
+        setAppError(caught.reason === "timeout"
+          ? (appLocale === "de"
+            ? "Das Senden des Anmeldelinks hat zu lange gedauert. Bitte versuche es noch einmal."
+            : "Sending the sign-in link took too long. Please try again.")
+          : (appLocale === "de"
+            ? "Der Anmeldelink konnte nicht angefordert werden. Bitte versuche es noch einmal."
+            : "The sign-in link could not be requested. Please try again."));
+        return;
+      }
       setAppError(userFacingError(displayError(caught, "The sign-in link could not be requested.")));
     }
   }
+  requestEmailMagicLinkRef.current = requestEmailMagicLink;
+
+  // iOS freezes JavaScript timers in the background, so a proof in progress
+  // stalls and its challenge expires. Mark it suspended when the app leaves
+  // the foreground and restart it with a fresh challenge on return.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      const run = emailMagicLinkRunRef.current;
+      if (!run) return;
+      if (state !== "active") {
+        run.suspended = true;
+        return;
+      }
+      if (run.suspended) void requestEmailMagicLinkRef.current(true);
+    });
+    return () => {
+      subscription.remove();
+      emailMagicLinkRunRef.current?.controller.abort();
+    };
+  }, []);
 
   async function completeEmailMagicLink(tokenValue: string) {
     const magicToken = tokenValue.trim();

@@ -4,7 +4,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createApiClient } from "../core/index";
 import {
+  EmailMagicLinkAbuseError,
   emailMagicLinkTokenFromUrl,
+  requestEmailMagicLinkWithAbuseProof,
   solveEmailMagicLinkAbuseChallenge,
 } from "../src/mobile-email-magic-link";
 
@@ -95,7 +97,9 @@ test("the create-account surface keeps Google and Apple and adds neutral email s
   const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   assert.match(source, /Create your account with email, Google, or Apple/);
   assert.match(source, /requestEmailMagicLink\(\)/);
-  assert.match(source, /solveEmailMagicLinkAbuseChallenge\(challenge\)/);
+  assert.match(source, /requestEmailMagicLinkWithAbuseProof\(\{/);
+  assert.match(source, /AppState\.addEventListener\("change", \(state\) => \{\n      const run = emailMagicLinkRunRef\.current;/);
+  assert.match(source, /requestEmailMagicLinkRef\.current\(true\)/);
   assert.match(source, /Link per E-Mail senden/);
   assert.match(source, /If this email can be used with Hey Hermes, a sign-in link is on its way/);
   assert.match(source, /Linking\.getInitialURL\(\)/);
@@ -104,4 +108,114 @@ test("the create-account surface keeps Google and Apple and adds neutral email s
   assert.match(source, /emailReauthenticationCompleted=\{accountDeletionEmailReauthenticationAccountId === snapshot\.me\.id\}/);
   assert.match(source, /signInWithGoogle\(\)/);
   assert.match(source, /AppleAuthenticationButtonType\.SIGN_UP/);
+});
+
+const proofChallenge = (overrides: Partial<{ challenge: string; difficulty: number; expiresAt: string; id: string }> = {}) => ({
+  challenge: "D".repeat(48),
+  difficulty: 12,
+  expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  id: "proof_fresh",
+  ...overrides,
+});
+
+test("the solver proves 12-bit and multi-digit nonces exactly like the server hash", async () => {
+  for (const difficulty of [12, 14]) {
+    const challenge = proofChallenge({ difficulty, challenge: `E${difficulty}`.padEnd(48, "x") });
+    const proof = await solveEmailMagicLinkAbuseChallenge(challenge);
+    const digest = createHash("sha256").update(`${proof.challenge}.${proof.nonce}`).digest();
+    const bits = digest.readUInt16BE(0) >> (16 - difficulty);
+    assert.equal(bits, 0, `difficulty ${difficulty} nonce ${proof.nonce}`);
+    assert.ok(proof.nonce > 9, "nonce exercises the multi-digit encoder");
+  }
+});
+
+test("the solver stops at expiresAt after a frozen yield instead of spinning on", async () => {
+  let clock = Date.now();
+  const challenge = proofChallenge({ difficulty: 24, expiresAt: new Date(clock + 5_000).toISOString() });
+  let yields = 0;
+  await assert.rejects(
+    solveEmailMagicLinkAbuseChallenge(challenge, {
+      yieldEvery: 256,
+      now: () => clock,
+      // iOS background: the timer returns only after the challenge expired.
+      yieldControl: async () => { yields += 1; clock += 10_000; },
+    }),
+    (error: unknown) => error instanceof EmailMagicLinkAbuseError && error.reason === "expired",
+  );
+  assert.equal(yields, 1);
+});
+
+test("the solver stops at the next batch when aborted", async () => {
+  const controller = new AbortController();
+  await assert.rejects(
+    solveEmailMagicLinkAbuseChallenge(proofChallenge({ difficulty: 24 }), {
+      yieldEvery: 256,
+      signal: controller.signal,
+      yieldControl: async () => controller.abort(),
+    }),
+    (error: unknown) => error instanceof EmailMagicLinkAbuseError && error.reason === "aborted",
+  );
+});
+
+test("an expired challenge is replaced by exactly one fresh challenge", async () => {
+  const fetched: string[] = [];
+  const started: string[] = [];
+  await requestEmailMagicLinkWithAbuseProof({
+    fetchChallenge: async () => {
+      const id = `proof_${fetched.length}`;
+      fetched.push(id);
+      return proofChallenge({ id });
+    },
+    solve: async (challenge) => {
+      if (challenge.id === "proof_0") throw new EmailMagicLinkAbuseError("expired", "expired");
+      return { challenge: challenge.challenge, challengeId: challenge.id, nonce: 7 };
+    },
+    start: async (proof) => { started.push(proof.challengeId); },
+  });
+  assert.deepEqual(fetched, ["proof_0", "proof_1"]);
+  assert.deepEqual(started, ["proof_1"]);
+
+  let fetches = 0;
+  await assert.rejects(
+    requestEmailMagicLinkWithAbuseProof({
+      fetchChallenge: async () => { fetches += 1; return proofChallenge(); },
+      solve: async () => { throw new EmailMagicLinkAbuseError("expired", "expired"); },
+      start: async () => assert.fail("must not start without a proof"),
+    }),
+    (error: unknown) => error instanceof EmailMagicLinkAbuseError && error.reason === "expired",
+  );
+  assert.equal(fetches, 2, "a second expiry ends the attempt instead of looping");
+});
+
+test("the whole request ends with a timeout error and stops the solver", async () => {
+  let fireTimeout: () => void = () => undefined;
+  let solverSignal: AbortSignal | undefined;
+  const pending = requestEmailMagicLinkWithAbuseProof({
+    fetchChallenge: async () => proofChallenge(),
+    solve: (_challenge, options) => {
+      solverSignal = options?.signal;
+      return new Promise(() => undefined);
+    },
+    start: async () => assert.fail("must not start"),
+    timeoutMs: 30_000,
+    setTimer: (callback, ms) => { assert.equal(ms, 30_000); fireTimeout = callback; return 1; },
+    clearTimer: () => undefined,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  fireTimeout();
+  await assert.rejects(pending, (error: unknown) => error instanceof EmailMagicLinkAbuseError && error.reason === "timeout");
+  assert.equal(solverSignal?.aborted, true);
+});
+
+test("an outside abort (app returning to foreground) ends the stale request", async () => {
+  const controller = new AbortController();
+  const pending = requestEmailMagicLinkWithAbuseProof({
+    fetchChallenge: async () => proofChallenge(),
+    solve: () => new Promise(() => undefined),
+    start: async () => assert.fail("must not start"),
+    signal: controller.signal,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  await assert.rejects(pending, (error: unknown) => error instanceof EmailMagicLinkAbuseError && error.reason === "aborted");
 });
