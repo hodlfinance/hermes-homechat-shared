@@ -150,6 +150,7 @@ import type {
   WorkspaceServer,
 } from "./types";
 import type { HermesJobResponse } from "./hermes-api";
+import { parseHeyHermesSalesStatus, type HeyHermesSalesStatus } from "./hermes-api";
 import type { SharedHermesHistoryEntry, SharedHermesHistoryVisibility } from "./hermes-channel";
 import type { ConnectionSetupIntent } from "./connection-setup";
 import type { HermesConversationListResponse } from "./hermes-api";
@@ -715,6 +716,22 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
       request<WorkspaceSummary>(`/admin/workspaces/${id}/reset`, { method: "POST", body: JSON.stringify(body) }),
     entitlement: () => request<Entitlement>("/entitlement"),
     subscriptionState: () => request<SubscriptionStateView>("/billing/subscription-state"),
+    // HPD-1063: null = unknown (old server 404, network error, invalid shape);
+    // callers then behave exactly as before.
+    salesStatus: async (): Promise<HeyHermesSalesStatus | null> => {
+      try {
+        return parseHeyHermesSalesStatus(await request<unknown>("/billing/sales-status"));
+      } catch {
+        return null;
+      }
+    },
+    joinWaitlist: async (): Promise<HeyHermesSalesStatus | null> => {
+      try {
+        return parseHeyHermesSalesStatus(await request<unknown>("/billing/waitlist", { method: "POST", body: "{}" }));
+      } catch {
+        return null;
+      }
+    },
     revenueCatCheckout: (body: BillingCheckoutRequest) =>
       request<BillingCheckoutResponse>("/billing/revenuecat/checkout", { method: "POST", body: JSON.stringify(body) }),
     planChangePreview: (body: BillingPlanChangePreviewRequest) =>

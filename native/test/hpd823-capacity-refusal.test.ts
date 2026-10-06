@@ -160,10 +160,10 @@ test("the modal chooses the capacity copy only when the refusal is present", () 
   assert.equal(mobilePendingAccessCopy("de").title, "Dein Zugang wird vorbereitet");
 
   const en = mobilePendingAccessCopy("en", mobilePendingAccessVariant(refused));
-  assert.equal(`${en.title} – ${en.body}`, "We’re at capacity – Hermes will be ready as soon as a place is free.");
+  assert.equal(`${en.title} – ${en.body}`, "We’re at capacity right now – Your Hermes will be set up as soon as a place is free — we’ll email you when it’s ready.");
   assert.equal(en.checkAgain, "Check again");
   const de = mobilePendingAccessCopy("de", "capacity");
-  assert.equal(`${de.title} – ${de.body}`, "Kapazität erreicht – Hermes ist bereit, sobald ein Platz frei ist.");
+  assert.equal(`${de.title} – ${de.body}`, "Gerade sind alle Plätze belegt – Dein Hermes wird eingerichtet, sobald ein Platz frei ist – wir schicken Dir eine E-Mail, sobald er bereit ist.");
   assert.equal(de.signOut, "Abmelden");
 
   for (const locale of appLocales) {
@@ -180,7 +180,7 @@ test("the surface feeds the status truth into the pending modal copy", () => {
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   assert.match(
     surface,
-    /const pendingAccessCopy = mobilePendingAccessCopy\(appLocale, mobilePendingAccessVariant\(workspaceStatusTruth\)\);/,
+    /const pendingAccessCopy = mobilePendingAccessCopy\(appLocale, mobilePendingAccessVariant\(workspaceStatusTruth\), \{\s*reason: workspaceStatusTruthCapacityRefusal\(workspaceStatusTruth\)\?\.reason/,
   );
   assert.match(surface, /<PendingProductAccessModal[\s\S]*?copy=\{pendingAccessCopy\}/);
 });

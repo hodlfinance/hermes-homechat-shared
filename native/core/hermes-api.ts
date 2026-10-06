@@ -569,3 +569,67 @@ export type HermesJobRunResponse = HermesJobResponse & {
 };
 
 export type HermesCanonicalEvent = CanonicalHermesRunEvent;
+
+// HPD-1063: the plane only sells while the Firecracker host has a free place.
+// GET /billing/sales-status and POST /billing/waitlist share this shape. Old
+// servers answer 404; every unknown answer maps to null, which means "behave
+// exactly as before" (purchase stays offered).
+export const heyHermesSalesStatusSchemaVersion = "heyhermes.sales-status/v1" as const;
+
+export type HeyHermesSalesStatusReason = "open" | "waitlist" | "capacity_unknown";
+export type HeyHermesWaitlistStatus = "waiting" | "invited" | "expired" | "purchased";
+
+export type HeyHermesSalesStatus = {
+  schemaVersion: typeof heyHermesSalesStatusSchemaVersion;
+  open: boolean;
+  reason: HeyHermesSalesStatusReason;
+  mayPurchase: boolean;
+  invitation: { expiresAt: string } | null;
+  waitlist: { status: HeyHermesWaitlistStatus; position: number | null } | null;
+  checkedAt: string;
+};
+
+const salesStatusReasons: readonly string[] = ["open", "waitlist", "capacity_unknown"];
+const waitlistStatuses: readonly string[] = ["waiting", "invited", "expired", "purchased"];
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && Number.isFinite(Date.parse(value));
+}
+
+/** Strict parser for the sales-status shape; anything else is null. */
+export function parseHeyHermesSalesStatus(value: unknown): HeyHermesSalesStatus | null {
+  if (!isPlainRecord(value)) return null;
+  if (value.schemaVersion !== heyHermesSalesStatusSchemaVersion) return null;
+  if (typeof value.open !== "boolean" || typeof value.mayPurchase !== "boolean") return null;
+  if (typeof value.reason !== "string" || !salesStatusReasons.includes(value.reason)) return null;
+  if (!isIsoTimestamp(value.checkedAt)) return null;
+
+  let invitation: HeyHermesSalesStatus["invitation"] = null;
+  if (value.invitation != null) {
+    if (!isPlainRecord(value.invitation) || !isIsoTimestamp(value.invitation.expiresAt)) return null;
+    invitation = { expiresAt: value.invitation.expiresAt };
+  }
+
+  let waitlist: HeyHermesSalesStatus["waitlist"] = null;
+  if (value.waitlist != null) {
+    if (!isPlainRecord(value.waitlist)) return null;
+    const { status, position } = value.waitlist;
+    if (typeof status !== "string" || !waitlistStatuses.includes(status)) return null;
+    if (position !== null && !(typeof position === "number" && Number.isInteger(position) && position > 0)) return null;
+    waitlist = { status: status as HeyHermesWaitlistStatus, position: position as number | null };
+  }
+
+  return {
+    schemaVersion: heyHermesSalesStatusSchemaVersion,
+    open: value.open,
+    reason: value.reason as HeyHermesSalesStatusReason,
+    mayPurchase: value.mayPurchase,
+    invitation,
+    waitlist,
+    checkedAt: value.checkedAt,
+  };
+}
