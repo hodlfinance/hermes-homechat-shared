@@ -18,6 +18,7 @@ import {
 } from "../core/index";
 import { mobileHomeChatActiveRunRecovery, mobileRunIsForeground } from "./mobile-home-chat-startup";
 import { mobileStopRunUnlessFinished } from "./mobile-stop-target";
+import { visibleUserMessageText } from "./voice-verbatim";
 
 export type NativeR8ChannelIdentity = {
   surface: "hey_hermes" | "finhermes";
@@ -84,7 +85,7 @@ export function mobileChatMessageFromCanonical(message: HermesApiMessage): ChatM
     runId: message.runId,
     conversationSessionId: message.conversationId,
     role: message.role,
-    content: message.content,
+    content: message.role === "user" ? visibleUserMessageText(message.content) : message.content,
     artifactReferences: message.artifactReferences,
     createdAt: message.createdAt,
   };
