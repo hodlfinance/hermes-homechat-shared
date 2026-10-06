@@ -1,4 +1,5 @@
 import {
+  assistantImageDataUri,
   chatRunEventFromHermesEvent,
   type createHermesApiClient,
   type ChatMessage,
@@ -392,6 +393,10 @@ export function createNativeR8CanonicalController(
     },
     runEventsResponse: (runId: string, options: HermesRunEventsOptions = {}) =>
       client.runEventsResponse(runId, options),
+    // HPD-1062: the data URI of one agent image, or null when the plane's
+    // answer is not exactly that image in an allowed format and size.
+    runImage: async (runId: string, imageId: string, context: MobileHermesRequestContext = {}) =>
+      assistantImageDataUri(await client.runImage(runId, imageId, context), { runId, imageId }),
     automations: async (context: MobileHermesRequestContext = {}) => {
       const response = await client.jobs(context);
       return mobileAutomationsViewFromCanonical(response.jobs);

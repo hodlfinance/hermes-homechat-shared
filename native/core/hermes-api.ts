@@ -421,6 +421,17 @@ export type HermesRunResponse = {
   run: HermesApiRun;
 };
 
+/** HPD-1062: one image the agent made, read back as base64 JSON. */
+export type HermesRunImageResponse = {
+  image: {
+    id: string;
+    runId: string;
+    mimeType: string;
+    size: number;
+    data: string;
+  };
+};
+
 export type HermesRunsResponse = {
   contractVersion: HermesApiContractVersion;
   run: HermesApiRun | null;

@@ -12,6 +12,7 @@ import type {
   HermesJobRunResponse,
   HermesJobsResponse,
   HermesMessagesResponse,
+  HermesRunImageResponse,
   HermesRunResponse,
   HermesRunsResponse,
   MarkHermesConversationReadRequest,
@@ -210,6 +211,12 @@ export function createHermesApiClient({ baseUrl, token = "", fetchImpl = fetch }
       request<HermesRunResponse>(`/hermes/runs/${encodeURIComponent(runId)}`, {
         signal: options.signal,
       }),
+    // HPD-1062: an image the agent made in this run, as base64 JSON.
+    runImage: (runId: string, imageId: string, options: HermesRequestOptions = {}) =>
+      request<HermesRunImageResponse>(
+        `/hermes/runs/${encodeURIComponent(runId)}/images/${encodeURIComponent(imageId)}`,
+        { signal: options.signal },
+      ),
     listRuns: (
       query: { active: true; channel?: string; limit?: number; surface?: string },
       options: HermesRequestOptions = {},
