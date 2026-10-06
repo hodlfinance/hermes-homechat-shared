@@ -28,6 +28,8 @@ export type IosPaywallCopy = {
   unavailablePrice: string;
   restore: string;
   restoring: string;
+  /** HPD-1043: RevenueCat refused because the receipt is bound to another Hey account. */
+  receiptInUse: string;
   manage: string;
   eligibleTrial: string;
   ineligibleTrial: string;
@@ -62,6 +64,7 @@ const en: IosPaywallCopy = {
   unavailablePrice: "The App Store price is unavailable right now.",
   restore: "Restore Purchases",
   restoring: "Restoring...",
+  receiptInUse: "This Apple ID's subscription already belongs to another Hey account. Sign in with the Hey account that bought it, or contact Hey Support.",
   manage: "Manage Subscription",
   eligibleTrial: "Apple confirms you are eligible: 7 days free, then {price}/month.",
   ineligibleTrial: "No trial applies. Billing starts immediately at {price}/month.",
@@ -96,6 +99,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
     unavailablePrice: "Der App-Store-Preis ist derzeit nicht verfügbar.",
     restore: "Käufe wiederherstellen",
     restoring: "Wiederherstellung...",
+    receiptInUse: "Das Abo dieser Apple-ID gehört bereits zu einem anderen Hey-Konto. Melde dich mit dem Hey-Konto an, mit dem es gekauft wurde, oder wende dich an den Hey-Support.",
     manage: "Abo verwalten",
     eligibleTrial: "Apple bestätigt deine Berechtigung: 7 Tage kostenlos, danach {price}/Monat.",
     ineligibleTrial: "Es gilt keine Testphase. Die Abrechnung beginnt sofort mit {price}/Monat.",
@@ -127,6 +131,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
     unavailablePrice: "Le prix App Store est indisponible pour le moment.",
     restore: "Restaurer les achats",
     restoring: "Restauration...",
+    receiptInUse: "L'abonnement de cet identifiant Apple appartient déjà à un autre compte Hey. Connecte-toi avec le compte Hey qui l'a acheté, ou contacte le support Hey.",
     manage: "Gérer l'abonnement",
     eligibleTrial: "Apple confirme ton éligibilité : 7 jours gratuits, puis {price}/mois.",
     ineligibleTrial: "Aucun essai ne s'applique. La facturation commence immédiatement à {price}/mois.",
@@ -158,6 +163,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
     unavailablePrice: "El precio del App Store no está disponible ahora mismo.",
     restore: "Restaurar compras",
     restoring: "Restaurando...",
+    receiptInUse: "La suscripción de este Apple ID ya pertenece a otra cuenta de Hey. Inicia sesión con la cuenta de Hey que la compró o contacta con el soporte de Hey.",
     manage: "Gestionar suscripción",
     eligibleTrial: "Apple confirma que cumples los requisitos: 7 días gratis y después {price}/mes.",
     ineligibleTrial: "No se aplica ninguna prueba. La facturación comienza de inmediato a {price}/mes.",
@@ -189,6 +195,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
     unavailablePrice: "Il prezzo App Store non è disponibile in questo momento.",
     restore: "Ripristina acquisti",
     restoring: "Ripristino...",
+    receiptInUse: "L'abbonamento di questo ID Apple appartiene già a un altro account Hey. Accedi con l'account Hey che l'ha acquistato oppure contatta l'assistenza Hey.",
     manage: "Gestisci abbonamento",
     eligibleTrial: "Apple conferma la tua idoneità: 7 giorni gratis, poi {price}/mese.",
     ineligibleTrial: "Non si applica alcuna prova. La fatturazione inizia subito a {price}/mese.",
@@ -220,6 +227,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
     unavailablePrice: "O preço da App Store está indisponível no momento.",
     restore: "Restaurar compras",
     restoring: "Restaurando...",
+    receiptInUse: "A assinatura deste ID Apple já pertence a outra conta Hey. Entre com a conta Hey que fez a compra ou fale com o suporte do Hey.",
     manage: "Gerenciar assinatura",
     eligibleTrial: "A Apple confirma sua elegibilidade: 7 dias grátis, depois {price}/mês.",
     ineligibleTrial: "Nenhum teste se aplica. A cobrança começa imediatamente em {price}/mês.",
@@ -251,6 +259,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
     unavailablePrice: "App Storeの価格を現在取得できません。",
     restore: "購入を復元",
     restoring: "復元中...",
+    receiptInUse: "このApple IDのサブスクリプションは、すでに別のHeyアカウントに紐づいています。購入したHeyアカウントでサインインするか、Heyサポートにお問い合わせください。",
     manage: "サブスクリプションを管理",
     eligibleTrial: "Appleが対象であることを確認しました。7日間無料、その後は月額{price}です。",
     ineligibleTrial: "無料体験は適用されません。月額{price}の請求がすぐに始まります。",
@@ -282,6 +291,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
     unavailablePrice: "지금은 App Store 가격을 가져올 수 없습니다.",
     restore: "구매 복원",
     restoring: "복원 중...",
+    receiptInUse: "이 Apple ID의 구독은 이미 다른 Hey 계정에 연결되어 있습니다. 구독을 구매한 Hey 계정으로 로그인하거나 Hey 지원팀에 문의하세요.",
     manage: "구독 관리",
     eligibleTrial: "Apple이 대상임을 확인했습니다. 7일 무료 후 월 {price}입니다.",
     ineligibleTrial: "무료 체험이 적용되지 않습니다. 월 {price} 결제가 즉시 시작됩니다.",
@@ -327,6 +337,16 @@ function trialText(copy: IosPaywallCopy, plan: MobilePurchasePlan | null, price:
  */
 export function iosPaywallCopy(locale: AppLocale): IosPaywallCopy {
   return copyByLocale[locale] ?? en;
+}
+
+/**
+ * HPD-1043: the purchase or restore was refused because this Apple ID's
+ * receipt is bound to another Hey account. Plain words instead of the SDK's
+ * "There is already another active subscriber using the same receipt."
+ */
+export function iosReceiptInUseMessage(locale: AppLocale): string {
+  // No restore hint: Restore Purchases fails with this very error.
+  return iosPaywallCopy(locale).receiptInUse;
 }
 
 export function shouldShowIosPaywallOnboarding(input: {
