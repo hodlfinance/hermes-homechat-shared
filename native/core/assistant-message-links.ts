@@ -15,10 +15,13 @@ const singleBrowserHandoffCodePattern = /^`(\/api\/workspace\/preview\/4321\/bro
 const htmlAnchorPattern = /<a\b[^>]*\bhref=(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/gi;
 const preserveMarkdownLinkPattern =
   /(!?\[[^\]\n]+\]\([^)]+\)|!?\[[^\]\n]+\](?:\[[^\]\n]*\])?|<https?:\/\/[^>\s]+>|<www\.[^>\s]+>)/g;
-const inlineMarkdownLinkPattern = /!?\[([^\]\n]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+// HPD-1059: CommonMark also writes a destination in angle brackets, [label](<url>).
+// Hermes did so on 2026-10-06 for a Browser handoff, and the brackets ended up
+// in the href, so the link was plain text. The brackets are not part of the URL.
+const inlineMarkdownLinkPattern = /!?\[([^\]\n]+)\]\((<[^<>\n]+>|[^)\s]+)(?:\s+"[^"]*")?\)/g;
 const referenceMarkdownLinkPattern = /\[([^\]\n]+)\]\[([^\]\n]*)\]/g;
 const shortcutReferencePattern = /\[([^\]\n]+)\]/g;
-const referenceDefinitionPattern = /^\s*\[([^\]\n]+)\]:\s+(\S+)(?:\s+.*)?$/;
+const referenceDefinitionPattern = /^\s*\[([^\]\n]+)\]:\s+(<[^<>\n]+>|\S+)(?:\s+.*)?$/;
 const bareAssistantLinkPattern =
   /(?:https?:\/\/[^\s<>"'`]+|www\.[^\s<>"'`]+|\/(?:api|app|pages|pricing|support|contact|about|privacy|terms)(?:[/?#][^\s<>"'`]*)?)/g;
 
@@ -77,7 +80,7 @@ export function assistantMessageLinkSegments(markdown: string): AssistantMessage
     };
     const protectedText = text
       .replace(inlineMarkdownLinkPattern, (raw, label: string, href: string) =>
-        protect({ label, href: raw.startsWith("!") ? undefined : href, image: raw.startsWith("!") }),
+        protect({ label, href: raw.startsWith("!") ? undefined : markdownLinkDestination(href), image: raw.startsWith("!") }),
       )
       .replace(referenceMarkdownLinkPattern, (raw, label: string, reference: string) => {
         const href = definitions.get(referenceKey(reference || label));
@@ -172,9 +175,15 @@ function referenceDefinitionsFrom(markdown: string) {
   for (const line of markdown.split("\n")) {
     const match = referenceDefinitionPattern.exec(line);
     if (!match) continue;
-    definitions.set(referenceKey(match[1] || ""), match[2] || "");
+    definitions.set(referenceKey(match[1] || ""), markdownLinkDestination(match[2] || ""));
   }
   return definitions;
+}
+
+/** A Markdown link destination without CommonMark's optional angle brackets. */
+export function markdownLinkDestination(value: string) {
+  const trimmed = value.trim();
+  return /^<[^<>\n]*>$/.test(trimmed) ? trimmed.slice(1, -1).trim() : trimmed;
 }
 
 function referenceKey(value: string) {

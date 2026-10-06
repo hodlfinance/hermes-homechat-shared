@@ -1,5 +1,5 @@
 import { isPreinstalledR8Suggestion } from "../policy";
-import { heyActivityStepText, heyActivityVerbText, modelComparisonPresentation, modelComparisonCopy } from "../core/index";
+import { heyActivityStepText, heyActivityVerbText, markdownLinkDestination, modelComparisonPresentation, modelComparisonCopy } from "../core/index";
 import { adminUiCopy, notificationDeliveryNotice } from "../core/admin-ui-copy";
 import { connectionUiMessage, connectionPermissionLines as localizedConnectionPermissionLines } from "../core/connection-ui-copy";
 import { staticUiCopy, staticUiMessage } from "./static-ui-copy";
@@ -1387,7 +1387,8 @@ const MessageLinkOpenerContext = createContext<(url: string) => void>((url) => {
 });
 
 function mobileMessageUrl(href: string) {
-  const value = href.trim();
+  // HPD-1059: a destination written as <url> is the URL without its brackets.
+  const value = markdownLinkDestination(href);
   if (!value) return null;
   if (/^(https?:|mailto:|tel:)/i.test(value)) return value;
   if (value.startsWith("/")) return bookmarkUrlForMobile(value);
