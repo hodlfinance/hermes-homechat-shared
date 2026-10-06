@@ -2,6 +2,7 @@ import { HEY_LEGAL_LINKS } from "../core/index";
 import type { AppLocale, EntitlementStatus, WorkspaceRuntimeAccess } from "../core/index";
 import type { MobilePurchasePlan } from "./revenuecat-purchases";
 import { hasValidMobileProductAccess } from "./mobile-product-access";
+import type { HeyHermesSalesStatus } from "../core/hermes-api";
 
 export const IOS_APP_STORE_SUBSCRIPTIONS_URL = "https://apps.apple.com/account/subscriptions";
 
@@ -432,4 +433,137 @@ export function iosPaywallView(input: {
 export async function openIosSubscriptionManagement(openUrl: (url: string) => Promise<unknown>) {
   await openUrl(IOS_APP_STORE_SUBSCRIPTIONS_URL);
   return IOS_APP_STORE_SUBSCRIPTIONS_URL;
+}
+
+// HPD-1063: the plane refuses to sell while the host has no free place. These
+// words replace the purchase button only when the server says so; an unknown
+// sales status (old server, network error) keeps the purchase exactly as before.
+export type IosPaywallWaitlistCopy = {
+  joinWaitlist: string;
+  joiningWaitlist: string;
+  waitlistIntro: string;
+  waitlistJoined: string;
+  waitlistPosition: string;
+  waitlistError: string;
+  invitationReserved: string;
+};
+
+const waitlistCopyByLocale: Record<AppLocale, IosPaywallWaitlistCopy> = {
+  en: {
+    joinWaitlist: "Join the waitlist",
+    joiningWaitlist: "Joining…",
+    waitlistIntro: "We're at capacity right now. Join the waitlist and we'll email you as soon as a place is free.",
+    waitlistJoined: "You're on the waitlist. We'll email you as soon as a place is free.",
+    waitlistPosition: "Your position: {position}",
+    waitlistError: "We couldn't add you to the waitlist. Please try again.",
+    invitationReserved: "A place is reserved for you until {time}.",
+  },
+  de: {
+    joinWaitlist: "Auf die Warteliste",
+    joiningWaitlist: "Wird eingetragen…",
+    waitlistIntro: "Gerade sind alle Plätze belegt. Trag Dich auf die Warteliste ein – wir schicken Dir eine E-Mail, sobald ein Platz frei ist.",
+    waitlistJoined: "Du stehst auf der Warteliste. Wir schicken Dir eine E-Mail, sobald ein Platz frei ist.",
+    waitlistPosition: "Deine Position: {position}",
+    waitlistError: "Wir konnten Dich nicht auf die Warteliste setzen. Bitte versuche es noch einmal.",
+    invitationReserved: "Ein Platz ist bis {time} für Dich reserviert.",
+  },
+  fr: {
+    joinWaitlist: "Rejoindre la liste d’attente",
+    joiningWaitlist: "Inscription…",
+    waitlistIntro: "Nous sommes complets pour le moment. Rejoignez la liste d’attente et nous vous écrirons dès qu’une place se libère.",
+    waitlistJoined: "Vous êtes sur la liste d’attente. Nous vous écrirons dès qu’une place se libère.",
+    waitlistPosition: "Votre position : {position}",
+    waitlistError: "Impossible de vous inscrire sur la liste d’attente. Veuillez réessayer.",
+    invitationReserved: "Une place vous est réservée jusqu’à {time}.",
+  },
+  es: {
+    joinWaitlist: "Unirme a la lista de espera",
+    joiningWaitlist: "Uniéndote…",
+    waitlistIntro: "Ahora mismo no hay plazas libres. Únete a la lista de espera y te escribiremos en cuanto haya una plaza.",
+    waitlistJoined: "Estás en la lista de espera. Te escribiremos en cuanto haya una plaza libre.",
+    waitlistPosition: "Tu posición: {position}",
+    waitlistError: "No pudimos añadirte a la lista de espera. Inténtalo de nuevo.",
+    invitationReserved: "Tienes una plaza reservada hasta {time}.",
+  },
+  it: {
+    joinWaitlist: "Iscriviti alla lista d’attesa",
+    joiningWaitlist: "Iscrizione…",
+    waitlistIntro: "Al momento non ci sono posti liberi. Iscriviti alla lista d’attesa e ti scriveremo non appena si libera un posto.",
+    waitlistJoined: "Sei nella lista d’attesa. Ti scriveremo non appena si libera un posto.",
+    waitlistPosition: "La tua posizione: {position}",
+    waitlistError: "Non è stato possibile iscriverti alla lista d’attesa. Riprova.",
+    invitationReserved: "Un posto è riservato per te fino alle {time}.",
+  },
+  "pt-BR": {
+    joinWaitlist: "Entrar na lista de espera",
+    joiningWaitlist: "Entrando…",
+    waitlistIntro: "No momento não há vagas. Entre na lista de espera e enviaremos um e-mail assim que houver uma vaga.",
+    waitlistJoined: "Você está na lista de espera. Enviaremos um e-mail assim que houver uma vaga.",
+    waitlistPosition: "Sua posição: {position}",
+    waitlistError: "Não foi possível colocar você na lista de espera. Tente novamente.",
+    invitationReserved: "Uma vaga está reservada para você até {time}.",
+  },
+  ja: {
+    joinWaitlist: "ウェイトリストに登録",
+    joiningWaitlist: "登録しています…",
+    waitlistIntro: "現在、空きがありません。ウェイトリストに登録いただくと、空きが出しだいメールでお知らせします。",
+    waitlistJoined: "ウェイトリストに登録しました。空きが出しだいメールでお知らせします。",
+    waitlistPosition: "あなたの順番: {position}",
+    waitlistError: "ウェイトリストに登録できませんでした。もう一度お試しください。",
+    invitationReserved: "{time}まであなたの枠を確保しています。",
+  },
+  ko: {
+    joinWaitlist: "대기자 명단에 등록",
+    joiningWaitlist: "등록 중…",
+    waitlistIntro: "지금은 자리가 없습니다. 대기자 명단에 등록하시면 자리가 나는 대로 이메일로 알려 드립니다.",
+    waitlistJoined: "대기자 명단에 등록되었습니다. 자리가 나는 대로 이메일로 알려 드립니다.",
+    waitlistPosition: "내 순서: {position}",
+    waitlistError: "대기자 명단에 등록하지 못했습니다. 다시 시도해 주세요.",
+    invitationReserved: "{time}까지 자리가 예약되어 있습니다.",
+  },
+};
+
+export function iosPaywallWaitlistCopy(locale: AppLocale): IosPaywallWaitlistCopy {
+  return waitlistCopyByLocale[locale] ?? waitlistCopyByLocale.en;
+}
+
+/**
+ * HPD-1063 decision: purchase unless the server explicitly refuses. Null
+ * (unknown) and mayPurchase=true keep the purchase; an invitation always
+ * allows the purchase.
+ */
+export function iosPaywallSalesDecision(status: HeyHermesSalesStatus | null): "purchase" | "waitlist" {
+  if (!status) return "purchase";
+  if (status.invitation) return "purchase";
+  return status.mayPurchase ? "purchase" : "waitlist";
+}
+
+export type IosPaywallSalesView = {
+  mode: "purchase" | "waitlist";
+  /** True once the account is on the waitlist (waiting); the join button then hides. */
+  joined: boolean;
+  joinLabel: string;
+  joiningLabel: string;
+  lines: string[];
+};
+
+export function iosPaywallSalesView(input: {
+  locale: AppLocale;
+  status: HeyHermesSalesStatus | null;
+  formatTime: (iso: string) => string;
+}): IosPaywallSalesView {
+  const copy = iosPaywallWaitlistCopy(input.locale);
+  const mode = iosPaywallSalesDecision(input.status);
+  const lines: string[] = [];
+  const status = input.status;
+  if (status?.invitation) {
+    lines.push(copy.invitationReserved.replace("{time}", input.formatTime(status.invitation.expiresAt)));
+  }
+  const joined = mode === "waitlist" && status?.waitlist?.status === "waiting";
+  if (mode === "waitlist") {
+    lines.push(joined ? copy.waitlistJoined : copy.waitlistIntro);
+    const position = status?.waitlist?.position;
+    if (joined && typeof position === "number") lines.push(copy.waitlistPosition.replace("{position}", String(position)));
+  }
+  return { mode, joined, joinLabel: copy.joinWaitlist, joiningLabel: copy.joiningWaitlist, lines };
 }

@@ -185,6 +185,7 @@ import {
 } from "./mobile-ai-access-logo";
 import { MobileAiAccessBrandMark } from "./mobile-ai-access-brand-marks";
 import {
+  workspaceStatusTruthCapacityRefusal,
   workspaceStatusTruthRequest,
   workspaceStatusTruthServerIsCurrent,
   workspaceStatusTruthServerRefreshDelayMs,
@@ -446,8 +447,11 @@ import {
   type MobilePurchasePlan,
   type MobileRevenueCatPackageId,
 } from "./revenuecat-purchases";
+import type { HeyHermesSalesStatus } from "../core/hermes-api";
 import {
   iosPaywallCopy,
+  iosPaywallSalesView,
+  iosPaywallWaitlistCopy,
   iosPaywallView,
   iosReceiptInUseMessage,
   openIosSubscriptionManagement,
@@ -2243,6 +2247,32 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }
 
   const api = useMemo(() => createApiClient({ baseUrl: API_BASE, token: token || "missing" }), [token]);
+  // HPD-1063: null = unknown (old server, network error); the paywall then
+  // behaves exactly as before.
+  const [salesStatus, setSalesStatus] = useState<HeyHermesSalesStatus | null>(null);
+  const [waitlistPhase, setWaitlistPhase] = useState<"idle" | "joining" | "error">("idle");
+  useEffect(() => {
+    setSalesStatus(null);
+    if (!token || host.session.mode !== "standalone" || Platform.OS !== "ios") return;
+    let cancelled = false;
+    void api.salesStatus().then((status) => {
+      if (!cancelled) setSalesStatus(status);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, token, host.session.mode]);
+  async function joinMobileWaitlist() {
+    if (waitlistPhase === "joining") return;
+    setWaitlistPhase("joining");
+    const status = await api.joinWaitlist();
+    if (status) {
+      setSalesStatus(status);
+      setWaitlistPhase("idle");
+    } else {
+      setWaitlistPhase("error");
+    }
+  }
   const loadRankedTasks = useCallback(async (background = false) => {
     if (!host.policy.preinstalledRanker || !token) return;
     const requestToken = token;
@@ -8029,7 +8059,16 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     status: workspaceStatusTruth,
   });
   const pendingProductAccess = productAccessScreen === "preparing";
-  const pendingAccessCopy = mobilePendingAccessCopy(appLocale, mobilePendingAccessVariant(workspaceStatusTruth));
+  const pendingAccessCopy = mobilePendingAccessCopy(appLocale, mobilePendingAccessVariant(workspaceStatusTruth), {
+    reason: workspaceStatusTruthCapacityRefusal(workspaceStatusTruth)?.reason ?? null,
+    waitlistPosition: salesStatus?.waitlist?.status === "waiting" ? salesStatus.waitlist.position : null,
+  });
+  const paywallSales = iosPaywallSalesView({
+    locale: appLocale,
+    status: salesStatus,
+    formatTime: (value) => formatSecurityDate(value, appLocale),
+  });
+  const paywallSalesError = waitlistPhase === "error" ? iosPaywallWaitlistCopy(appLocale).waitlistError : null;
   const mobilePersonalPurchaseAvailable = mobilePersonalPurchaseCanStart(
     snapshot.me.id,
     snapshot.subscription,
@@ -8214,6 +8253,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             notice={mobilePurchaseNotice}
             onDismissNotice={() => setMobilePurchaseNotice(null)}
             onPurchase={purchaseMobilePlan}
+            sales={paywallSales}
+            salesError={paywallSalesError}
+            waitlistJoining={waitlistPhase === "joining"}
+            onJoinWaitlist={joinMobileWaitlist}
             onRestore={restoreMobilePurchases}
             onManage={manageMobileSubscription}
           />
@@ -9312,6 +9355,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                           notice={mobilePurchaseNotice}
                           onDismissNotice={() => setMobilePurchaseNotice(null)}
                           onPurchase={purchaseMobilePlan}
+                          sales={paywallSales}
+                          salesError={paywallSalesError}
+                          waitlistJoining={waitlistPhase === "joining"}
+                          onJoinWaitlist={joinMobileWaitlist}
                           onRestore={restoreMobilePurchases}
                           onManage={manageMobileSubscription}
                         />
@@ -9729,7 +9776,15 @@ function IosPaywallPanel({ locale,
   onPurchase,
   onRestore,
   onManage,
+  sales,
+  salesError = null,
+  waitlistJoining = false,
+  onJoinWaitlist,
 }: { locale: AppLocale } & {
+  sales?: ReturnType<typeof iosPaywallSalesView>;
+  salesError?: string | null;
+  waitlistJoining?: boolean;
+  onJoinWaitlist?: () => Promise<void>;
   view: ReturnType<typeof iosPaywallView>;
   personalAccess?: ReturnType<typeof personalAccessPresentation>;
   plan: MobilePurchasePlan | null;
@@ -9790,7 +9845,24 @@ function IosPaywallPanel({ locale,
         </>
       ) : null}
       {phase === "loading" ? <ActivityIndicator color={palette.teal} /> : null}
-      {purchaseAvailable ? (
+      {sales?.lines.map((line) => (
+        <Text key={line} style={styles.paywallDisclosure}>{line}</Text>
+      ))}
+      {salesError ? <Text style={styles.paywallDisclosure}>{salesError}</Text> : null}
+      {purchaseAvailable && sales?.mode === "waitlist" ? (
+        sales.joined ? null : (
+          <Pressable
+            style={[styles.primaryButtonWide, (busy || waitlistJoining || !accountReady) && styles.disabledButton]}
+            disabled={busy || waitlistJoining || !accountReady}
+            onPress={() => void onJoinWaitlist?.()}
+            accessibilityRole="button"
+            accessibilityLabel={sales.joinLabel}
+          >
+            {waitlistJoining ? <ActivityIndicator color={palette.accentText} /> : null}
+            <Text style={styles.primaryButtonText}>{waitlistJoining ? sales.joiningLabel : sales.joinLabel}</Text>
+          </Pressable>
+        )
+      ) : purchaseAvailable ? (
         <Pressable
           style={[styles.primaryButtonWide, purchaseDisabled && styles.disabledButton]}
           disabled={purchaseDisabled}

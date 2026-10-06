@@ -26,7 +26,7 @@ const en = {
   "agentNotRunning": "The current Management Agent check did not confirm a running workspace runtime.",
   "agentStale": "The Management Agent check is not current enough to confirm readiness.",
   "runtimeReady": "Your private Hermes runtime is ready.",
-  "runtimeSettingUp": "Your private Hermes runtime is still being set up. Please try again shortly.",
+  "runtimeSettingUp": "Your Hermes is being set up — we'll email you when it's ready.",
   "runtimePaused": "Your private Hermes runtime is paused. Please resume access before trying again.",
   "runtimeAttention": "Your private Hermes runtime needs attention. Please try again shortly."
 };
@@ -58,7 +58,7 @@ const catalog: Record<AppLocale, typeof en> = { en,
   "agentNotRunning": "Die aktuelle Management-Agent-Prüfung hat keine laufende Workspace-Umgebung bestätigt.",
   "agentStale": "Die Management-Agent-Prüfung ist nicht aktuell genug, um die Bereitschaft zu bestätigen.",
   "runtimeReady": "Deine private Hermes-Umgebung ist bereit.",
-  "runtimeSettingUp": "Deine private Hermes-Umgebung wird noch eingerichtet. Versuche es gleich erneut.",
+  "runtimeSettingUp": "Dein Hermes wird eingerichtet – wir schicken Dir eine E-Mail, sobald er bereit ist.",
   "runtimePaused": "Deine private Hermes-Umgebung ist pausiert. Aktiviere den Zugriff vor einem neuen Versuch.",
   "runtimeAttention": "Deine private Hermes-Umgebung benötigt Aufmerksamkeit. Versuche es gleich erneut."
 },
@@ -89,7 +89,7 @@ const catalog: Record<AppLocale, typeof en> = { en,
   "agentNotRunning": "La vérification actuelle de l’agent de gestion n’a pas confirmé un environnement en cours d’exécution.",
   "agentStale": "La vérification de l’agent de gestion est trop ancienne pour confirmer la disponibilité.",
   "runtimeReady": "Votre environnement Hermes privé est prêt.",
-  "runtimeSettingUp": "Votre environnement Hermes privé est encore en configuration. Réessayez dans un instant.",
+  "runtimeSettingUp": "Votre Hermes est en cours de configuration — nous vous écrirons dès qu’il sera prêt.",
   "runtimePaused": "Votre environnement Hermes privé est en pause. Réactivez l’accès avant de réessayer.",
   "runtimeAttention": "Votre environnement Hermes privé nécessite une vérification. Réessayez dans un instant."
 },
@@ -120,7 +120,7 @@ const catalog: Record<AppLocale, typeof en> = { en,
   "agentNotRunning": "La comprobación actual del agente de gestión no confirmó un entorno del espacio en ejecución.",
   "agentStale": "La comprobación del agente de gestión no es lo bastante reciente para confirmar la disponibilidad.",
   "runtimeReady": "Tu entorno privado de Hermes está listo.",
-  "runtimeSettingUp": "Tu entorno privado de Hermes sigue configurándose. Inténtalo de nuevo en un momento.",
+  "runtimeSettingUp": "Tu Hermes se está configurando: te enviaremos un correo cuando esté listo.",
   "runtimePaused": "Tu entorno privado de Hermes está en pausa. Reactiva el acceso antes de volver a intentarlo.",
   "runtimeAttention": "Tu entorno privado de Hermes necesita atención. Inténtalo de nuevo en un momento."
 },
@@ -151,7 +151,7 @@ const catalog: Record<AppLocale, typeof en> = { en,
   "agentNotRunning": "La verifica attuale dell’agente di gestione non ha confermato un ambiente dello spazio in esecuzione.",
   "agentStale": "La verifica dell’agente di gestione non è abbastanza recente per confermare la disponibilità.",
   "runtimeReady": "Il tuo ambiente Hermes privato è pronto.",
-  "runtimeSettingUp": "Il tuo ambiente Hermes privato è ancora in configurazione. Riprova tra poco.",
+  "runtimeSettingUp": "Il tuo Hermes è in configurazione: ti invieremo un’email quando sarà pronto.",
   "runtimePaused": "Il tuo ambiente Hermes privato è in pausa. Riattiva l’accesso prima di riprovare.",
   "runtimeAttention": "Il tuo ambiente Hermes privato richiede attenzione. Riprova tra poco."
 },
@@ -182,7 +182,7 @@ const catalog: Record<AppLocale, typeof en> = { en,
   "agentNotRunning": "A verificação atual do agente de gestão não confirmou um ambiente do espaço em execução.",
   "agentStale": "A verificação do agente de gestão não é recente o bastante para confirmar a disponibilidade.",
   "runtimeReady": "Seu ambiente privado do Hermes está pronto.",
-  "runtimeSettingUp": "Seu ambiente privado do Hermes ainda está sendo configurado. Tente novamente em instantes.",
+  "runtimeSettingUp": "Seu Hermes está sendo configurado — enviaremos um e-mail quando estiver pronto.",
   "runtimePaused": "Seu ambiente privado do Hermes está pausado. Reative o acesso antes de tentar novamente.",
   "runtimeAttention": "Seu ambiente privado do Hermes precisa de atenção. Tente novamente em instantes."
 },
@@ -213,7 +213,7 @@ const catalog: Record<AppLocale, typeof en> = { en,
   "agentNotRunning": "管理エージェントの現在の確認情報ではワークスペースが稼働中であると確認できませんでした。",
   "agentStale": "管理エージェントの確認情報が古いため、利用可能か確認できません。",
   "runtimeReady": "プライベートなHermes実行環境は準備完了です。",
-  "runtimeSettingUp": "プライベートなHermes実行環境は設定中です。しばらくしてから再試行してください。",
+  "runtimeSettingUp": "Hermes を設定しています。準備ができしだいメールでお知らせします。",
   "runtimePaused": "プライベートなHermes実行環境は一時停止中です。アクセスを再開してから再試行してください。",
   "runtimeAttention": "プライベートなHermes実行環境に確認が必要です。しばらくしてから再試行してください。"
 },
@@ -244,13 +244,18 @@ const catalog: Record<AppLocale, typeof en> = { en,
   "agentNotRunning": "관리 에이전트의 현재 확인 정보로 워크스페이스 환경이 실행 중인지 확인하지 못했습니다.",
   "agentStale": "관리 에이전트 확인 정보가 오래되어 준비 상태를 확인할 수 없습니다.",
   "runtimeReady": "비공개 Hermes 실행 환경이 준비되었습니다.",
-  "runtimeSettingUp": "비공개 Hermes 실행 환경을 설정 중입니다. 잠시 후 다시 시도하세요.",
+  "runtimeSettingUp": "Hermes를 설정하고 있습니다. 준비되면 이메일로 알려 드립니다.",
   "runtimePaused": "비공개 Hermes 실행 환경이 일시 중지되었습니다. 접근을 재개한 후 다시 시도하세요.",
   "runtimeAttention": "비공개 Hermes 실행 환경에 확인이 필요합니다. 잠시 후 다시 시도하세요."
 }
 };
+// HPD-1063: servers still send the old English sentence; it maps to the new
+// honest wording instead of passing through as "please try again shortly".
+const legacyServerMessages: Record<string, keyof typeof en> = {
+  "Your private Hermes runtime is still being set up. Please try again shortly.": "runtimeSettingUp",
+};
 export function statusSummaryCopy(locale: AppLocale) { return catalog[locale]; }
 export function statusServerMessage(locale: AppLocale, message: string) {
- const key = (Object.keys(en) as Array<keyof typeof en>).find(key => en[key] === message);
+ const key = legacyServerMessages[message] ?? (Object.keys(en) as Array<keyof typeof en>).find(key => en[key] === message);
  return key ? catalog[locale][key] : message;
 }

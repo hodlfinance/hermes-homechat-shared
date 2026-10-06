@@ -438,76 +438,168 @@ export type MobilePendingAccessCopy = {
 const pendingAccessCopyByLocale: Record<AppLocale, MobilePendingAccessCopy> = {
   en: {
     title: "Your access is being prepared",
-    body: "Your Hey Hermes account is ready. We’ll activate your access shortly. Please check again in a little while.",
+    body: "Your Hey Hermes account is ready. Your Hermes is being set up — we’ll email you when it’s ready.",
     checkAgain: "Check again",
     signOut: "Sign out",
   },
   de: {
     title: "Dein Zugang wird vorbereitet",
-    body: "Dein Hey-Hermes-Account ist bereit. Wir schalten Deinen Zugang in Kürze frei. Bitte prüfe es gleich noch einmal.",
+    body: "Dein Hey-Hermes-Account ist bereit. Dein Hermes wird eingerichtet – wir schicken Dir eine E-Mail, sobald er bereit ist.",
     checkAgain: "Erneut prüfen",
     signOut: "Abmelden",
   },
   fr: {
     title: "Votre accès est en cours de préparation",
-    body: "Votre compte Hey Hermes est prêt. Nous activerons bientôt votre accès. Veuillez réessayer dans quelques instants.",
+    body: "Votre compte Hey Hermes est prêt. Votre Hermes est en cours de configuration — nous vous écrirons dès qu’il sera prêt.",
     checkAgain: "Vérifier à nouveau",
     signOut: "Se déconnecter",
   },
   es: {
     title: "Estamos preparando tu acceso",
-    body: "Tu cuenta de Hey Hermes está lista. Activaremos tu acceso en breve. Vuelve a comprobarlo dentro de un momento.",
+    body: "Tu cuenta de Hey Hermes está lista. Tu Hermes se está configurando: te enviaremos un correo cuando esté listo.",
     checkAgain: "Comprobar de nuevo",
     signOut: "Cerrar sesión",
   },
   it: {
     title: "Stiamo preparando il tuo accesso",
-    body: "Il tuo account Hey Hermes è pronto. Attiveremo il tuo accesso a breve. Controlla di nuovo tra poco.",
+    body: "Il tuo account Hey Hermes è pronto. Il tuo Hermes è in configurazione: ti invieremo un’email quando sarà pronto.",
     checkAgain: "Controlla di nuovo",
     signOut: "Esci",
   },
   "pt-BR": {
     title: "Seu acesso está sendo preparado",
-    body: "Sua conta do Hey Hermes está pronta. Ativaremos seu acesso em breve. Verifique novamente daqui a pouco.",
+    body: "Sua conta do Hey Hermes está pronta. Seu Hermes está sendo configurado — enviaremos um e-mail quando estiver pronto.",
     checkAgain: "Verificar novamente",
     signOut: "Sair",
   },
   ja: {
     title: "アクセスを準備しています",
-    body: "Hey Hermes アカウントの準備ができました。まもなくアクセスを有効にします。しばらくしてからもう一度ご確認ください。",
+    body: "Hey Hermes アカウントの準備ができました。Hermes を設定しています。準備ができしだいメールでお知らせします。",
     checkAgain: "もう一度確認",
     signOut: "サインアウト",
   },
   ko: {
     title: "액세스를 준비하고 있습니다",
-    body: "Hey Hermes 계정이 준비되었습니다. 곧 액세스를 활성화할 예정입니다. 잠시 후 다시 확인해 주세요.",
+    body: "Hey Hermes 계정이 준비되었습니다. Hermes를 설정하고 있습니다. 준비되면 이메일로 알려 드립니다.",
     checkAgain: "다시 확인",
     signOut: "로그아웃",
   },
 };
 
-// HPD-823: shown instead of the pending copy while the host has refused the
-// guest for capacity. Title and body read as one sentence; no promise of a
-// notification.
-const capacityAccessCopyByLocale: Record<AppLocale, Pick<MobilePendingAccessCopy, "title" | "body">> = {
-  en: { title: "We’re at capacity", body: "Hermes will be ready as soon as a place is free." },
-  de: { title: "Kapazität erreicht", body: "Hermes ist bereit, sobald ein Platz frei ist." },
-  fr: { title: "Capacité atteinte", body: "Hermes sera prêt dès qu’une place se libère." },
-  es: { title: "Capacidad completa", body: "Hermes estará listo en cuanto haya una plaza libre." },
-  it: { title: "Capacità esaurita", body: "Hermes sarà pronto non appena si libera un posto." },
-  "pt-BR": { title: "Capacidade esgotada", body: "O Hermes estará pronto assim que houver uma vaga livre." },
-  ja: { title: "現在、空きがありません", body: "空きが出しだい、Hermes の準備が整います。" },
-  ko: { title: "현재 수용 한도에 도달했습니다", body: "자리가 나는 대로 Hermes가 준비됩니다." },
+// HPD-823 / HPD-1063: shown instead of the pending copy while the host has
+// refused the guest. The title names the refusal in plain words (never a raw
+// code); the body promises the ready email, which the server sends.
+export type MobileCapacityRefusalKind = "capacity" | "paused" | "problem";
+
+type CapacityAccessCopy = {
+  titles: Record<MobileCapacityRefusalKind, string>;
+  body: string;
+  position: string;
 };
+
+const capacityAccessCopyByLocale: Record<AppLocale, CapacityAccessCopy> = {
+  en: {
+    titles: {
+      capacity: "We’re at capacity right now",
+      paused: "Setup is paused for a moment",
+      problem: "Setup hit a problem; our team has been alerted",
+    },
+    body: "Your Hermes will be set up as soon as a place is free — we’ll email you when it’s ready.",
+    position: "Your position: {position}",
+  },
+  de: {
+    titles: {
+      capacity: "Gerade sind alle Plätze belegt",
+      paused: "Die Einrichtung pausiert kurz",
+      problem: "Bei der Einrichtung gab es ein Problem; unser Team ist informiert",
+    },
+    body: "Dein Hermes wird eingerichtet, sobald ein Platz frei ist – wir schicken Dir eine E-Mail, sobald er bereit ist.",
+    position: "Deine Position: {position}",
+  },
+  fr: {
+    titles: {
+      capacity: "Nous sommes complets pour le moment",
+      paused: "La configuration est brièvement en pause",
+      problem: "La configuration a rencontré un problème ; notre équipe a été prévenue",
+    },
+    body: "Votre Hermes sera configuré dès qu’une place se libère — nous vous écrirons dès qu’il sera prêt.",
+    position: "Votre position : {position}",
+  },
+  es: {
+    titles: {
+      capacity: "Ahora mismo no hay plazas libres",
+      paused: "La configuración está en pausa un momento",
+      problem: "La configuración tuvo un problema; nuestro equipo ya está avisado",
+    },
+    body: "Tu Hermes se configurará en cuanto haya una plaza libre: te enviaremos un correo cuando esté listo.",
+    position: "Tu posición: {position}",
+  },
+  it: {
+    titles: {
+      capacity: "Al momento non ci sono posti liberi",
+      paused: "La configurazione è in pausa per un momento",
+      problem: "La configurazione ha avuto un problema; il nostro team è stato avvisato",
+    },
+    body: "Il tuo Hermes sarà configurato non appena si libera un posto: ti invieremo un’email quando sarà pronto.",
+    position: "La tua posizione: {position}",
+  },
+  "pt-BR": {
+    titles: {
+      capacity: "No momento não há vagas",
+      paused: "A configuração está pausada por um momento",
+      problem: "A configuração teve um problema; nossa equipe foi avisada",
+    },
+    body: "Seu Hermes será configurado assim que houver uma vaga — enviaremos um e-mail quando estiver pronto.",
+    position: "Sua posição: {position}",
+  },
+  ja: {
+    titles: {
+      capacity: "現在、空きがありません",
+      paused: "設定を一時的に停止しています",
+      problem: "設定中に問題が発生しました。担当チームに通知済みです",
+    },
+    body: "空きが出しだい Hermes を設定します。準備ができたらメールでお知らせします。",
+    position: "あなたの順番: {position}",
+  },
+  ko: {
+    titles: {
+      capacity: "지금은 자리가 없습니다",
+      paused: "설정이 잠시 중단되었습니다",
+      problem: "설정 중 문제가 발생했습니다. 담당 팀에 알렸습니다",
+    },
+    body: "자리가 나는 대로 Hermes를 설정합니다. 준비되면 이메일로 알려 드립니다.",
+    position: "내 순서: {position}",
+  },
+};
+
+/** Maps a plane refusal reason to plain words; unknown codes read as a short pause. */
+export function mobileCapacityRefusalKind(reason: string | null | undefined): MobileCapacityRefusalKind {
+  if (reason === "reserve_preparation_failed") return "problem";
+  if (reason === "provisioner_unavailable" || reason === "capacity_unknown") return "paused";
+  // capacity_* from the plane, and the older host_at_capacity spelling.
+  if (typeof reason === "string" && (reason.startsWith("capacity_") || reason.endsWith("_at_capacity"))) return "capacity";
+  return reason == null ? "capacity" : "paused";
+}
+
+export function mobileCapacityAccessCopy(locale: AppLocale): CapacityAccessCopy {
+  return capacityAccessCopyByLocale[locale] ?? capacityAccessCopyByLocale.en;
+}
 
 export type MobilePendingAccessVariant = "pending" | "capacity";
 
 export function mobilePendingAccessCopy(
   locale: AppLocale,
   variant: MobilePendingAccessVariant = "pending",
+  detail: { reason?: string | null; waitlistPosition?: number | null } = {},
 ): MobilePendingAccessCopy {
   const pending = pendingAccessCopyByLocale[locale];
-  return variant === "capacity" ? { ...pending, ...capacityAccessCopyByLocale[locale] } : pending;
+  if (variant !== "capacity") return pending;
+  const capacity = mobileCapacityAccessCopy(locale);
+  const position = detail.waitlistPosition;
+  const body = typeof position === "number"
+    ? `${capacity.body} ${capacity.position.replace("{position}", String(position))}`
+    : capacity.body;
+  return { ...pending, title: capacity.titles[mobileCapacityRefusalKind(detail.reason)], body };
 }
 
 type NavigationRemovalCopy = Pick<MobileCopy["nav"],
