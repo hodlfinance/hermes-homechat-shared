@@ -28,7 +28,7 @@ test("the connecting drawer keeps navigation live while runtime actions stay fai
   assert.match(opening, /onNewPage=\{\(\) => \{\s*setMenuOpen\(false\);\s*setOpeningDestinationTitle/s);
   assert.match(opening, /onOpenDashboard=\{\(\) => \{\s*setMenuOpen\(false\);\s*setOpeningDestinationTitle/s);
   assert.match(opening, /openingDestinationTitle \|\| tab !== "chat"/);
-  assert.match(opening, /mobileScreenTitle\(tab, settingsSection, t\)/);
+  assert.match(opening, /mobileScreenTitle\(tab, settingsSection, t, appLocale\)/);
   assert.match(opening, /sessionFailureCopy\?\.body \|\| message/);
   assert.match(opening, /<View style=\{styles\.openingDestinationState\}>/);
   assert.match(opening, /styles\.openingDestinationMessage/);

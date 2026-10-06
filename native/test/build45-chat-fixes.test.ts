@@ -47,7 +47,7 @@ test("HPD-807: the Stop control reaches the blocking run through the API before 
 test("HPD-807: the clarify card's answer field has a visible placeholder", () => {
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   const card = surface.slice(surface.indexOf("function MobileChatClarifyCard("), surface.indexOf("const reduceMotionStore"));
-  assert.match(card, /placeholder="Other answer"\s+placeholderTextColor=\{palette\.muted\}/);
+  assert.match(card, /placeholder=\{cardCopy\.otherAnswer\}\s+placeholderTextColor=\{palette\.muted\}/);
 });
 
 test("HPD-822: the stop control is an outline circle with a filled square, never red", () => {
