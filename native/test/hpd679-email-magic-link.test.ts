@@ -98,7 +98,7 @@ test("the create-account surface keeps Google and Apple and adds neutral email s
   assert.match(source, /Create your account with email, Google, or Apple/);
   assert.match(source, /requestEmailMagicLink\(\)/);
   assert.match(source, /requestEmailMagicLinkWithAbuseProof\(\{/);
-  assert.match(source, /AppState\.addEventListener\("change", \(state\) => \{\n      const run = emailMagicLinkRunRef\.current;/);
+  assert.match(source, /const run = emailMagicLinkRunRef\.current;\s+if \(!run\) return;\s+\/\/[^\n]*\n[^\n]*\n\s+if \(state === "background"\) \{\s+run\.suspended = true;/);
   assert.match(source, /requestEmailMagicLinkRef\.current\(true\)/);
   assert.match(source, /Link per E-Mail senden/);
   assert.match(source, /If this email can be used with Hey Hermes, a sign-in link is on its way/);

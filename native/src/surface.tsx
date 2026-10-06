@@ -5219,11 +5219,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     const subscription = AppState.addEventListener("change", (state) => {
       const run = emailMagicLinkRunRef.current;
       if (!run) return;
-      if (state !== "active") {
+      // Only a real background stop freezes timers; Control Center or a system
+      // prompt ("inactive") keeps the proof in progress.
+      if (state === "background") {
         run.suspended = true;
         return;
       }
-      if (run.suspended) void requestEmailMagicLinkRef.current(true);
+      if (state === "active" && run.suspended) void requestEmailMagicLinkRef.current(true);
     });
     return () => {
       subscription.remove();
