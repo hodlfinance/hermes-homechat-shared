@@ -354,8 +354,8 @@ const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
     subscribeCta: "Subscribe for {price}/month",
     trialThen: "then {price} per month · cancel anytime",
     subscribeThen: "Monthly · cancel anytime",
-    trialTerms: "7 days free, then {price}/month. Renews automatically each month until you cancel in your App Store settings at least 24 hours before the period ends. For ages 16+.",
-    subscribeTerms: "{price}/month. Renews automatically each month until you cancel in your App Store settings at least 24 hours before the period ends. For ages 16+.",
+    trialTerms: "7 days free, then {price}/month. Renews automatically each month until you cancel in your App Store settings at least 24 hours before the period ends.",
+    subscribeTerms: "{price}/month. Renews automatically each month until you cancel in your App Store settings at least 24 hours before the period ends.",
   },
   de: {
     eyebrow: "Hey Hermes Personal",
@@ -373,27 +373,27 @@ const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
     subscribeCta: "Abonnieren für {price}/Monat",
     trialThen: "danach {price} pro Monat · jederzeit kündbar",
     subscribeThen: "Monatlich · jederzeit kündbar",
-    trialTerms: "7 Tage gratis, danach {price}/Monat. Verlängert sich automatisch jeden Monat, bis du spätestens 24 Stunden vor Ablauf in den App-Store-Einstellungen kündigst. Ab 16 Jahren.",
-    subscribeTerms: "{price}/Monat. Verlängert sich automatisch jeden Monat, bis du spätestens 24 Stunden vor Ablauf in den App-Store-Einstellungen kündigst. Ab 16 Jahren.",
+    trialTerms: "7 Tage gratis, danach {price}/Monat. Verlängert sich automatisch jeden Monat, bis du spätestens 24 Stunden vor Ablauf in den App-Store-Einstellungen kündigst.",
+    subscribeTerms: "{price}/Monat. Verlängert sich automatisch jeden Monat, bis du spätestens 24 Stunden vor Ablauf in den App-Store-Einstellungen kündigst.",
   },
   fr: {
     eyebrow: "Hey Hermes Personal",
-    trialTitle: "Essayez Hey Hermes gratuitement pendant 7 jours",
+    trialTitle: "Essaie Hey Hermes gratuitement pendant 7 jours",
     trialTitleAccent: "gratuitement pendant 7 jours",
-    planTitle: "Une IA qui travaille pour vous. Et qui vous appartient.",
-    planTitleAccent: "Et qui vous appartient.",
+    planTitle: "Une IA qui travaille pour toi. Et qui t’appartient.",
+    planTitleAccent: "Et qui t’appartient.",
     benefits: [
-      ["Votre propre serveur privé.", " C’est vous qui avez les clés."],
+      ["Ton propre serveur privé.", " C’est toi qui as les clés."],
       ["Chat et voix,", " sur iPhone et sur le web."],
-      ["Des automatisations", " qui tournent pendant votre absence."],
+      ["Des automatisations", " qui tournent pendant ton absence."],
       ["Une mémoire", " qui s’améliore chaque jour."],
     ],
     trialCta: "Commencer ma semaine gratuite",
     subscribeCta: "S’abonner pour {price}/mois",
     trialThen: "puis {price} par mois · résiliable à tout moment",
     subscribeThen: "Mensuel · résiliable à tout moment",
-    trialTerms: "7 jours gratuits, puis {price}/mois. Renouvellement automatique chaque mois jusqu’à résiliation dans les réglages de l’App Store, au moins 24 heures avant la fin de la période. À partir de 16 ans.",
-    subscribeTerms: "{price}/mois. Renouvellement automatique chaque mois jusqu’à résiliation dans les réglages de l’App Store, au moins 24 heures avant la fin de la période. À partir de 16 ans.",
+    trialTerms: "7 jours gratuits, puis {price}/mois. Renouvellement automatique chaque mois jusqu’à ce que tu résilies dans les réglages de l’App Store, au moins 24 heures avant la fin de la période.",
+    subscribeTerms: "{price}/mois. Renouvellement automatique chaque mois jusqu’à ce que tu résilies dans les réglages de l’App Store, au moins 24 heures avant la fin de la période.",
   },
   es: {
     eyebrow: "Hey Hermes Personal",
@@ -411,8 +411,8 @@ const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
     subscribeCta: "Suscribirme por {price}/mes",
     trialThen: "después {price} al mes · cancela cuando quieras",
     subscribeThen: "Mensual · cancela cuando quieras",
-    trialTerms: "7 días gratis, después {price}/mes. Se renueva automáticamente cada mes hasta que canceles en los ajustes del App Store al menos 24 horas antes de que termine el periodo. Mayores de 16 años.",
-    subscribeTerms: "{price}/mes. Se renueva automáticamente cada mes hasta que canceles en los ajustes del App Store al menos 24 horas antes de que termine el periodo. Mayores de 16 años.",
+    trialTerms: "7 días gratis, después {price}/mes. Se renueva automáticamente cada mes hasta que canceles en los ajustes del App Store al menos 24 horas antes de que termine el periodo.",
+    subscribeTerms: "{price}/mes. Se renueva automáticamente cada mes hasta que canceles en los ajustes del App Store al menos 24 horas antes de que termine el periodo.",
   },
   it: {
     eyebrow: "Hey Hermes Personal",
@@ -430,8 +430,8 @@ const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
     subscribeCta: "Abbonati a {price}/mese",
     trialThen: "poi {price} al mese · disdici quando vuoi",
     subscribeThen: "Mensile · disdici quando vuoi",
-    trialTerms: "7 giorni gratis, poi {price}/mese. Si rinnova automaticamente ogni mese finché non disdici nelle impostazioni dell’App Store almeno 24 ore prima della fine del periodo. Dai 16 anni in su.",
-    subscribeTerms: "{price}/mese. Si rinnova automaticamente ogni mese finché non disdici nelle impostazioni dell’App Store almeno 24 ore prima della fine del periodo. Dai 16 anni in su.",
+    trialTerms: "7 giorni gratis, poi {price}/mese. Si rinnova automaticamente ogni mese finché non disdici nelle impostazioni dell’App Store almeno 24 ore prima della fine del periodo.",
+    subscribeTerms: "{price}/mese. Si rinnova automaticamente ogni mese finché non disdici nelle impostazioni dell’App Store almeno 24 ore prima della fine del periodo.",
   },
   "pt-BR": {
     eyebrow: "Hey Hermes Personal",
@@ -449,8 +449,8 @@ const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
     subscribeCta: "Assinar por {price}/mês",
     trialThen: "depois {price} por mês · cancele quando quiser",
     subscribeThen: "Mensal · cancele quando quiser",
-    trialTerms: "7 dias grátis, depois {price}/mês. Renova automaticamente todo mês até você cancelar nos ajustes da App Store pelo menos 24 horas antes do fim do período. A partir de 16 anos.",
-    subscribeTerms: "{price}/mês. Renova automaticamente todo mês até você cancelar nos ajustes da App Store pelo menos 24 horas antes do fim do período. A partir de 16 anos.",
+    trialTerms: "7 dias grátis, depois {price}/mês. Renova automaticamente todo mês até você cancelar nos ajustes da App Store pelo menos 24 horas antes do fim do período.",
+    subscribeTerms: "{price}/mês. Renova automaticamente todo mês até você cancelar nos ajustes da App Store pelo menos 24 horas antes do fim do período.",
   },
   ja: {
     eyebrow: "Hey Hermes Personal",
@@ -468,8 +468,8 @@ const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
     subscribeCta: "月額{price}で登録",
     trialThen: "その後は月額{price} · いつでも解約可能",
     subscribeThen: "月額 · いつでも解約可能",
-    trialTerms: "7日間無料、その後は月額{price}。期間終了の24時間前までにApp Storeの設定で解約しない限り、毎月自動更新されます。16歳以上が対象です。",
-    subscribeTerms: "月額{price}。期間終了の24時間前までにApp Storeの設定で解約しない限り、毎月自動更新されます。16歳以上が対象です。",
+    trialTerms: "7日間無料、その後は月額{price}。期間終了の24時間前までにApp Storeの設定で解約しない限り、毎月自動更新されます。",
+    subscribeTerms: "月額{price}。期間終了の24時間前までにApp Storeの設定で解約しない限り、毎月自動更新されます。",
   },
   ko: {
     eyebrow: "Hey Hermes Personal",
@@ -487,8 +487,8 @@ const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
     subscribeCta: "월 {price}에 구독하기",
     trialThen: "이후 월 {price} · 언제든 해지 가능",
     subscribeThen: "월간 · 언제든 해지 가능",
-    trialTerms: "7일 무료, 이후 월 {price}. 기간 종료 24시간 전까지 App Store 설정에서 해지하지 않으면 매월 자동 갱신됩니다. 만 16세 이상.",
-    subscribeTerms: "월 {price}. 기간 종료 24시간 전까지 App Store 설정에서 해지하지 않으면 매월 자동 갱신됩니다. 만 16세 이상.",
+    trialTerms: "7일 무료, 이후 월 {price}. 기간 종료 24시간 전까지 App Store 설정에서 해지하지 않으면 매월 자동 갱신됩니다.",
+    subscribeTerms: "월 {price}. 기간 종료 24시간 전까지 App Store 설정에서 해지하지 않으면 매월 자동 갱신됩니다.",
   },
 };
 
@@ -560,6 +560,9 @@ export type HeyPaywallOfferView = {
   eyebrow: string;
   title: string;
   titleAccent: string;
+  /** At capacity the button becomes the waitlist; the free week is not offered there. */
+  waitlistTitle: string;
+  waitlistTitleAccent: string;
   benefits: readonly (readonly [string, string])[];
   ctaLabel: string;
   ctaSubline: string;
@@ -580,15 +583,19 @@ function offerView(
     eyebrow: offer.eyebrow,
     title: trial ? offer.trialTitle : offer.planTitle,
     titleAccent: trial ? offer.trialTitleAccent : offer.planTitleAccent,
+    waitlistTitle: offer.planTitle,
+    waitlistTitleAccent: offer.planTitleAccent,
     benefits: offer.benefits,
     ctaLabel: storeLabel ?? (trial ? offer.trialCta : fill(offer.subscribeCta, price)),
     ctaSubline: fill(trial ? offer.trialThen : offer.subscribeThen, price),
-    // An unconfirmed eligibility keeps Apple's own wording: the sheet decides.
-    termsText: trial
-      ? fill(offer.trialTerms, price)
-      : plan?.trialEligibility === "unknown" || !plan
-        ? `${fill(offer.subscribeTerms, price)} ${copy.unknownTrial}`
-        : fill(offer.subscribeTerms, price),
+    // Without a Store package there is no price to state, so Apple's renewal
+    // words stand alone. An unconfirmed eligibility keeps Apple's own wording:
+    // the sheet decides. The full age line (with guardian consent) closes it.
+    termsText: [
+      !plan ? copy.renewal : fill(trial ? offer.trialTerms : offer.subscribeTerms, price),
+      !trial && (!plan || plan.trialEligibility === "unknown") ? copy.unknownTrial : null,
+      copy.age,
+    ].filter(Boolean).join(" "),
   };
 }
 

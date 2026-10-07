@@ -29,6 +29,7 @@ test("an eligible account sees the free week, its price after the trial and Appl
   assert.equal(offer.ctaLabel, "Start your free week");
   assert.equal(offer.ctaSubline, "then CHF 29.00 per month · cancel anytime");
   assert.match(offer.termsText, /7 days free, then CHF 29\.00\/month\. Renews automatically/);
+  assert.match(offer.termsText, /Guardian consent is required where local law says so\./);
 });
 
 test("an ineligible account never sees a free-week promise", () => {
@@ -36,6 +37,7 @@ test("an ineligible account never sees a free-week promise", () => {
     const offer = view("de", plan(eligibility)).offer;
     assert.equal(offer.kind, "subscribe");
     assert.equal(offer.ctaLabel, "Abonnieren für CHF 29.00/Monat");
+    assert.equal(offer.waitlistTitle, offer.title);
     assert.doesNotMatch(`${offer.title} ${offer.ctaLabel} ${offer.ctaSubline} ${offer.termsText}`, /gratis|kostenlos/i);
   }
 });
@@ -46,7 +48,11 @@ test("unknown eligibility shows the plan and leaves the trial decision to Apple'
   assert.match(offer.termsText, /Apple will confirm eligibility in the purchase sheet/);
 });
 
-test("without a Store package the button says what the Store is doing", () => {
+test("without a Store package the button says what the Store is doing and no price is doubled", () => {
+  for (const locale of appLocales) {
+    const terms = view(locale, null, "unavailable").offer.termsText;
+    assert.doesNotMatch(terms, /month\/month|\/mois\/mois|月額月額|월 월|\{price\}/, locale);
+  }
   assert.equal(view("en", null, "loading").offer.ctaLabel, "Checking the App Store price...");
   assert.equal(view("en", null, "unavailable").offer.ctaLabel, "The App Store price is unavailable right now.");
 });

@@ -10046,8 +10046,10 @@ function IosPaywallOfferPanel({ locale,
   const busy = phase === "purchasing" || phase === "restoring";
   const purchaseDisabled = busy || !accountReady || !plan;
   const offer = view.offer;
-  const accentAt = offer.titleAccent ? offer.title.indexOf(offer.titleAccent) : -1;
   const waitlist = purchaseAvailable && sales?.mode === "waitlist";
+  const title = waitlist ? offer.waitlistTitle : offer.title;
+  const titleAccent = waitlist ? offer.waitlistTitleAccent : offer.titleAccent;
+  const accentAt = titleAccent ? title.indexOf(titleAccent) : -1;
   return (
     <View style={styles.paywallOffer}>
       <View style={styles.paywallArt}>
@@ -10057,11 +10059,11 @@ function IosPaywallOfferPanel({ locale,
       <Text style={styles.paywallOfferTitle} accessibilityRole="header">
         {accentAt >= 0 ? (
           <>
-            {offer.title.slice(0, accentAt)}
-            <Text style={styles.paywallOfferTitleAccent}>{offer.titleAccent}</Text>
-            {offer.title.slice(accentAt + offer.titleAccent.length)}
+            {title.slice(0, accentAt)}
+            <Text style={styles.paywallOfferTitleAccent}>{titleAccent}</Text>
+            {title.slice(accentAt + titleAccent.length)}
           </>
-        ) : offer.title}
+        ) : title}
       </Text>
       <View style={styles.paywallBenefits}>
         {offer.benefits.map(([lead, rest]) => (
@@ -15194,11 +15196,13 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
   },
+  // App Review 3.1.2: the amount billed after the trial is the clearest
+  // price on the screen, directly under the button.
   paywallCtaSubline: {
     marginTop: 10,
     color: palette.ink,
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 17,
+    fontWeight: "700",
     textAlign: "center",
   },
   paywallTerms: {
