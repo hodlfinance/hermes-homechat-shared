@@ -27,8 +27,11 @@ export const selfServePlans = {
     publicName: "Personal",
     monthlyPriceCents: 2900,
     billingCurrency: "USD",
-    includedAiCreditsCents: 500,
-    dayCeilingCents: 125,
+    // Justus decided on 2026-10-07: Personal includes USD 10 of managed AI a
+    // month (was USD 5). The daily soft ceiling keeps the 25 % ratio every plan
+    // uses. Mirrors hey-hermes packages/core/src/product.ts (HPD-1086).
+    includedAiCreditsCents: 1000,
+    dayCeilingCents: 250,
     serverType: "cx23",
     vcpu: 2,
     memoryMb: 4096,
