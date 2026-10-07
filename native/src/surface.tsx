@@ -7969,9 +7969,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   <Text style={styles.authModeIntro}>
                     {authEntryMode === "sign_in"
                       ? staticUiCopy(appLocale)["We’ll email you a secure sign-in link. No password needed."]
-                      : appLocale === "de"
-                        ? "Erstelle deinen Account mit E-Mail, Google oder Apple."
-                        : "Create your account with email, Google, or Apple."}
+                      : staticUiCopy(appLocale)["Create your account with email, Google, or Apple."]}
                   </Text>
                   <TextInput
                     value={emailSignupEmail}
