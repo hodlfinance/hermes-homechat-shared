@@ -110,6 +110,20 @@ test("three mouth puffs start connected to the mouth and every particle travels 
   }
 });
 
+test("fire images mount only shortly before the first puff, so a short-lived opening screen leaves no fire to recycle", () => {
+  // Sign-in bug 2026-10-07: the opening screen's animated dragon mounted the fire puff with
+  // opacity 0; sign-in replaced it within a fraction of a second, React Native 0.81 recycled the
+  // Image view, and the fire puff's late load callback painted over the sign-in dragon's head.
+  const delay = numberConstant("FIRE_MOUNT_DELAY_MS");
+  assert.match(component, /const LOOP_DURATION_MS = 2_800;/);
+  const firstPuffMs = numberConstant("FIRE_START") * 2_800;
+  assert.ok(delay >= 500, "fire must not mount with the dragon");
+  assert.ok(delay <= firstPuffMs - 200, "fire images need time to load before the first puff");
+  assert.match(component, /const \[fireMounted, setFireMounted\] = useState\(false\);/);
+  assert.match(component, /if \(!animated\) \{\s*setFireMounted\(false\);\s*return;\s*\}\s*const timer = setTimeout\(\(\) => setFireMounted\(true\), FIRE_MOUNT_DELAY_MS\);\s*return \(\) => clearTimeout\(timer\);/);
+  assert.equal(component.match(/FIRE_PARTICLES\.map/g)?.length, 1, "no other path may mount fire images");
+});
+
 test("Reduce Motion and the existing active-run lifecycle still own whether the dragon animates", () => {
   assert.equal(mobileActivitySymbol({ tone: "working", reduceMotion: false }), "spinner");
   assert.equal(mobileActivitySymbol({ tone: "working", reduceMotion: true }), "glyph");
@@ -121,7 +135,7 @@ test("Reduce Motion and the existing active-run lifecycle still own whether the 
   assert.match(component, /return \(\) => \{\s*loop\.stop\(\);\s*pose\.stopAnimation\(\);\s*pose\.setValue\(0\);/);
   assert.equal(numberArray("FIRE_OPACITY")[0], 0, "stopped and Reduce Motion states must render no fire");
   assert.equal(numberArray("FIRE_SCALE")[0], 0, "stopped and Reduce Motion states must collapse every fire particle");
-  assert.match(component, /\{animated && FIRE_PARTICLES\.map/, "terminal and Reduce Motion renders must synchronously remove fire");
+  assert.match(component, /\{animated && fireMounted && FIRE_PARTICLES\.map/, "terminal and Reduce Motion renders must synchronously remove fire");
   assert.match(component, /export const MobileWorkingDragon = memo\(/, "stable activity props must not rebuild the native animation graph on every host tick");
   assert.match(component, /style=\{\{ height: size, width: size \}\}/);
   assert.ok(component.indexOf("FIRE_PARTICLES.map") > component.lastIndexOf("<DragonSlice"), "fire must layer over the unchanged dragon without moving it");
