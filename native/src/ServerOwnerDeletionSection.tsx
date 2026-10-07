@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { Square, SquareCheck, Trash2 } from "lucide-react-native";
+import { RotateCw, Square, SquareCheck, Trash2 } from "lucide-react-native";
 import { apiErrorCode } from "../core/api-client";
 import type { AppLocale } from "../core/index";
 import type { ServerOwnerDeletionConfirmation, ServerOwnerDeletionStatus } from "../core/types";
@@ -116,6 +116,15 @@ export function ServerOwnerDeletionSection({
             <Text key={line} style={[styles.body, { color: palette.text }]} allowFontScaling>{line}</Text>
           ))}
         </View>
+      ) : null}
+      {loadError ? (
+        <MobileSystemRow
+          accessibilityRole="button"
+          icon={<RotateCw size={17} color={palette.teal} />}
+          label={copy.retry}
+          onPress={() => void load()}
+          testID="server-owner-deletion-retry"
+        />
       ) : null}
       {model.showForm && status ? (
         <View style={styles.block}>

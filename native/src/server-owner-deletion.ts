@@ -51,6 +51,7 @@ export interface ServerOwnerDeletionCopy {
   failures: Record<string, string>;
   errors: Record<string, string>;
   loadFailed: string;
+  retry: string;
 }
 
 const en: ServerOwnerDeletionCopy = {
@@ -83,9 +84,9 @@ const en: ServerOwnerDeletionCopy = {
   running: "Your server is being deleted now.",
   deleted: (when) => `Your server was deleted on ${when}.`,
   deletedNext: "Your account, subscription and app conversations stay until you delete them separately.",
-  receipt: (volumes, files) => `Receipt: ${volumes} disks and snapshots and ${files} backup and export files removed.`,
+  receipt: (volumes, files) => `Removed: disks and snapshots ${volumes}, backup and export files ${files}.`,
   receiptClean: "Nothing of the server is left on our host.",
-  failed: "The server could not be deleted. Nothing more was removed. Try again or contact support.",
+  failed: "The server could not be deleted. Try again or contact support.",
   failures: {
     stale: "The deletion did not finish in time and was stopped. Try again.",
     volumes_remain: "Part of the server could not be removed. Try again or contact support.",
@@ -101,6 +102,7 @@ const en: ServerOwnerDeletionCopy = {
     generic: "That did not work. Try again.",
   },
   loadFailed: "The server deletion could not be loaded. Try again.",
+  retry: "Try again",
 };
 
 const de: ServerOwnerDeletionCopy = {
@@ -133,9 +135,9 @@ const de: ServerOwnerDeletionCopy = {
   running: "Dein Server wird gerade gelöscht.",
   deleted: (when) => `Dein Server wurde am ${when} gelöscht.`,
   deletedNext: "Konto, Abo und Unterhaltungen in der App bleiben, bis Du sie eigens löschst.",
-  receipt: (volumes, files) => `Beleg: ${volumes} Platten und Snapshots sowie ${files} Backup- und Exportdateien entfernt.`,
+  receipt: (volumes, files) => `Entfernt: Platten und Snapshots ${volumes}, Backup- und Exportdateien ${files}.`,
   receiptClean: "Vom Server ist auf unserem Host nichts mehr übrig.",
-  failed: "Der Server konnte nicht gelöscht werden. Es wurde nichts weiter entfernt. Versuche es noch einmal oder wende Dich an den Support.",
+  failed: "Der Server konnte nicht gelöscht werden. Versuche es noch einmal oder wende Dich an den Support.",
   failures: {
     stale: "Das Löschen wurde nicht rechtzeitig fertig und abgebrochen. Versuche es noch einmal.",
     volumes_remain: "Ein Teil des Servers konnte nicht entfernt werden. Versuche es noch einmal oder wende Dich an den Support.",
@@ -151,6 +153,7 @@ const de: ServerOwnerDeletionCopy = {
     generic: "Das hat nicht geklappt. Versuche es noch einmal.",
   },
   loadFailed: "Die Serverlöschung konnte nicht geladen werden. Versuche es noch einmal.",
+  retry: "Erneut versuchen",
 };
 
 const fr: ServerOwnerDeletionCopy = {
@@ -183,9 +186,9 @@ const fr: ServerOwnerDeletionCopy = {
   running: "Votre serveur est en cours de suppression.",
   deleted: (when) => `Votre serveur a été supprimé le ${when}.`,
   deletedNext: "Votre compte, votre abonnement et les conversations de l'app restent jusqu'à ce que vous les supprimiez séparément.",
-  receipt: (volumes, files) => `Reçu : ${volumes} disques et instantanés et ${files} fichiers de sauvegarde et d'export supprimés.`,
+  receipt: (volumes, files) => `Supprimés : disques et instantanés ${volumes}, fichiers de sauvegarde et d'export ${files}.`,
   receiptClean: "Plus rien du serveur ne reste sur notre hôte.",
-  failed: "Le serveur n'a pas pu être supprimé. Rien d'autre n'a été retiré. Réessayez ou contactez le support.",
+  failed: "Le serveur n'a pas pu être supprimé. Réessayez ou contactez le support.",
   failures: {
     stale: "La suppression n'a pas abouti à temps et a été arrêtée. Réessayez.",
     volumes_remain: "Une partie du serveur n'a pas pu être retirée. Réessayez ou contactez le support.",
@@ -201,6 +204,7 @@ const fr: ServerOwnerDeletionCopy = {
     generic: "Cela n'a pas fonctionné. Réessayez.",
   },
   loadFailed: "La suppression du serveur n'a pas pu être chargée. Réessayez.",
+  retry: "Réessayer",
 };
 
 const es: ServerOwnerDeletionCopy = {
@@ -233,9 +237,9 @@ const es: ServerOwnerDeletionCopy = {
   running: "Tu servidor se está eliminando ahora.",
   deleted: (when) => `Tu servidor se eliminó el ${when}.`,
   deletedNext: "Tu cuenta, tu suscripción y las conversaciones de la app se conservan hasta que las elimines por separado.",
-  receipt: (volumes, files) => `Comprobante: ${volumes} discos e instantáneas y ${files} archivos de copia y exportación eliminados.`,
+  receipt: (volumes, files) => `Eliminado: discos e instantáneas ${volumes}, archivos de copia y exportación ${files}.`,
   receiptClean: "No queda nada del servidor en nuestro host.",
-  failed: "No se pudo eliminar el servidor. No se quitó nada más. Inténtalo de nuevo o contacta con soporte.",
+  failed: "No se pudo eliminar el servidor. Inténtalo de nuevo o contacta con soporte.",
   failures: {
     stale: "La eliminación no terminó a tiempo y se detuvo. Inténtalo de nuevo.",
     volumes_remain: "Una parte del servidor no se pudo quitar. Inténtalo de nuevo o contacta con soporte.",
@@ -251,6 +255,7 @@ const es: ServerOwnerDeletionCopy = {
     generic: "No ha funcionado. Inténtalo de nuevo.",
   },
   loadFailed: "No se pudo cargar la eliminación del servidor. Inténtalo de nuevo.",
+  retry: "Reintentar",
 };
 
 const it: ServerOwnerDeletionCopy = {
@@ -283,9 +288,9 @@ const it: ServerOwnerDeletionCopy = {
   running: "Il tuo server è in fase di eliminazione.",
   deleted: (when) => `Il tuo server è stato eliminato il ${when}.`,
   deletedNext: "Account, abbonamento e conversazioni nell'app restano finché non li elimini a parte.",
-  receipt: (volumes, files) => `Ricevuta: ${volumes} dischi e snapshot e ${files} file di backup ed esportazione rimossi.`,
+  receipt: (volumes, files) => `Rimossi: dischi e snapshot ${volumes}, file di backup ed esportazione ${files}.`,
   receiptClean: "Del server non resta nulla sul nostro host.",
-  failed: "Non è stato possibile eliminare il server. Non è stato rimosso altro. Riprova o contatta il supporto.",
+  failed: "Non è stato possibile eliminare il server. Riprova o contatta il supporto.",
   failures: {
     stale: "L'eliminazione non è terminata in tempo ed è stata interrotta. Riprova.",
     volumes_remain: "Una parte del server non è stata rimossa. Riprova o contatta il supporto.",
@@ -301,6 +306,7 @@ const it: ServerOwnerDeletionCopy = {
     generic: "Non ha funzionato. Riprova.",
   },
   loadFailed: "Non è stato possibile caricare l'eliminazione del server. Riprova.",
+  retry: "Riprova",
 };
 
 const ptBR: ServerOwnerDeletionCopy = {
@@ -333,9 +339,9 @@ const ptBR: ServerOwnerDeletionCopy = {
   running: "Seu servidor está sendo excluído agora.",
   deleted: (when) => `Seu servidor foi excluído em ${when}.`,
   deletedNext: "Sua conta, sua assinatura e as conversas do app ficam até você excluí-las separadamente.",
-  receipt: (volumes, files) => `Comprovante: ${volumes} discos e snapshots e ${files} arquivos de backup e exportação removidos.`,
+  receipt: (volumes, files) => `Removidos: discos e snapshots ${volumes}, arquivos de backup e exportação ${files}.`,
   receiptClean: "Nada do servidor ficou no nosso host.",
-  failed: "Não foi possível excluir o servidor. Nada mais foi removido. Tente novamente ou fale com o suporte.",
+  failed: "Não foi possível excluir o servidor. Tente novamente ou fale com o suporte.",
   failures: {
     stale: "A exclusão não terminou a tempo e foi interrompida. Tente novamente.",
     volumes_remain: "Parte do servidor não pôde ser removida. Tente novamente ou fale com o suporte.",
@@ -351,6 +357,7 @@ const ptBR: ServerOwnerDeletionCopy = {
     generic: "Não funcionou. Tente novamente.",
   },
   loadFailed: "Não foi possível carregar a exclusão do servidor. Tente novamente.",
+  retry: "Tentar novamente",
 };
 
 const ja: ServerOwnerDeletionCopy = {
@@ -383,9 +390,9 @@ const ja: ServerOwnerDeletionCopy = {
   running: "サーバーを削除しています。",
   deleted: (when) => `サーバーは ${when} に削除されました。`,
   deletedNext: "アカウント、サブスクリプション、アプリ内の会話は、別途削除するまで残ります。",
-  receipt: (volumes, files) => `受領記録：ディスクとスナップショット ${volumes} 件、バックアップとエクスポートのファイル ${files} 件を削除しました。`,
+  receipt: (volumes, files) => `削除記録：ディスクとスナップショット ${volumes} 件、バックアップとエクスポートのファイル ${files} 件を削除しました。`,
   receiptClean: "当社ホスト上にサーバーの残りはありません。",
-  failed: "サーバーを削除できませんでした。それ以上は何も削除していません。もう一度お試しいただくか、サポートにお問い合わせください。",
+  failed: "サーバーを削除できませんでした。もう一度お試しいただくか、サポートにお問い合わせください。",
   failures: {
     stale: "削除が時間内に終わらなかったため中止しました。もう一度お試しください。",
     volumes_remain: "サーバーの一部を削除できませんでした。もう一度お試しいただくか、サポートにお問い合わせください。",
@@ -401,6 +408,7 @@ const ja: ServerOwnerDeletionCopy = {
     generic: "うまくいきませんでした。もう一度お試しください。",
   },
   loadFailed: "サーバーの削除情報を読み込めませんでした。もう一度お試しください。",
+  retry: "再試行",
 };
 
 const ko: ServerOwnerDeletionCopy = {
@@ -433,9 +441,9 @@ const ko: ServerOwnerDeletionCopy = {
   running: "서버를 삭제하고 있습니다.",
   deleted: (when) => `서버가 ${when}에 삭제되었습니다.`,
   deletedNext: "계정, 구독, 앱의 대화는 따로 삭제할 때까지 남아 있습니다.",
-  receipt: (volumes, files) => `영수증: 디스크와 스냅샷 ${volumes}개, 백업 및 내보내기 파일 ${files}개를 삭제했습니다.`,
+  receipt: (volumes, files) => `삭제 기록: 디스크와 스냅샷 ${volumes}개, 백업 및 내보내기 파일 ${files}개를 삭제했습니다.`,
   receiptClean: "저희 호스트에 서버의 남은 것이 없습니다.",
-  failed: "서버를 삭제하지 못했습니다. 더 이상 삭제된 것은 없습니다. 다시 시도하거나 지원팀에 문의하세요.",
+  failed: "서버를 삭제하지 못했습니다. 다시 시도하거나 지원팀에 문의하세요.",
   failures: {
     stale: "삭제가 제시간에 끝나지 않아 중단되었습니다. 다시 시도하세요.",
     volumes_remain: "서버의 일부를 삭제하지 못했습니다. 다시 시도하거나 지원팀에 문의하세요.",
@@ -451,6 +459,7 @@ const ko: ServerOwnerDeletionCopy = {
     generic: "실패했습니다. 다시 시도하세요.",
   },
   loadFailed: "서버 삭제 정보를 불러오지 못했습니다. 다시 시도하세요.",
+  retry: "다시 시도",
 };
 
 const byLocale: Record<AppLocale, ServerOwnerDeletionCopy> = { en, de, fr, es, it, "pt-BR": ptBR, ja, ko };

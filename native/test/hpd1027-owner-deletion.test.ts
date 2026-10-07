@@ -95,7 +95,7 @@ test("walks requested, running (polling), deleted (receipt) and failed (form aga
   assert.equal(deleted.poll, false);
   assert.equal(deleted.showForm, false);
   assert.deepEqual(deleted.receipt, [
-    "Receipt: 4 disks and snapshots and 3 backup and export files removed.",
+    "Removed: disks and snapshots 4, backup and export files 3.",
     en.receiptClean,
     en.deletedNext,
   ]);
@@ -132,7 +132,7 @@ test("flow: preview, confirm, requested, running, deleted against a fake Plane",
   state = { ...state, request: { ...state.request!, state: "deleted", completedAt: "2026-10-08T10:05:00.000Z", receipt: { removedVolumes: 2, removedFiles: 0, remainingVolumes: 0, remainingFiles: 0, offHostCopiesChecked: false } } };
   const done = serverOwnerDeletionModel(await plane.serverOwnerDeletion(), en, date);
   assert.equal(done.phase, "deleted");
-  assert.match(done.receipt[0]!, /2 disks/);
+  assert.match(done.receipt[0]!, /disks and snapshots 2,/);
 });
 
 test("every app language has its own complete copy, export hint first", () => {
@@ -180,4 +180,6 @@ test("the app shows the section only when offered, above the account deletion, w
   assert.ok(source.indexOf("copy.exportFirst") < source.indexOf("copy.intro"));
   assert.ok(source.indexOf("copy.exportFirst") < source.indexOf("copy.deletedHeading"));
   assert.match(source, /if \(hidden\) return null;/);
+  // A failed load can be retried.
+  assert.match(source, /label=\{copy\.retry\}\s*onPress=\{\(\) => void load\(\)\}/);
 });
