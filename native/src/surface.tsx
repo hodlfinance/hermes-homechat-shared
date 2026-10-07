@@ -451,12 +451,14 @@ import {
 } from "./revenuecat-purchases";
 import type { HeyHermesSalesStatus } from "../core/hermes-api";
 import {
+  heyPreparingCopy,
   iosPaywallCopy,
   iosPaywallSalesView,
   iosPaywallWaitlistCopy,
   iosPaywallView,
   iosReceiptInUseMessage,
   openIosSubscriptionManagement,
+  shouldShowIosPaywallOnboarding,
   type IosPaywallStoreState,
 } from "./ios-paywall";
 import {
@@ -4612,6 +4614,36 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     return () => subscription.remove();
   }, [refresh, refreshProductAccess, token]);
 
+  // HPD-1090: while the preparing screen shows, ask the server every 5 s and
+  // switch to chat by itself. When it switches, load the whole snapshot: the
+  // server persists the first greeting only once the runtime is ready, so the
+  // chat must not open on the snapshot read while it was still being set up.
+  const preparingProductAccess = Boolean(snapshot) && mobileProductAccessScreen({
+    standalone: host.session.mode === "standalone",
+    ios: Platform.OS === "ios",
+    showPaywallOnboarding: snapshot ? shouldShowIosPaywallOnboarding({
+      comped: snapshot.entitlement.comped === true,
+      entitlementStatus: snapshot.entitlement.status,
+      runtimeAccess: snapshot.subscription.lifecycle.runtimeAccess,
+    }) : false,
+    snapshot: snapshot!,
+    status: workspaceStatusTruth,
+  }) === "preparing";
+  const wasPreparingRef = useRef(false);
+  useEffect(() => {
+    if (!token) return;
+    if (!preparingProductAccess) {
+      if (wasPreparingRef.current) {
+        wasPreparingRef.current = false;
+        void refresh(true);
+      }
+      return;
+    }
+    wasPreparingRef.current = true;
+    const timer = setInterval(() => void refreshProductAccess(), 5_000);
+    return () => clearInterval(timer);
+  }, [preparingProductAccess, refresh, refreshProductAccess, token]);
+
   useEffect(() => {
     if (!token || !snapshot) {
       setDelegatedTasks([]);
@@ -8290,6 +8322,27 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     formatSecurityDateValue,
   );
 
+  // HPD-1090: after the purchase and until the server reports the runtime
+  // ready, a full screen in the paywall's design says what is happening,
+  // instead of a chat whose input is locked without explanation.
+  if (pendingProductAccess) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
+        <ScrollView contentContainerStyle={styles.paywallScreen}>
+          <HeyPreparingPanel
+            locale={appLocale}
+            capacityCopy={mobilePendingAccessVariant(workspaceStatusTruth) === "capacity" ? pendingAccessCopy : null}
+            busy={productAccessRefreshing}
+            onCheckAgain={refreshProductAccess}
+            signOutLabel={staticUiCopy(appLocale)["Sign out"]}
+            onSignOut={() => void logout()}
+          />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   if (productAccessScreen === "purchase") {
     return (
       <SafeAreaView style={styles.safe}>
@@ -9748,63 +9801,76 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         </ScrollView>
       )}
 
-      <PendingProductAccessModal
-        busy={productAccessRefreshing}
-        copy={pendingAccessCopy}
-        onCheckAgain={refreshProductAccess}
-        onSignOut={() => logout()}
-        visible={pendingProductAccess}
-      />
-
     </SafeAreaView>
   );
 }
 
-function PendingProductAccessModal({
+/**
+ * HPD-1090: the screen between purchase and a ready Hermes, in the HPD-1085
+ * paywall design: ink dragon, headline with a blue accent, calm copy and a
+ * progress hint. While the host has refused the guest (HPD-823) it shows the
+ * capacity words instead of the progress hint.
+ */
+function HeyPreparingPanel({
+  locale,
+  capacityCopy,
   busy,
-  copy,
   onCheckAgain,
+  signOutLabel,
   onSignOut,
-  visible,
 }: {
+  locale: AppLocale;
+  capacityCopy: ReturnType<typeof mobilePendingAccessCopy> | null;
   busy: boolean;
-  copy: ReturnType<typeof mobilePendingAccessCopy>;
   onCheckAgain: () => Promise<void>;
-  onSignOut: () => Promise<void>;
-  visible: boolean;
+  signOutLabel: string;
+  onSignOut: () => void;
 }) {
+  const copy = heyPreparingCopy(locale);
+  const title = capacityCopy?.title ?? copy.title;
+  const titleAccent = capacityCopy ? "" : copy.titleAccent;
+  const accentAt = titleAccent ? title.indexOf(titleAccent) : -1;
   return (
-    <Modal
-      animationType="fade"
-      onRequestClose={() => undefined}
-      statusBarTranslucent
-      transparent
-      visible={visible}
-    >
-      <View style={styles.pendingAccessBackdrop}>
-        <View accessibilityRole="alert" accessibilityViewIsModal style={styles.pendingAccessDialog}>
-          <Text style={styles.pendingAccessTitle}>{copy.title}</Text>
-          <Text style={styles.pendingAccessBody}>{copy.body}</Text>
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy}
-            onPress={() => void onCheckAgain()}
-            style={[styles.primaryButtonWide, busy && styles.disabledButton]}
-          >
-            {busy ? <ActivityIndicator color={palette.accentText} /> : null}
-            <Text style={styles.primaryButtonText}>{copy.checkAgain}</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => void onSignOut()}
-            style={styles.secondaryButtonWide}
-          >
-            <LogOut size={17} color={palette.teal} />
-            <Text style={styles.secondaryButtonText}>{copy.signOut}</Text>
-          </Pressable>
-        </View>
+    <View style={styles.paywallOffer} accessibilityLiveRegion="polite">
+      <View style={styles.paywallArt}>
+        <Image source={paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors />
       </View>
-    </Modal>
+      <Text style={styles.paywallEyebrow}>{copy.eyebrow}</Text>
+      <Text style={styles.paywallOfferTitle} accessibilityRole="header">
+        {accentAt >= 0 ? (
+          <>
+            {title.slice(0, accentAt)}
+            <Text style={styles.paywallOfferTitleAccent}>{titleAccent}</Text>
+            {title.slice(accentAt + titleAccent.length)}
+          </>
+        ) : title}
+      </Text>
+      <Text style={styles.preparingBody}>{capacityCopy?.body ?? copy.appBody}</Text>
+      {capacityCopy ? null : (
+        <View style={styles.preparingProgress} accessibilityRole="progressbar" accessibilityLabel={copy.progress}>
+          <ActivityIndicator color={paywallBrandColor} />
+          <Text style={styles.preparingProgressText}>{copy.progress}</Text>
+        </View>
+      )}
+      <View style={styles.paywallQuietRow}>
+        <Pressable
+          disabled={busy}
+          onPress={() => void onCheckAgain()}
+          accessibilityRole="button"
+          accessibilityLabel={copy.checkAgain}
+          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+          style={[styles.paywallQuietAction, busy && styles.disabledButton]}
+        >
+          {busy ? <ActivityIndicator size="small" color={palette.muted} /> : null}
+          <Text style={styles.paywallQuietText}>{copy.checkAgain}</Text>
+        </Pressable>
+      </View>
+      <View style={styles.paywallFooter}>
+        <Pressable onPress={onSignOut} accessibilityRole="button" accessibilityLabel={signOutLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+          <Text style={styles.paywallFooterLink}>{signOutLabel}</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -15211,6 +15277,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     textAlign: "center",
+  },
+  preparingBody: {
+    marginTop: 14,
+    color: palette.text,
+    fontSize: 17,
+    lineHeight: 24,
+  },
+  preparingProgress: {
+    marginTop: 22,
+    minHeight: 58,
+    borderRadius: 16,
+    backgroundColor: paywallCheckBackground,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+  },
+  preparingProgressText: {
+    color: paywallBrandColor,
+    fontSize: 16,
+    fontWeight: "700",
+    flexShrink: 1,
   },
   paywallQuietRow: {
     marginTop: 16,

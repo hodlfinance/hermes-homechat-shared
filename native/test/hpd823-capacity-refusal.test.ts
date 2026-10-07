@@ -176,11 +176,11 @@ test("the modal chooses the capacity copy only when the refusal is present", () 
   }
 });
 
-test("the surface feeds the status truth into the pending modal copy", () => {
+test("the surface feeds the status truth into the preparing screen's capacity copy", () => {
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   assert.match(
     surface,
     /const pendingAccessCopy = mobilePendingAccessCopy\(appLocale, mobilePendingAccessVariant\(workspaceStatusTruth\), \{\s*reason: workspaceStatusTruthCapacityRefusal\(workspaceStatusTruth\)\?\.reason/,
   );
-  assert.match(surface, /<PendingProductAccessModal[\s\S]*?copy=\{pendingAccessCopy\}/);
+  assert.match(surface, /<HeyPreparingPanel[\s\S]*?capacityCopy=\{mobilePendingAccessVariant\(workspaceStatusTruth\) === "capacity" \? pendingAccessCopy : null\}/);
 });
