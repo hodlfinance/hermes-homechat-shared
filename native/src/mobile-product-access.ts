@@ -36,10 +36,14 @@ export function mobileProductAccessScreen(input: {
   showPaywallOnboarding: boolean;
   snapshot: Pick<AppSnapshot, "me" | "workspace" | "entitlement">;
   status: WorkspaceStatusTruthView | null;
-}): "purchase" | "preparing" | "home" {
+}): "purchase" | "no_access" | "preparing" | "home" {
   if (!input.standalone) return "home";
   // Buying access must remain possible before the private runtime is ready.
   if (input.ios && input.showPaywallOnboarding) return "purchase";
+  // HPD-1090: an account that never paid has nothing being prepared (Android,
+  // or iOS without the paywall). It must not see the preparing screen and its
+  // ready-email promise.
+  if (!hasValidMobileProductAccess(input.snapshot.entitlement)) return "no_access";
   return isMobileAccountFullyReady(input.snapshot, input.status) ? "home" : "preparing";
 }
 

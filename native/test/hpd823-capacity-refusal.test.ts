@@ -180,7 +180,7 @@ test("the surface feeds the status truth into the preparing screen's capacity co
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   assert.match(
     surface,
-    /const pendingAccessCopy = mobilePendingAccessCopy\(appLocale, mobilePendingAccessVariant\(workspaceStatusTruth\), \{\s*reason: workspaceStatusTruthCapacityRefusal\(workspaceStatusTruth\)\?\.reason/,
+    /const pendingAccessCopy = mobilePendingAccessCopy\(appLocale, mobilePendingAccessVariant\(workspaceStatusTruth\), \{\s*email: readyEmailPromised,\s*reason: workspaceStatusTruthCapacityRefusal\(workspaceStatusTruth\)\?\.reason/,
   );
   assert.match(surface, /<HeyPreparingPanel[\s\S]*?capacityCopy=\{mobilePendingAccessVariant\(workspaceStatusTruth\) === "capacity" \? pendingAccessCopy : null\}/);
 });

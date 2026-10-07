@@ -62,9 +62,9 @@ test("verified paid, trial, grace and complimentary access waits for the bound r
   }
 });
 
-test("external hosts retain their own gate and non-iOS standalone retains its existing preparation gate", () => {
+test("external hosts retain their own gate and non-iOS standalone retains its no-access state when it never paid", () => {
   assert.equal(screen({ entitlementStatus: "none", standalone: false, status: null }), "home");
   assert.equal(screen({ entitlementStatus: "active", standalone: false, status: null }), "home");
-  assert.equal(screen({ entitlementStatus: "none", ios: false }), "preparing");
+  assert.equal(screen({ entitlementStatus: "none", ios: false }), "no_access"); // HPD-1090: never paid, nothing is being prepared
   assert.equal(screen({ entitlementStatus: "active", ios: false }), "home");
 });
