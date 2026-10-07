@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, View, type ColorValue, type ImageSourcePropType } from "react-native";
 import neutralDragon from "../assets/baby-dragon-neutral.png";
 import winkWingDragon from "../assets/baby-dragon-wink-wing.png";
@@ -15,6 +15,12 @@ const FIRE_END = 0.75;
 const FIRE_TIMELINE = [0, FIRE_START, 0.5, 0.5357, 0.5714, 0.6071, 0.6429, 0.6786, 0.7143, FIRE_END, 1];
 const FIRE_OPACITY = [0, 0, 0.383, 0.707, 0.924, 1, 0.924, 0.707, 0.383, 0, 0];
 const FIRE_SCALE = [0, 0, 0.27, 0.539, 0.756, 0.875, 0.861, 0.698, 0.4, 0, 0];
+// The fire images mount shortly before the first puff instead of with the dragon. React Native
+// 0.81 on iOS can apply a recycled Image view's late load callback to the next image that reuses
+// the view (fixed upstream in facebook/react-native#58669, not in 0.81). The opening screen lives
+// for a fraction of a second before sign-in replaces it; fire mounted there put a stretched fire
+// puff over the sign-in dragon's head. A screen that never reaches the first puff mounts no fire.
+const FIRE_MOUNT_DELAY_MS = 1000;
 
 const FIRE_PARTICLES = [
   { id: "puff-left", source: firePuff, scale: 0.14, heightRatio: 0.78, startY: 0.625, xTravel: -0.12, yTravel: -0.14, rotation: "-9deg" },
@@ -149,6 +155,16 @@ export const MobileWorkingDragon = memo(function MobileWorkingDragon({
   tintColor?: ColorValue;
 }) {
   const pose = useRef(new Animated.Value(0)).current;
+  const [fireMounted, setFireMounted] = useState(false);
+
+  useEffect(() => {
+    if (!animated) {
+      setFireMounted(false);
+      return;
+    }
+    const timer = setTimeout(() => setFireMounted(true), FIRE_MOUNT_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [animated]);
 
   useEffect(() => {
     pose.stopAnimation();
@@ -221,7 +237,7 @@ export const MobileWorkingDragon = memo(function MobileWorkingDragon({
       />
 
       {/* HPD-663 selected variant: warm puffs start at the mouth, then rise upward and fade. */}
-      {animated && FIRE_PARTICLES.map((particle) => (
+      {animated && fireMounted && FIRE_PARTICLES.map((particle) => (
         <FireParticle
           key={particle.id}
           source={particle.source}
