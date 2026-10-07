@@ -15,7 +15,9 @@ export function isPrivateMobileBrowserHref(href: string) {
   return (
     href === "/app?connection=gmail" ||
     /^\/api\/workspace\/preview\/\d+(?:[/?#]|$)/i.test(href) ||
-    /^\/api\/backup-jobs\/bak_[A-Za-z0-9_-]{14}\/download$/.test(href)
+    /^\/api\/backup-jobs\/bak_[A-Za-z0-9_-]{14}\/download$/.test(href) ||
+    // HPD-1027 S5: the Owner's full server archive, fetched with the Owner's own session.
+    href === "/api/workspace/server/export/download"
   );
 }
 

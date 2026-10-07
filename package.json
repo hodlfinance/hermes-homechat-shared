@@ -86,6 +86,7 @@
     "./native/hermes-canonical": "./native/src/hermes-canonical.ts",
     "./native/appI18n": "./native/src/appI18n.ts",
     "./native/server-access": "./native/src/server-access.ts",
+    "./native/server-full-export": "./native/src/server-full-export.ts",
     "./native/ServerAccessSection": "./native/src/ServerAccessSection.tsx",
     "./native/mobile-ai-access-brand-marks": "./native/src/mobile-ai-access-brand-marks.tsx",
     "./native/assets.d": "./native/src/assets.d.ts",
