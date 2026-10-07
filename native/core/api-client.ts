@@ -130,6 +130,7 @@ import type {
   WorkspaceServerIdentity,
   ServerAccessView,
   ServerBlockingPathRemoval,
+  ServerFullExportStatus,
   ServerOwnerSshKey,
   ServerOwnerSshKeyListing,
   ProviderStatusView,
@@ -767,6 +768,9 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
         method: "POST",
         body: JSON.stringify({ path }),
       }),
+    /** HPD-1027 S5: the Owner's full server archive (encrypted to the Owner's SSH keys). */
+    serverFullExport: () => request<ServerFullExportStatus>("/workspace/server/export"),
+    createServerFullExport: () => request<ServerFullExportStatus>("/workspace/server/export", { method: "POST" }),
     heyHermesAdapter: () => request<HeyHermesAdapterManifest>("/workspace/hey-hermes-adapter"),
     materializeHeyHermesAdapter: () =>
       request<HeyHermesAdapterMaterialization | null>("/workspace/hey-hermes-adapter/materialize", { method: "POST" }),

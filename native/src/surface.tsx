@@ -503,6 +503,8 @@ import {
 import { MobileSystemRow, MobileSystemSection } from "./mobile-system-surface";
 import { ServerAccessSection } from "./ServerAccessSection";
 import { serverAccessVisible } from "./server-access";
+import { ServerFullExportSection } from "./ServerFullExportSection";
+import { SERVER_FULL_EXPORT_DOWNLOAD_HREF, serverFullExportVisible } from "./server-full-export";
 import {
   MobileSwipeRemoveRow,
   type MobileRemovableNavigationEntry,
@@ -9575,6 +9577,23 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                         </Pressable>
                       </View>
                     </MobileSystemSection>
+                    {/* HPD-1027 S5: the server Owner's full server archive, beside the export above (which stays). */}
+                    {serverFullExportVisible(serverIdentity) ? (
+                      <ServerFullExportSection
+                        client={api}
+                        locale={appLocale}
+                        formatDate={formatSecurityDateValue}
+                        onDownload={async () => {
+                          await openMobileBrowserHref({
+                            api,
+                            apiBase: API_BASE,
+                            href: SERVER_FULL_EXPORT_DOWNLOAD_HREF,
+                            openUrl: (url) => Linking.openURL(url),
+                            openPrivateUrl: (url) => WebBrowser.openBrowserAsync(url),
+                          });
+                        }}
+                      />
+                    ) : null}
                     <MobileSystemSection>
                       <MobileSystemRow
                         icon={<Download size={17} color={palette.teal} />}

@@ -1272,6 +1272,8 @@ interface WorkspaceServerIdentityBase {
   serverOwner?: boolean;
   /** HPD-1027 S4: the Owner screens exist only while customer SSH is switched on for this workspace. */
   ownerAccessAvailable?: boolean;
+  /** HPD-1027 S5: the full server archive row exists only while it is switched on for this workspace. */
+  fullExportAvailable?: boolean;
 }
 
 export type WorkspaceServerIdentity = WorkspaceServerIdentityBase & (
@@ -2999,6 +3001,32 @@ export interface ServerBlockingPath {
   path: string;
   /** "unreadable": the safety check could not read it; "shared_ai_key": it still holds our shared AI key. */
   why: "unreadable" | "shared_ai_key";
+}
+
+/** HPD-1027 S5: where the Owner's full server archive stands. */
+export type ServerFullExportState = "requested" | "running" | "ready" | "failed" | "expired";
+
+export interface ServerFullExportRequestView {
+  id: string;
+  state: ServerFullExportState;
+  requestedAt: string;
+  completedAt: string | null;
+  /** Only while ready. */
+  bytes: number | null;
+  sha256: string | null;
+  expiresAt: string | null;
+  /** Only when failed: a fixed code, never host text. */
+  failureCode: string | null;
+  /** The SSH keys (ed25519/RSA) the archive is encrypted to. */
+  recipientFingerprints: string[];
+}
+
+export interface ServerFullExportStatus {
+  serverOwner: true;
+  /** At least one ssh-ed25519 or ssh-rsa key: age encrypts only to those. */
+  eligible: boolean;
+  linkDays: number;
+  request: ServerFullExportRequestView | null;
 }
 
 export interface ServerBlockingPathRemoval {
