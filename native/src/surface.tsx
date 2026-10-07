@@ -1652,6 +1652,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [signedOutSupportOpen, setSignedOutSupportOpen] = useState(false);
   const [authEntryMode, setAuthEntryMode] = useState<"sign_in" | "create_account">("sign_in");
   const [emailSignupEmail, setEmailSignupEmail] = useState("");
+  // HPD-1087: customers sign in with a link, Google or Apple. Passwords exist
+  // only for special accounts (the App Review demo account), so the password
+  // form sits behind a small "Sign in with password" link.
+  const [signInWithPassword, setSignInWithPassword] = useState(false);
   const [emailMagicLinkPhase, setEmailMagicLinkPhase] = useState<"idle" | "sending" | "sent" | "completing">("idle");
   const emailMagicLinkConsumedRef = useRef<string | null>(null);
   // The one in-flight link request: its abort handle, a generation so a
@@ -7928,7 +7932,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 </Pressable>
               </View>
 
-              {authEntryMode === "sign_in" ? (
+              {authEntryMode === "sign_in" && signInWithPassword ? (
                 <View style={styles.authForm}>
                   {/* textContentType is what iOS actually reads; autoComplete alone
                       is Android. Without it iOS guesses, and it guessed "new
@@ -7949,13 +7953,25 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                     {busy ? <ActivityIndicator color={palette.accentText} /> : <ShieldCheck size={18} color={palette.accentText} />}
                     <Text style={styles.primaryButtonText}>{busyLabel ? staticUiMessage(appLocale, busyLabel) : staticUiCopy(appLocale)["Sign in"]}</Text>
                   </Pressable>
+                  <Pressable
+                    style={styles.authSupportButton}
+                    onPress={() => {
+                      if (!emailSignupEmail.trim() && email.trim()) setEmailSignupEmail(email.trim());
+                      setSignInWithPassword(false);
+                    }}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.authPasswordToggleText}>{staticUiCopy(appLocale)["Use a sign-in link instead"]}</Text>
+                  </Pressable>
                 </View>
               ) : (
                 <View style={styles.authForm}>
                   <Text style={styles.authModeIntro}>
-                    {appLocale === "de"
-                      ? "Erstelle deinen Account mit E-Mail, Google oder Apple."
-                      : "Create your account with email, Google, or Apple."}
+                    {authEntryMode === "sign_in"
+                      ? staticUiCopy(appLocale)["We’ll email you a secure sign-in link. No password needed."]
+                      : appLocale === "de"
+                        ? "Erstelle deinen Account mit E-Mail, Google oder Apple."
+                        : "Create your account with email, Google, or Apple."}
                   </Text>
                   <TextInput
                     value={emailSignupEmail}
@@ -7979,18 +7995,28 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                       : <Mail size={18} color={palette.accentText} />}
                     <Text style={styles.primaryButtonText}>
                       {emailMagicLinkPhase === "sending"
-                        ? (appLocale === "de" ? "Link wird gesendet …" : "Sending link…")
+                        ? staticUiCopy(appLocale)["Sending link…"]
                         : emailMagicLinkPhase === "completing"
-                          ? (appLocale === "de" ? "Anmeldung wird abgeschlossen …" : "Finishing sign-in…")
-                          : (appLocale === "de" ? "Link per E-Mail senden" : "Email me a sign-in link")}
+                          ? staticUiCopy(appLocale)["Finishing sign-in…"]
+                          : staticUiCopy(appLocale)["Email me a sign-in link"]}
                     </Text>
                   </Pressable>
                   {emailMagicLinkPhase === "sent" ? (
                     <Text style={styles.authModeIntro} accessibilityRole="alert">
-                      {appLocale === "de"
-                        ? "Wenn diese E-Mail für Hey Hermes verwendet werden kann, ist ein Anmeldelink unterwegs."
-                        : "If this email can be used with Hey Hermes, a sign-in link is on its way."}
+                      {staticUiCopy(appLocale)["If this email can be used with Hey Hermes, a sign-in link is on its way."]}
                     </Text>
+                  ) : null}
+                  {authEntryMode === "sign_in" ? (
+                    <Pressable
+                      style={styles.authSupportButton}
+                      onPress={() => {
+                        if (!email.trim() && emailSignupEmail.trim()) setEmail(emailSignupEmail.trim());
+                        setSignInWithPassword(true);
+                      }}
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.authPasswordToggleText}>{staticUiCopy(appLocale)["Sign in with password"]}</Text>
+                    </Pressable>
                   ) : null}
                 </View>
               )}
@@ -13348,6 +13374,12 @@ const styles = StyleSheet.create({
     color: palette.teal,
     fontSize: 15,
     fontWeight: "500",
+  },
+  authPasswordToggleText: {
+    color: palette.muted,
+    fontSize: 14,
+    fontWeight: "500",
+    textDecorationLine: "underline",
   },
   paywallScreen: {
     padding: 18,
