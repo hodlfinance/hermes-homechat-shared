@@ -51,6 +51,7 @@ import {
   AppState,
   Appearance,
   Clipboard,
+  DynamicColorIOS,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -8309,11 +8310,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             onJoinWaitlist={joinMobileWaitlist}
             onRestore={restoreMobilePurchases}
             onManage={manageMobileSubscription}
+            signOutLabel={staticUiCopy(appLocale)["Sign out"]}
+            onSignOut={() => void logout()}
           />
-          <Pressable style={styles.secondaryButtonWide} onPress={() => void logout()} accessibilityRole="button">
-            <LogOut size={17} color={palette.teal} />
-            <Text style={styles.secondaryButtonText}>{staticUiCopy(appLocale)["Sign out"]}</Text>
-          </Pressable>
         </ScrollView>
       </SafeAreaView>
     );
@@ -9832,7 +9831,12 @@ function IosPaywallPanel({ locale,
   salesError = null,
   waitlistJoining = false,
   onJoinWaitlist,
+  signOutLabel,
+  onSignOut,
 }: { locale: AppLocale } & {
+  /** HPD-1085: the full purchase screen carries Sign out in its quiet footer. */
+  signOutLabel?: string;
+  onSignOut?: () => void;
   sales?: ReturnType<typeof iosPaywallSalesView>;
   salesError?: string | null;
   waitlistJoining?: boolean;
@@ -9852,6 +9856,30 @@ function IosPaywallPanel({ locale,
 }) {
   const busy = phase === "purchasing" || phase === "restoring";
   const purchaseDisabled = busy || !accountReady || !plan;
+
+  if (!compact) {
+    return (
+      <IosPaywallOfferPanel
+        locale={locale}
+        view={view}
+        plan={plan}
+        phase={phase}
+        accountReady={accountReady}
+        purchaseAvailable={purchaseAvailable}
+        notice={notice}
+        onDismissNotice={onDismissNotice}
+        onPurchase={onPurchase}
+        onRestore={onRestore}
+        onManage={onManage}
+        sales={sales}
+        salesError={salesError}
+        waitlistJoining={waitlistJoining}
+        onJoinWaitlist={onJoinWaitlist}
+        signOutLabel={signOutLabel}
+        onSignOut={onSignOut}
+      />
+    );
+  }
 
   return (
     <View style={[styles.mobilePurchaseSection, compact && styles.mobilePurchaseSectionCompact, !compact && styles.paywallPanel]}>
@@ -9963,6 +9991,171 @@ function IosPaywallPanel({ locale,
             <Text style={styles.paywallLegalLink}>{link.label}</Text>
           </Pressable>
         ))}
+      </View>
+    </View>
+  );
+}
+
+// HPD-1085: brand blue from the landing page, brighter in dark mode.
+const paywallBrandColor = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4ed8", dark: "#7ea2ff" }) : "#1d4ed8";
+const paywallCtaColor = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4ed8", dark: "#3563e9" }) : "#1d4ed8";
+const paywallCheckBackground = Platform.OS === "ios" ? DynamicColorIOS({ light: "#e8eefc", dark: "#1e2742" }) : "#e8eefc";
+const paywallIllustration = require("../assets/paywall-ink-key.png");
+
+/**
+ * HPD-1085: the full-screen purchase offer. The free week leads when the Store
+ * confirms eligibility; price, period, renewal and trial terms stay next to
+ * the button (App Review 3.1.2); restore, manage, legal and sign-out are quiet.
+ */
+function IosPaywallOfferPanel({ locale,
+  view,
+  plan,
+  phase,
+  accountReady,
+  purchaseAvailable,
+  notice,
+  onDismissNotice,
+  onPurchase,
+  onRestore,
+  onManage,
+  sales,
+  salesError = null,
+  waitlistJoining = false,
+  onJoinWaitlist,
+  signOutLabel,
+  onSignOut,
+}: {
+  locale: AppLocale;
+  view: ReturnType<typeof iosPaywallView>;
+  plan: MobilePurchasePlan | null;
+  phase: MobilePurchasePhase;
+  accountReady: boolean;
+  purchaseAvailable: boolean;
+  notice: string | null;
+  onDismissNotice: () => void;
+  onPurchase: (packageId: MobileRevenueCatPackageId) => Promise<void>;
+  onRestore: () => Promise<void>;
+  onManage: () => Promise<void>;
+  sales?: ReturnType<typeof iosPaywallSalesView>;
+  salesError?: string | null;
+  waitlistJoining?: boolean;
+  onJoinWaitlist?: () => Promise<void>;
+  signOutLabel?: string;
+  onSignOut?: () => void;
+}) {
+  const busy = phase === "purchasing" || phase === "restoring";
+  const purchaseDisabled = busy || !accountReady || !plan;
+  const offer = view.offer;
+  const waitlist = purchaseAvailable && sales?.mode === "waitlist";
+  const title = waitlist ? offer.waitlistTitle : offer.title;
+  const titleAccent = waitlist ? offer.waitlistTitleAccent : offer.titleAccent;
+  const accentAt = titleAccent ? title.indexOf(titleAccent) : -1;
+  return (
+    <View style={styles.paywallOffer}>
+      <View style={styles.paywallArt}>
+        <Image source={paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors />
+      </View>
+      <Text style={styles.paywallEyebrow}>{offer.eyebrow}</Text>
+      <Text style={styles.paywallOfferTitle} accessibilityRole="header">
+        {accentAt >= 0 ? (
+          <>
+            {title.slice(0, accentAt)}
+            <Text style={styles.paywallOfferTitleAccent}>{titleAccent}</Text>
+            {title.slice(accentAt + titleAccent.length)}
+          </>
+        ) : title}
+      </Text>
+      <View style={styles.paywallBenefits}>
+        {offer.benefits.map(([lead, rest]) => (
+          <View key={lead} style={styles.paywallBenefit}>
+            <View style={styles.paywallBenefitCheck}>
+              <Check size={13} color={paywallBrandColor} strokeWidth={3.2} />
+            </View>
+            <Text style={styles.paywallBenefitText}>
+              <Text style={styles.paywallBenefitLead}>{lead}</Text>
+              {rest}
+            </Text>
+          </View>
+        ))}
+      </View>
+      {phase === "loading" ? <ActivityIndicator color={paywallBrandColor} /> : null}
+      {sales?.lines.map((line) => (
+        <Text key={line} style={styles.paywallTerms}>{line}</Text>
+      ))}
+      {salesError ? <Text style={styles.paywallTerms}>{salesError}</Text> : null}
+      {waitlist ? (
+        sales.joined ? null : (
+          <Pressable
+            style={[styles.paywallCta, (busy || waitlistJoining || !accountReady) && styles.disabledButton]}
+            disabled={busy || waitlistJoining || !accountReady}
+            onPress={() => void onJoinWaitlist?.()}
+            accessibilityRole="button"
+            accessibilityLabel={sales.joinLabel}
+          >
+            {waitlistJoining ? <ActivityIndicator color="#ffffff" /> : null}
+            <Text style={styles.paywallCtaText}>{waitlistJoining ? sales.joiningLabel : sales.joinLabel}</Text>
+          </Pressable>
+        )
+      ) : purchaseAvailable ? (
+        <>
+          <Pressable
+            style={[styles.paywallCta, purchaseDisabled && styles.disabledButton]}
+            disabled={purchaseDisabled}
+            onPress={() => plan ? void onPurchase(plan.packageId) : undefined}
+            accessibilityRole="button"
+            accessibilityLabel={`${offer.ctaLabel}. ${offer.ctaSubline}`}
+          >
+            {phase === "purchasing" ? <ActivityIndicator color="#ffffff" /> : null}
+            <Text style={styles.paywallCtaText}>{offer.ctaLabel}</Text>
+          </Pressable>
+          <Text style={styles.paywallCtaSubline}>{offer.ctaSubline}</Text>
+          <Text style={styles.paywallTerms}>{offer.termsText}</Text>
+          {view.complimentaryOverlapText ? <Text style={styles.paywallTerms}>{view.complimentaryOverlapText}</Text> : null}
+        </>
+      ) : null}
+      <View style={styles.paywallQuietRow}>
+        <Pressable
+          disabled={busy || !accountReady}
+          onPress={() => void onRestore()}
+          accessibilityRole="button"
+          accessibilityLabel={view.restoreLabel}
+          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+          style={[styles.paywallQuietAction, (busy || !accountReady) && styles.disabledButton]}
+        >
+          {phase === "restoring" ? <ActivityIndicator size="small" color={palette.muted} /> : null}
+          <Text style={styles.paywallQuietText}>{phase === "restoring" ? view.restoringLabel : view.restoreLabel}</Text>
+        </Pressable>
+        <Pressable
+          disabled={busy}
+          onPress={() => void onManage()}
+          accessibilityRole="link"
+          accessibilityLabel={view.manageLabel}
+          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+          style={[styles.paywallQuietAction, busy && styles.disabledButton]}
+        >
+          <Text style={styles.paywallQuietText}>{view.manageLabel}</Text>
+        </Pressable>
+      </View>
+      {/* The result of Restore belongs directly under the button that produced it. */}
+      {notice ? <Notice locale={locale} tone={phase === "error" ? "error" : "info"} text={notice} onDismiss={onDismissNotice} /> : null}
+      <View style={styles.paywallFooter}>
+        {view.legalLinks.map((link) => (
+          <Pressable
+            key={link.key}
+            onPress={() => void openHeyLegalHref(link.url)}
+            accessibilityRole="link"
+            accessibilityLabel={link.label}
+            // 12pt text alone is a ~16pt target; Apple asks for 44pt.
+            hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
+          >
+            <Text style={styles.paywallFooterLink}>{link.label}</Text>
+          </Pressable>
+        ))}
+        {onSignOut && signOutLabel ? (
+          <Pressable onPress={onSignOut} accessibilityRole="button" accessibilityLabel={signOutLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+            <Text style={styles.paywallFooterLink}>{signOutLabel}</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -14922,6 +15115,136 @@ const styles = StyleSheet.create({
     color: palette.teal,
     fontSize: 13,
     fontWeight: "600",
+    textDecorationLine: "underline",
+  },
+  paywallOffer: {
+    gap: 0,
+    paddingTop: 4,
+  },
+  paywallArt: {
+    height: 168,
+    borderRadius: 20,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  paywallArtImage: {
+    width: "100%",
+    height: "100%",
+  },
+  paywallEyebrow: {
+    marginTop: 20,
+    marginBottom: 6,
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 1.9,
+    textTransform: "uppercase",
+  },
+  paywallOfferTitle: {
+    color: palette.ink,
+    fontSize: 30,
+    lineHeight: 33,
+    fontWeight: "800",
+    letterSpacing: -0.6,
+  },
+  paywallOfferTitleAccent: {
+    color: paywallBrandColor,
+  },
+  paywallBenefits: {
+    marginTop: 18,
+    gap: 11,
+  },
+  paywallBenefit: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 11,
+  },
+  paywallBenefitCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: paywallCheckBackground,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paywallBenefitText: {
+    flex: 1,
+    color: palette.text,
+    fontSize: 16,
+    lineHeight: 21,
+  },
+  paywallBenefitLead: {
+    color: palette.ink,
+    fontWeight: "700",
+  },
+  paywallCta: {
+    marginTop: 22,
+    minHeight: 58,
+    borderRadius: 16,
+    backgroundColor: paywallCtaColor,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  paywallCtaText: {
+    color: "#ffffff",
+    fontSize: 18,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  // App Review 3.1.2: the amount billed after the trial is the clearest
+  // price on the screen, directly under the button.
+  paywallCtaSubline: {
+    marginTop: 10,
+    color: palette.ink,
+    fontSize: 17,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  paywallTerms: {
+    marginTop: 12,
+    color: palette.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: "center",
+  },
+  paywallQuietRow: {
+    marginTop: 16,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    columnGap: 18,
+    rowGap: 4,
+  },
+  paywallQuietAction: {
+    minHeight: 36,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  paywallQuietText: {
+    color: palette.muted,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  paywallFooter: {
+    marginTop: 6,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: palette.line,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    columnGap: 18,
+    rowGap: 10,
+  },
+  paywallFooterLink: {
+    color: palette.muted,
+    fontSize: 12,
     textDecorationLine: "underline",
   },
   paywallTrustList: {
