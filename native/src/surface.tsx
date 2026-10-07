@@ -450,8 +450,8 @@ import {
   type MobileRevenueCatPackageId,
 } from "./revenuecat-purchases";
 import type { HeyHermesSalesStatus } from "../core/hermes-api";
+import { heyPreparingCopy } from "./hey-preparing";
 import {
-  heyPreparingCopy,
   iosPaywallCopy,
   iosPaywallSalesView,
   iosPaywallWaitlistCopy,

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { appLocales } from "../core/types";
-import { heyPreparingCopy } from "../src/ios-paywall";
+import { heyPreparingCopy } from "../src/hey-preparing";
 
 // HPD-1090: after the purchase and until the runtime is ready, web and app
 // show a preparing screen in the HPD-1085 paywall design and switch to chat
