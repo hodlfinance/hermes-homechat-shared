@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { ServerAccessView } from "../core/index";
+import { appLocales } from "../core/types";
 import {
   formatServerUptime,
   looksLikePrivateKey,
@@ -129,6 +130,23 @@ test("the app screen offers the remove action for each blocking path", () => {
 test("the remove confirm names the path and says it cannot be undone", () => {
   assert.equal(serverAccessCopy("en").blockingConfirm("/var/log/x.gz"), "Delete /var/log/x.gz? This cannot be undone.");
   assert.match(serverAccessCopy("de").blockingConfirm("/var/log/x.gz"), /^\/var\/log\/x\.gz löschen\? Das lässt sich nicht rückgängig machen\.$/);
+});
+
+test("removing a key asks first; only the destructive button revokes, cancel does nothing", () => {
+  const section = readFileSync(new URL("../src/ServerAccessSection.tsx", import.meta.url), "utf8");
+  assert.match(section, /onPress=\{\(\) => confirmRevoke\(key\.id\)\}/);
+  assert.doesNotMatch(section, /onPress=\{\(\) => void revoke\(key\.id\)\}/);
+  assert.match(section, /Alert\.alert\(copy\.revokeConfirm, undefined, \[\s*\{ text: copy\.revokeConfirmCancel, style: "cancel" \},\s*\{ text: copy\.revoke, style: "destructive", onPress: \(\) => void revoke\(keyId\) \}/);
+});
+
+test("the key-removal confirm exists in all eight app languages", () => {
+  assert.equal(serverAccessCopy("de").revokeConfirm, "Schlüssel entfernen? Der Zugang mit diesem Schlüssel endet sofort.");
+  assert.equal(serverAccessCopy("en").revokeConfirm, "Remove key? Access with this key ends immediately.");
+  for (const locale of appLocales) {
+    const copy = serverAccessCopy(locale);
+    assert.ok(copy.revokeConfirm && copy.revokeConfirmCancel && copy.revoke, locale);
+    if (locale !== "en") assert.notEqual(copy.revokeConfirm, serverAccessCopy("en").revokeConfirm, locale);
+  }
 });
 
 test("nothing shows while customer SSH is switched off for the workspace", () => {

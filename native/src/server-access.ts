@@ -25,6 +25,9 @@ export interface ServerAccessCopy {
   adding: string;
   revoke: string;
   revoking: string;
+  /** Asked before a key is removed; its access ends at once. */
+  revokeConfirm: string;
+  revokeConfirmCancel: string;
   keyLimit: (max: number) => string;
   exportHint: string;
   statusOff: string;
@@ -69,6 +72,8 @@ const en: ServerAccessCopy = {
   adding: "Adding…",
   revoke: "Remove",
   revoking: "Removing…",
+  revokeConfirm: "Remove key? Access with this key ends immediately.",
+  revokeConfirmCancel: "Cancel",
   keyLimit: (max) => `At most ${max} keys.`,
   exportHint: "Add an ed25519 or RSA key: a full export of your server is encrypted to one of those.",
   statusOff: "Root access over SSH is not switched on for your server yet.",
@@ -136,6 +141,8 @@ const de: ServerAccessCopy = {
   adding: "Wird hinzugefügt…",
   revoke: "Entfernen",
   revoking: "Wird entfernt…",
+  revokeConfirm: "Schlüssel entfernen? Der Zugang mit diesem Schlüssel endet sofort.",
+  revokeConfirmCancel: "Abbrechen",
   keyLimit: (max) => `Höchstens ${max} Schlüssel.`,
   exportHint: "Hinterlege einen ed25519- oder RSA-Schlüssel: Ein vollständiger Export Deines Servers wird für einen solchen verschlüsselt.",
   statusOff: "Der root-Zugang über SSH ist für Deinen Server noch nicht eingeschaltet.",
@@ -192,8 +199,20 @@ const de: ServerAccessCopy = {
 // The other app languages fall back to English until their copy is reviewed.
 const byLocale: Partial<Record<AppLocale, ServerAccessCopy>> = { en, de };
 
+// The key-removal confirm is safety copy, so every app language has it already.
+const revokeConfirmByLocale: Record<AppLocale, Pick<ServerAccessCopy, "revoke" | "revokeConfirm" | "revokeConfirmCancel">> = {
+  en: { revoke: en.revoke, revokeConfirm: en.revokeConfirm, revokeConfirmCancel: en.revokeConfirmCancel },
+  de: { revoke: de.revoke, revokeConfirm: de.revokeConfirm, revokeConfirmCancel: de.revokeConfirmCancel },
+  fr: { revoke: "Supprimer", revokeConfirm: "Supprimer la clé ? L’accès avec cette clé prend fin immédiatement.", revokeConfirmCancel: "Annuler" },
+  es: { revoke: "Eliminar", revokeConfirm: "¿Eliminar la clave? El acceso con esta clave termina de inmediato.", revokeConfirmCancel: "Cancelar" },
+  it: { revoke: "Rimuovi", revokeConfirm: "Rimuovere la chiave? L’accesso con questa chiave termina subito.", revokeConfirmCancel: "Annulla" },
+  "pt-BR": { revoke: "Remover", revokeConfirm: "Remover a chave? O acesso com esta chave termina imediatamente.", revokeConfirmCancel: "Cancelar" },
+  ja: { revoke: "削除", revokeConfirm: "鍵を削除しますか？この鍵によるアクセスはすぐに終了します。", revokeConfirmCancel: "キャンセル" },
+  ko: { revoke: "삭제", revokeConfirm: "키를 삭제할까요? 이 키로 하는 접속은 즉시 종료됩니다.", revokeConfirmCancel: "취소" },
+};
+
 export function serverAccessCopy(locale: AppLocale): ServerAccessCopy {
-  return byLocale[locale] ?? en;
+  return { ...(byLocale[locale] ?? en), ...(revokeConfirmByLocale[locale] ?? {}) };
 }
 
 /** Same shapes the Plane refuses first (apps/api/src/server-owner-ssh-keys.ts). */

@@ -108,6 +108,15 @@ export function ServerAccessSection({
     }
   };
 
+  // Removing a key ends access with it at once: ask once before revoking.
+  const confirmRevoke = (keyId: string) => {
+    if (revokingId) return;
+    Alert.alert(copy.revokeConfirm, undefined, [
+      { text: copy.revokeConfirmCancel, style: "cancel" },
+      { text: copy.revoke, style: "destructive", onPress: () => void revoke(keyId) },
+    ]);
+  };
+
   const removeBlocking = async (path: string) => {
     if (removingPath) return;
     setRemovingPath(path);
@@ -201,7 +210,7 @@ export function ServerAccessSection({
             error={revokeError?.id === key.id ? revokeError.message : null}
             icon={<KeyRound size={17} color={palette.teal} />}
             label={key.label ?? key.algorithm}
-            onPress={() => void revoke(key.id)}
+            onPress={() => confirmRevoke(key.id)}
             pending={revokingId === key.id}
             trailing={<Trash2 size={16} color={palette.muted} />}
           />
