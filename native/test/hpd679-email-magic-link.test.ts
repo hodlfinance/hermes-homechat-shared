@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createApiClient } from "../core/index";
+import { authUiCopy } from "../core/auth-ui-copy";
 import {
   EmailMagicLinkAbuseError,
   emailMagicLinkTokenFromUrl,
@@ -100,7 +101,9 @@ test("the create-account surface keeps Google and Apple and adds neutral email s
   assert.match(source, /requestEmailMagicLinkWithAbuseProof\(\{/);
   assert.match(source, /const run = emailMagicLinkRunRef\.current;\s+if \(!run\) return;\s+\/\/[^\n]*\n[^\n]*\n\s+if \(state === "background"\) \{\s+run\.suspended = true;/);
   assert.match(source, /requestEmailMagicLinkRef\.current\(true\)/);
-  assert.match(source, /Link per E-Mail senden/);
+  // HPD-1087 moved the link wording into the shared copy table, in all eight languages.
+  assert.match(source, /staticUiCopy\(appLocale\)\["Email me a sign-in link"\]/);
+  assert.equal(authUiCopy("de")["Email me a sign-in link"], "Link per E-Mail senden");
   assert.match(source, /If this email can be used with Hey Hermes, a sign-in link is on its way/);
   assert.match(source, /Linking\.getInitialURL\(\)/);
   assert.match(source, /Linking\.addEventListener\("url"/);
@@ -218,4 +221,25 @@ test("an outside abort (app returning to foreground) ends the stale request", as
   await new Promise((resolve) => setImmediate(resolve));
   controller.abort();
   await assert.rejects(pending, (error: unknown) => error instanceof EmailMagicLinkAbuseError && error.reason === "aborted");
+});
+
+test("HPD-1087: sign-in opens on the email link; the password form sits behind a small link", () => {
+  const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  const start = source.indexOf("authEntryMode === \"sign_in\" && signInWithPassword ? (");
+  assert.ok(start > 0, "the password form is gated on the toggle");
+  const block = source.slice(start, source.indexOf("Platform.OS === \"ios\" && (nativeAuthConfig", start));
+  const [passwordBranch = "", linkBranch = ""] = block.split(/\n\s+\) : \(\n/);
+  assert.match(passwordBranch, /secureTextEntry/);
+  assert.match(passwordBranch, /Use a sign-in link instead/);
+  assert.doesNotMatch(linkBranch, /secureTextEntry|loginPassword|accessCode/);
+  assert.match(linkBranch, /requestEmailMagicLink\(\)/);
+  assert.match(linkBranch, /authEntryMode === "sign_in" \? \(\s+<Pressable[\s\S]*setSignInWithPassword\(true\)[\s\S]*"Sign in with password"/);
+  assert.match(source, /const \[signInWithPassword, setSignInWithPassword\] = useState\(false\)/);
+  for (const locale of ["en", "de", "fr", "es", "it", "pt-BR", "ja", "ko"] as const) {
+    const copy = authUiCopy(locale);
+    for (const key of ["Sign in with password", "Use a sign-in link instead", "Email me a sign-in link", "We’ll email you a secure sign-in link. No password needed."] as const) {
+      assert.ok(copy[key]?.trim(), `${locale}: ${key}`);
+    }
+  }
+  assert.equal(authUiCopy("de")["Sign in with password"], "Mit Passwort anmelden");
 });
