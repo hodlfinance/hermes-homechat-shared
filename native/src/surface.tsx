@@ -450,7 +450,7 @@ import {
   type MobileRevenueCatPackageId,
 } from "./revenuecat-purchases";
 import type { HeyHermesSalesStatus } from "../core/hermes-api";
-import { heyPreparingCopy } from "./hey-preparing";
+import { heyNoAccessCopy, heyPreparingBody, heyPreparingCopy, heyReadyEmailPromised } from "./hey-preparing";
 import {
   iosPaywallCopy,
   iosPaywallSalesView,
@@ -8166,7 +8166,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     status: workspaceStatusTruth,
   });
   const pendingProductAccess = productAccessScreen === "preparing";
+  const readyEmailPromised = heyReadyEmailPromised(snapshot);
   const pendingAccessCopy = mobilePendingAccessCopy(appLocale, mobilePendingAccessVariant(workspaceStatusTruth), {
+    email: readyEmailPromised,
     reason: workspaceStatusTruthCapacityRefusal(workspaceStatusTruth)?.reason ?? null,
     waitlistPosition: salesStatus?.waitlist?.status === "waiting" ? salesStatus.waitlist.position : null,
   });
@@ -8349,13 +8351,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // HPD-1090: after the purchase and until the server reports the runtime
   // ready, a full screen in the paywall's design says what is happening,
   // instead of a chat whose input is locked without explanation.
-  if (pendingProductAccess) {
+  if (pendingProductAccess || productAccessScreen === "no_access") {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
         <ScrollView contentContainerStyle={styles.paywallScreen}>
           <HeyPreparingPanel
             locale={appLocale}
+            noAccess={productAccessScreen === "no_access"}
+            readyEmail={readyEmailPromised}
             capacityCopy={mobilePendingAccessVariant(workspaceStatusTruth) === "capacity" ? pendingAccessCopy : null}
             busy={productAccessRefreshing}
             onCheckAgain={refreshProductAccess}
@@ -9837,6 +9841,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
  */
 function HeyPreparingPanel({
   locale,
+  noAccess,
+  readyEmail,
   capacityCopy,
   busy,
   onCheckAgain,
@@ -9844,6 +9850,10 @@ function HeyPreparingPanel({
   onSignOut,
 }: {
   locale: AppLocale;
+  /** HPD-1090: never paid; nothing is being set up, so no progress and no email promise. */
+  noAccess: boolean;
+  /** HPD-1090: the ready email is promised only while email notifications are on. */
+  readyEmail: boolean;
   capacityCopy: ReturnType<typeof mobilePendingAccessCopy> | null;
   busy: boolean;
   onCheckAgain: () => Promise<void>;
@@ -9851,8 +9861,10 @@ function HeyPreparingPanel({
   onSignOut: () => void;
 }) {
   const copy = heyPreparingCopy(locale);
-  const title = capacityCopy?.title ?? copy.title;
-  const titleAccent = capacityCopy ? "" : copy.titleAccent;
+  const noAccessCopy = noAccess ? heyNoAccessCopy(locale) : null;
+  const title = noAccessCopy?.title ?? capacityCopy?.title ?? copy.title;
+  const titleAccent = noAccessCopy || capacityCopy ? "" : copy.titleAccent;
+  const body = noAccessCopy?.body ?? capacityCopy?.body ?? heyPreparingBody(locale, { surface: "app", email: readyEmail });
   const accentAt = titleAccent ? title.indexOf(titleAccent) : -1;
   return (
     <View style={styles.paywallOffer} accessibilityLiveRegion="polite">
@@ -9869,8 +9881,8 @@ function HeyPreparingPanel({
           </>
         ) : title}
       </Text>
-      <Text style={styles.preparingBody}>{capacityCopy?.body ?? copy.appBody}</Text>
-      {capacityCopy ? null : (
+      <Text style={styles.preparingBody}>{body}</Text>
+      {capacityCopy || noAccessCopy ? null : (
         <View style={styles.preparingProgress} accessibilityRole="progressbar" accessibilityLabel={copy.progress}>
           <ActivityIndicator color={paywallBrandColor} />
           <Text style={styles.preparingProgressText}>{copy.progress}</Text>

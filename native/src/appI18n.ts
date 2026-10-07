@@ -494,6 +494,8 @@ export type MobileCapacityRefusalKind = "capacity" | "paused" | "problem";
 type CapacityAccessCopy = {
   titles: Record<MobileCapacityRefusalKind, string>;
   body: string;
+  /** HPD-1090: without the email promise, for accounts with email notifications off. */
+  bodyNoEmail: string;
   position: string;
 };
 
@@ -505,6 +507,7 @@ const capacityAccessCopyByLocale: Record<AppLocale, CapacityAccessCopy> = {
       problem: "Setup hit a problem; our team has been alerted",
     },
     body: "Your Hermes will be set up as soon as a place is free — we’ll email you when it’s ready.",
+    bodyNoEmail: "Your Hermes will be set up as soon as a place is free.",
     position: "Your position: {position}",
   },
   de: {
@@ -514,6 +517,7 @@ const capacityAccessCopyByLocale: Record<AppLocale, CapacityAccessCopy> = {
       problem: "Bei der Einrichtung gab es ein Problem; unser Team ist informiert",
     },
     body: "Dein Hermes wird eingerichtet, sobald ein Platz frei ist – wir schicken Dir eine E-Mail, sobald er bereit ist.",
+    bodyNoEmail: "Dein Hermes wird eingerichtet, sobald ein Platz frei ist.",
     position: "Deine Position: {position}",
   },
   fr: {
@@ -523,6 +527,7 @@ const capacityAccessCopyByLocale: Record<AppLocale, CapacityAccessCopy> = {
       problem: "La configuration a rencontré un problème ; notre équipe a été prévenue",
     },
     body: "Votre Hermes sera configuré dès qu’une place se libère — nous vous écrirons dès qu’il sera prêt.",
+    bodyNoEmail: "Votre Hermes sera configuré dès qu’une place se libère.",
     position: "Votre position : {position}",
   },
   es: {
@@ -532,6 +537,7 @@ const capacityAccessCopyByLocale: Record<AppLocale, CapacityAccessCopy> = {
       problem: "La configuración tuvo un problema; nuestro equipo ya está avisado",
     },
     body: "Tu Hermes se configurará en cuanto haya una plaza libre: te enviaremos un correo cuando esté listo.",
+    bodyNoEmail: "Tu Hermes se configurará en cuanto haya una plaza libre.",
     position: "Tu posición: {position}",
   },
   it: {
@@ -541,6 +547,7 @@ const capacityAccessCopyByLocale: Record<AppLocale, CapacityAccessCopy> = {
       problem: "La configurazione ha avuto un problema; il nostro team è stato avvisato",
     },
     body: "Il tuo Hermes sarà configurato non appena si libera un posto: ti invieremo un’email quando sarà pronto.",
+    bodyNoEmail: "Il tuo Hermes sarà configurato non appena si libera un posto.",
     position: "La tua posizione: {position}",
   },
   "pt-BR": {
@@ -550,6 +557,7 @@ const capacityAccessCopyByLocale: Record<AppLocale, CapacityAccessCopy> = {
       problem: "A configuração teve um problema; nossa equipe foi avisada",
     },
     body: "Seu Hermes será configurado assim que houver uma vaga — enviaremos um e-mail quando estiver pronto.",
+    bodyNoEmail: "Seu Hermes será configurado assim que houver uma vaga.",
     position: "Sua posição: {position}",
   },
   ja: {
@@ -559,6 +567,7 @@ const capacityAccessCopyByLocale: Record<AppLocale, CapacityAccessCopy> = {
       problem: "設定中に問題が発生しました。担当チームに通知済みです",
     },
     body: "空きが出しだい Hermes を設定します。準備ができたらメールでお知らせします。",
+    bodyNoEmail: "空きが出しだい Hermes を設定します。",
     position: "あなたの順番: {position}",
   },
   ko: {
@@ -568,6 +577,7 @@ const capacityAccessCopyByLocale: Record<AppLocale, CapacityAccessCopy> = {
       problem: "설정 중 문제가 발생했습니다. 담당 팀에 알렸습니다",
     },
     body: "자리가 나는 대로 Hermes를 설정합니다. 준비되면 이메일로 알려 드립니다.",
+    bodyNoEmail: "자리가 나는 대로 Hermes를 설정합니다.",
     position: "내 순서: {position}",
   },
 };
@@ -590,15 +600,16 @@ export type MobilePendingAccessVariant = "pending" | "capacity";
 export function mobilePendingAccessCopy(
   locale: AppLocale,
   variant: MobilePendingAccessVariant = "pending",
-  detail: { reason?: string | null; waitlistPosition?: number | null } = {},
+  detail: { reason?: string | null; waitlistPosition?: number | null; email?: boolean } = {},
 ): MobilePendingAccessCopy {
   const pending = pendingAccessCopyByLocale[locale];
   if (variant !== "capacity") return pending;
   const capacity = mobileCapacityAccessCopy(locale);
   const position = detail.waitlistPosition;
+  const base = detail.email === false ? capacity.bodyNoEmail : capacity.body;
   const body = typeof position === "number"
-    ? `${capacity.body} ${capacity.position.replace("{position}", String(position))}`
-    : capacity.body;
+    ? `${base} ${capacity.position.replace("{position}", String(position))}`
+    : base;
   return { ...pending, title: capacity.titles[mobileCapacityRefusalKind(detail.reason)], body };
 }
 
