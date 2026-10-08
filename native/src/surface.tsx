@@ -505,6 +505,8 @@ import { ServerAccessSection } from "./ServerAccessSection";
 import { serverAccessVisible } from "./server-access";
 import { ServerFullExportSection } from "./ServerFullExportSection";
 import { SERVER_FULL_EXPORT_DOWNLOAD_HREF, serverFullExportVisible } from "./server-full-export";
+import { ServerOwnerDeletionSection } from "./ServerOwnerDeletionSection";
+import { serverOwnerDeletionVisible } from "./server-owner-deletion";
 import {
   MobileSwipeRemoveRow,
   type MobileRemovableNavigationEntry,
@@ -9719,6 +9721,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                         trailing={<ChevronRight size={17} color={palette.muted} />}
                       />
                     </MobileSystemSection>
+                    {/* HPD-1027 S6a: the server Owner deletes their own server, above the account deletion. */}
+                    {serverOwnerDeletionVisible(serverIdentity) ? (
+                      <ServerOwnerDeletionSection client={api} locale={appLocale} formatDate={formatSecurityDateValue} />
+                    ) : null}
                     {host.session.mode === "standalone" && snapshot ? (
                       <MobileSystemSection title={mobileDangerZoneText(appLocale)}>
                         <View style={styles.systemSurfaceNotice}>

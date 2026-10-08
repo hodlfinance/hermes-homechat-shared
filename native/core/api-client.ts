@@ -131,6 +131,8 @@ import type {
   ServerAccessView,
   ServerBlockingPathRemoval,
   ServerFullExportStatus,
+  ServerOwnerDeletionConfirmation,
+  ServerOwnerDeletionStatus,
   ServerOwnerSshKey,
   ServerOwnerSshKeyListing,
   ProviderStatusView,
@@ -771,6 +773,10 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     /** HPD-1027 S5: the Owner's full server archive (encrypted to the Owner's SSH keys). */
     serverFullExport: () => request<ServerFullExportStatus>("/workspace/server/export"),
     createServerFullExport: () => request<ServerFullExportStatus>("/workspace/server/export", { method: "POST" }),
+    /** HPD-1027 S6a: what a server deletion removes and keeps, and where the Owner's request stands. */
+    serverOwnerDeletion: () => request<ServerOwnerDeletionStatus>("/workspace/server/deletion"),
+    requestServerOwnerDeletion: (body: ServerOwnerDeletionConfirmation) =>
+      request<ServerOwnerDeletionStatus>("/workspace/server/deletion", { method: "POST", body: JSON.stringify(body) }),
     heyHermesAdapter: () => request<HeyHermesAdapterManifest>("/workspace/hey-hermes-adapter"),
     materializeHeyHermesAdapter: () =>
       request<HeyHermesAdapterMaterialization | null>("/workspace/hey-hermes-adapter/materialize", { method: "POST" }),

@@ -1274,6 +1274,8 @@ interface WorkspaceServerIdentityBase {
   ownerAccessAvailable?: boolean;
   /** HPD-1027 S5: the full server archive row exists only while it is switched on for this workspace. */
   fullExportAvailable?: boolean;
+  /** HPD-1027 S6a: the Owner's server deletion section exists only while the Plane offers it. */
+  serverDeletionAvailable?: boolean;
 }
 
 export type WorkspaceServerIdentity = WorkspaceServerIdentityBase & (
@@ -3027,6 +3029,52 @@ export interface ServerFullExportStatus {
   eligible: boolean;
   linkDays: number;
   request: ServerFullExportRequestView | null;
+}
+
+/** HPD-1027 S6a: the server Owner's deletion of their own server. */
+export type ServerOwnerDeletionState = "requested" | "running" | "deleted" | "failed" | "superseded";
+
+/** The host receipt as counts; volume names stay on the Plane. */
+export interface ServerOwnerDeletionReceiptSummary {
+  removedVolumes: number;
+  removedFiles: number;
+  remainingVolumes: number;
+  remainingFiles: number;
+  offHostCopiesChecked: boolean;
+}
+
+export interface ServerOwnerDeletionRequestView {
+  operationId: string;
+  state: ServerOwnerDeletionState;
+  requestedAt: string;
+  completedAt: string | null;
+  /** Only when failed: a fixed code, never host text. */
+  failureCode: string | null;
+  /** Only when deleted. */
+  receipt?: ServerOwnerDeletionReceiptSummary | null;
+}
+
+export interface ServerOwnerDeletionConsequences {
+  deleted: string[];
+  kept: string[];
+  backupRetention: string;
+  offHostBackups: string;
+  separateActions: string[];
+  irreversible: true;
+}
+
+export interface ServerOwnerDeletionStatus {
+  serverOwner: true;
+  /** What the Owner types again to confirm. */
+  serverId: string;
+  consequences: ServerOwnerDeletionConsequences;
+  request: ServerOwnerDeletionRequestView | null;
+}
+
+export interface ServerOwnerDeletionConfirmation {
+  operationId: string;
+  confirmServerId: string;
+  acknowledgeIrreversible: true;
 }
 
 export interface ServerBlockingPathRemoval {
