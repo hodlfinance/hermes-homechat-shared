@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { AlertTriangle, KeyRound, Server, Trash2 } from "lucide-react-native";
 import { apiErrorCode } from "../core/api-client";
 import type { AppLocale } from "../core/index";
@@ -86,6 +86,8 @@ export function ServerAccessSection({
       setKeys(await client.addServerOwnerSshKey({ publicKey: value, ...(label.trim() ? { label: label.trim() } : {}) }));
       setPublicKey("");
       setLabel("");
+      // HPD-1094: with the keyboard still up, the next tap (the trash icon) only closed it.
+      Keyboard.dismiss();
       void load();
     } catch (error) {
       setAddError(serverAccessErrorMessage(apiErrorCode(error), copy));
