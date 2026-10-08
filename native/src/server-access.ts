@@ -31,6 +31,8 @@ export interface ServerAccessCopy {
   keyLimit: (max: number) => string;
   exportHint: string;
   statusOff: string;
+  /** HPD-1098: one line for the Owner of a server whose SSH access the Plane deliberately withholds. */
+  withheldNote: string;
   statusNoKeys: string;
   statusPending: string;
   statusApplied: string;
@@ -77,6 +79,7 @@ const en: ServerAccessCopy = {
   keyLimit: (max) => `At most ${max} keys.`,
   exportHint: "Add an ed25519 or RSA key: a full export of your server is encrypted to one of those.",
   statusOff: "Root access over SSH is not switched on for your server yet.",
+  withheldNote: "Server access is not enabled for this server yet.",
   statusNoKeys: "Add a key to log in as root.",
   statusPending: "Your keys are being placed on your server. This takes a few minutes.",
   statusApplied: "Root login is ready.",
@@ -146,6 +149,7 @@ const de: ServerAccessCopy = {
   keyLimit: (max) => `Höchstens ${max} Schlüssel.`,
   exportHint: "Hinterlege einen ed25519- oder RSA-Schlüssel: Ein vollständiger Export Deines Servers wird für einen solchen verschlüsselt.",
   statusOff: "Der root-Zugang über SSH ist für Deinen Server noch nicht eingeschaltet.",
+  withheldNote: "Serverzugang ist für diesen Server noch nicht freigeschaltet.",
   statusNoKeys: "Füge einen Schlüssel hinzu, um Dich als root anzumelden.",
   statusPending: "Deine Schlüssel werden auf Deinen Server gebracht. Das dauert ein paar Minuten.",
   statusApplied: "Die root-Anmeldung ist bereit.",
@@ -292,6 +296,17 @@ export function serverAccessRows(
  */
 export function serverAccessVisible(identity: { serverOwner?: boolean; ownerAccessAvailable?: boolean } | null | undefined) {
   return identity?.serverOwner === true && identity.ownerAccessAvailable === true;
+}
+
+/**
+ * HPD-1098: the Owner of a server the Plane deliberately keeps without customer SSH (a protected
+ * workspace, server-identity ownerAccessWithheld) reads one honest line where the section would be,
+ * instead of nothing.
+ */
+export function serverAccessWithheldVisible(
+  identity: { serverOwner?: boolean; ownerAccessAvailable?: boolean; ownerAccessWithheld?: boolean } | null | undefined,
+) {
+  return identity?.serverOwner === true && identity.ownerAccessAvailable !== true && identity.ownerAccessWithheld === true;
 }
 
 export function serverAccessSwitchedOff(

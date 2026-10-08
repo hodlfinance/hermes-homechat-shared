@@ -502,7 +502,7 @@ import {
 } from "./mobile-account-action";
 import { MobileSystemRow, MobileSystemSection } from "./mobile-system-surface";
 import { ServerAccessSection } from "./ServerAccessSection";
-import { serverAccessVisible } from "./server-access";
+import { serverAccessCopy, serverAccessVisible, serverAccessWithheldVisible } from "./server-access";
 import { workspaceServerDetailRows } from "./workspace-server-details";
 import { ServerFullExportSection } from "./ServerFullExportSection";
 import { SERVER_FULL_EXPORT_DOWNLOAD_HREF, serverFullExportVisible } from "./server-full-export";
@@ -630,16 +630,7 @@ const mobileSupportAccessScopes = ["diagnostics.read", "logs.redacted.read", "se
 
 function mobileAccountActionIntents(snapshot: AppSnapshot | null): MobileAccountActionIntent[] {
   if (!snapshot) return [];
-  const currentAccount = snapshot.accounts.find((account) => account.id === snapshot.me.id);
   const actions: MobileAccountActionIntent[] = [];
-  if (currentAccount?.role === "owner") {
-    actions.push({ kind: "invite_account" });
-    for (const account of snapshot.accounts) {
-      if (account.status !== "active") continue;
-      actions.push({ accountId: account.id, kind: "reset_account_access" });
-      if (account.role !== "owner") actions.push({ accountId: account.id, kind: "disable_account_access" });
-    }
-  }
   // HPD-415: the Support screen grants support access; the security panel under
   // Account is where it is shown and withdrawn, and that panel carries its own
   // per-row pending state. So only the grant belongs in this keyed set.
@@ -1702,9 +1693,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const pendingFinSuggestionRef = useRef<FinHermesSuggestion | null>(null);
   const inputRef = useRef(input);
   inputRef.current = input;
-  const [accountName, setAccountName] = useState("");
-  const [accountEmail, setAccountEmail] = useState("");
-  const [adminNotice, setAdminNotice] = useState<string | null>(null);
   const [supportReason, setSupportReason] = useState<string | null>(null);
   const [supportMinutes, setSupportMinutes] = useState("30");
   const [supportToken, setSupportToken] = useState<string | null>(null);
@@ -7630,56 +7618,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     }
   }
 
-  async function createAccount() {
-    const name = accountName.trim();
-    const accountEmailAddress = accountEmail.trim();
-    if (!name || !accountEmailAddress) return;
-    const operation = startMobileAccountAction({ kind: "invite_account" });
-    if (!operation) return;
-    await settleMobileAccountAction(operation, async () => {
-      const response = await api.createAccount({ name, email: accountEmailAddress, role: "member" });
-      setAccountName("");
-      setAccountEmail("");
-      if (response.runtimeError) recordDiagnostic("error", "Created account runtime needs attention", response.runtimeError);
-      const creationParts = [
-        systemPageCopy.account.created.replace("{email}", response.account.email),
-        response.assignedWarmWorkspaceId ? systemPageCopy.account.preparedWorkspace : null,
-        response.runtimePrepared
-          ? systemPageCopy.account.runtimeReady
-          : response.runtimeError
-            ? systemPageCopy.account.runtimeAttention
-            : systemPageCopy.account.runtimeStarts,
-        response.generatedAccessCode
-          ? systemPageCopy.account.oneTimeCode.replace("{code}", response.generatedAccessCode)
-          : null,
-      ].filter((part): part is string => Boolean(part));
-      setAdminNotice(creationParts.join(" "));
-      await refresh();
-    }, systemPageCopy.account.createError, true);
-  }
-
-  async function disableAccount(account: AlphaAccount) {
-    const operation = startMobileAccountAction({ accountId: account.id, kind: "disable_account_access" });
-    if (!operation) return;
-    await settleMobileAccountAction(operation, async () => {
-      await api.deleteAccount(account.id);
-      setAdminNotice(systemPageCopy.account.disabled.replace("{email}", account.email));
-      await refresh();
-    }, systemPageCopy.account.disableError, true);
-  }
-
-  async function resetAccount(account: AlphaAccount) {
-    const operation = startMobileAccountAction({ accountId: account.id, kind: "reset_account_access" });
-    if (!operation) return;
-    await settleMobileAccountAction(operation, async () => {
-      const response = await api.updateAccount(account.id, { resetAccessCode: true });
-      setAdminNotice(response.generatedAccessCode
-        ? `${systemPageCopy.account.reset.replace("{email}", account.email)} ${systemPageCopy.account.oneTimeCode.replace("{code}", response.generatedAccessCode)}`
-        : systemPageCopy.account.updatedAccount.replace("{email}", account.email));
-      await refresh();
-    }, systemPageCopy.account.resetError, true);
-  }
-
   async function createSupportAccess() {
     const minutes = Math.max(1, Math.min(240, Number.parseInt(supportMinutes, 10) || 30));
     const operation = startMobileAccountAction({ kind: "create_support_pass" });
@@ -8148,7 +8086,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const currentAccount = snapshot.accounts.find((account) => account.id === snapshot.me.id);
   const isOwner = currentAccount?.role === "owner";
   const canManageWorkspaceConnections = snapshot.workspace.accountId === snapshot.me.id;
-  const inviteAccountAction = mobileAccountActionRow(accountActionState, { kind: "invite_account" });
   const createSupportPassAction = mobileAccountActionRow(accountActionState, { kind: "create_support_pass" });
   const mobilePurchaseBusy = mobilePurchasePhase === "purchasing" || mobilePurchasePhase === "restoring";
   const paywall = iosPaywallView({
@@ -9681,51 +9618,17 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                     {/* HPD-1027 S4: only the server Owner sees SSH keys, root login and server facts. */}
                     {serverAccessVisible(serverIdentity) ? (
                       <ServerAccessSection client={api} locale={appLocale} formatDate={formatSecurityDateValue} />
+                    ) : serverAccessWithheldVisible(serverIdentity) ? (
+                      /* HPD-1098: a protected server keeps customer SSH off on purpose; say so instead of nothing. */
+                      <MobileSystemSection title={serverAccessCopy(appLocale).title}>
+                        <View style={styles.systemSurfaceNotice}>
+                          <Text style={styles.muted}>{serverAccessCopy(appLocale).withheldNote}</Text>
+                        </View>
+                      </MobileSystemSection>
                     ) : null}
-                    {host.session.mode === "standalone" && isOwner ? (
-                      <>
-                        <MobileSystemSection
-                          title={t.systemPages.account.invite}
-                          footer={t.systemPages.account.capacity
-                            .replace("{active}", String(snapshot.runtime.activeAccounts))
-                            .replace("{capacity}", String(snapshot.runtime.accountCapacity))}
-                        >
-                          <View style={styles.systemSurfaceNotice}>
-                            <TextInput value={accountName} onChangeText={setAccountName} placeholder={t.systemPages.account.name} editable={inviteAccountAction?.phase !== "pending"} style={styles.input} />
-                            <TextInput value={accountEmail} onChangeText={setAccountEmail} placeholder={t.systemPages.account.email} autoCapitalize="none" keyboardType="email-address" editable={inviteAccountAction?.phase !== "pending"} style={styles.input} />
-                          </View>
-                          <MobileSystemRow
-                            icon={<UserPlus size={17} color={palette.teal} />}
-                            label={t.systemPages.account.invite}
-                            onPress={() => void createAccount()}
-                            pending={inviteAccountAction?.phase === "pending"}
-                            error={inviteAccountAction?.error}
-                            disabled={!accountName.trim() || !accountEmail.trim()}
-                          />
-                          {adminNotice ? <View style={styles.systemSurfaceNotice}><Notice locale={appLocale} tone="info" text={adminNotice} /></View> : null}
-                        </MobileSystemSection>
-                        <MobileSystemSection title={t.systemPages.account.ownerTitle}>
-                          {snapshot.accounts.map((account) => {
-                            const resetAction = mobileAccountActionRow(accountActionState, { accountId: account.id, kind: "reset_account_access" });
-                            const disableAction = mobileAccountActionRow(accountActionState, { accountId: account.id, kind: "disable_account_access" });
-                            return (
-                              <AccountRow
-                                key={account.id}
-                                account={account}
-                                resetPending={resetAction?.phase === "pending"}
-                                resetError={resetAction?.error}
-                                disablePending={disableAction?.phase === "pending"}
-                                disableError={disableAction?.error}
-                                onReset={resetAccount}
-                                onDisable={disableAccount}
-                                copy={t.systemPages.account}
-                                locale={appLocale}
-                              />
-                            );
-                          })}
-                        </MobileSystemSection>
-                      </>
-                    ) : host.session.mode === "standalone" && currentAccount ? (
+                    {/* HPD-1098: Invite person and People are admin tools and never appear in the app
+                        (Justus, 2026-10-08); the web Admin tab keeps them. Every account sees its own row. */}
+                    {host.session.mode === "standalone" && currentAccount ? (
                       <MobileSystemSection title={t.systemPages.account.memberTitle}>
                         <AccountRow account={currentAccount} copy={t.systemPages.account} locale={appLocale} />
                       </MobileSystemSection>

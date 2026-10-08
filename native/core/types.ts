@@ -1272,6 +1272,8 @@ interface WorkspaceServerIdentityBase {
   serverOwner?: boolean;
   /** HPD-1027 S4: the Owner screens exist only while customer SSH is switched on for this workspace. */
   ownerAccessAvailable?: boolean;
+  /** HPD-1098: true for the Owner of a protected workspace whose customer SSH is withheld on purpose. */
+  ownerAccessWithheld?: boolean;
   /** HPD-1027 S5: the full server archive row exists only while it is switched on for this workspace. */
   fullExportAvailable?: boolean;
   /** HPD-1027 S6a: the Owner's server deletion section exists only while the Plane offers it. */
