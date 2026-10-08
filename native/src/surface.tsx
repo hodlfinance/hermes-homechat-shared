@@ -503,6 +503,7 @@ import {
 import { MobileSystemRow, MobileSystemSection } from "./mobile-system-surface";
 import { ServerAccessSection } from "./ServerAccessSection";
 import { serverAccessVisible } from "./server-access";
+import { workspaceServerDetailRows } from "./workspace-server-details";
 import { ServerFullExportSection } from "./ServerFullExportSection";
 import { SERVER_FULL_EXPORT_DOWNLOAD_HREF, serverFullExportVisible } from "./server-full-export";
 import { ServerOwnerDeletionSection } from "./ServerOwnerDeletionSection";
@@ -13290,44 +13291,18 @@ function AccountSecurityPanel({
         ) : null}
         {detailsOpen && serverOpen && serverIdentity ? (
           <>
-            <MobileSystemRow
-              accessibilityRole="text"
-              detail={serverIdentity.workspaceId}
-              disabled
-              label={copy.serverWorkspace}
-              onPress={() => undefined}
-              reserveIconSpace={false}
-            />
-            {serverIdentity.publicIpv4 ? (
+            {/* HPD-1027: one shared row model for app and web. */}
+            {workspaceServerDetailRows(serverIdentity, copy, formatDate).map((row) => (
               <MobileSystemRow
                 accessibilityRole="text"
-                detail={serverIdentity.publicIpv4}
+                detail={row.detail}
                 disabled
-                label={copy.serverIpv4}
+                key={row.key}
+                label={row.label}
                 onPress={() => undefined}
                 reserveIconSpace={false}
               />
-            ) : null}
-            {serverIdentity.serverType ? (
-              <MobileSystemRow
-                accessibilityRole="text"
-                detail={[serverIdentity.serverType, serverIdentity.location].filter(Boolean).join(" · ")}
-                disabled
-                label={copy.serverType}
-                onPress={() => undefined}
-                reserveIconSpace={false}
-              />
-            ) : null}
-            {serverIdentity.inServiceSince ? (
-              <MobileSystemRow
-                accessibilityRole="text"
-                detail={formatDate(serverIdentity.inServiceSince)}
-                disabled
-                label={copy.serverSince}
-                onPress={() => undefined}
-                reserveIconSpace={false}
-              />
-            ) : null}
+            ))}
           </>
         ) : null}
         {detailsOpen ? (

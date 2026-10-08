@@ -89,6 +89,7 @@
     "./native/server-full-export": "./native/src/server-full-export.ts",
     "./native/server-owner-deletion": "./native/src/server-owner-deletion.ts",
     "./native/lapse-export": "./native/src/lapse-export.ts",
+    "./native/workspace-server-details": "./native/src/workspace-server-details.ts",
     "./native/ServerAccessSection": "./native/src/ServerAccessSection.tsx",
     "./native/mobile-ai-access-brand-marks": "./native/src/mobile-ai-access-brand-marks.tsx",
     "./native/assets.d": "./native/src/assets.d.ts",
