@@ -133,6 +133,8 @@ import type {
   ServerFullExportStatus,
   ServerOwnerDeletionConfirmation,
   ServerOwnerDeletionStatus,
+  LapseExportOwnerView,
+  LapseExportKey,
   ServerOwnerSshKey,
   ServerOwnerSshKeyListing,
   ProviderStatusView,
@@ -777,6 +779,9 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     serverOwnerDeletion: () => request<ServerOwnerDeletionStatus>("/workspace/server/deletion"),
     requestServerOwnerDeletion: (body: ServerOwnerDeletionConfirmation) =>
       request<ServerOwnerDeletionStatus>("/workspace/server/deletion", { method: "POST", body: JSON.stringify(body) }),
+    /** HPD-1027 S6(b): the lapse export and its one-time fresh key, on the account screen. */
+    lapseExport: () => request<LapseExportOwnerView>("/workspace/server/lapse-export"),
+    takeLapseExportKey: () => request<LapseExportKey>("/workspace/server/lapse-export/key", { method: "POST" }),
     heyHermesAdapter: () => request<HeyHermesAdapterManifest>("/workspace/hey-hermes-adapter"),
     materializeHeyHermesAdapter: () =>
       request<HeyHermesAdapterMaterialization | null>("/workspace/hey-hermes-adapter/materialize", { method: "POST" }),
