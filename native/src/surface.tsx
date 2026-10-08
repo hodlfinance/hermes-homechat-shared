@@ -9118,7 +9118,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           </View>
         </KeyboardAvoidingView>
       ) : (
-        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} keyboardShouldPersistTaps="handled">
           {error ? <Notice locale={appLocale} tone="error" text={error} onDismiss={dismissAppError} dismissLabel={t.systemPages.common.dismiss} /> : null}
           {visibleSessionNotice ? <Notice locale={appLocale} tone="info" text={visibleSessionNotice} onDismiss={dismissSessionNotice} dismissLabel={t.systemPages.common.dismiss} /> : null}
 
