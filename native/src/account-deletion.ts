@@ -46,7 +46,7 @@ export function deletionSummary(receipt: HeyAccountDeletionReceipt) {
     : `Your Hey account data will be deleted by ${formatDeadline(receipt.activeDataPurgeDueAt)}.`;
   // HPD-1027: the private server, its memory and its backups go only with the Owner's
   // server deletion; account deletion suspends it (privacy policy section 7).
-  return `${base} ${data} Any private server is suspended, not deleted. Your App Store subscription was not cancelled.`;
+  return `${base} ${data} Access to any private server is suspended; the server is not deleted. Your App Store subscription was not cancelled.`;
 }
 
 export function deletionErrorMessage(error: unknown) {
