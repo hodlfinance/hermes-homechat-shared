@@ -155,3 +155,26 @@ const noAccessCopyByLocale: Record<AppLocale, HeyNoAccessCopy> = {
 export function heyNoAccessCopy(locale: AppLocale): HeyNoAccessCopy {
   return noAccessCopyByLocale[locale] ?? noAccessCopyByLocale.en;
 }
+
+/**
+ * HPD-1102: an account without a plan only reaches the purchase or the
+ * preparing screen. Apple 5.1.1(v) requires account deletion to stay
+ * reachable, so both screens (app and web) carry a quiet "Account" entry. It
+ * opens a panel with Sign out and the existing deletion flow, nothing else.
+ */
+export type HeyPaywallAccountCopy = { entry: string; title: string; body: string; signedInAs: string; back: string };
+
+const paywallAccountCopyByLocale: Record<AppLocale, HeyPaywallAccountCopy> = {
+  en: { entry: "Account", title: "Your account", body: "You can sign out or delete your account here. Hey Hermes itself needs an active plan.", signedInAs: "Signed in as {email}", back: "Back" },
+  de: { entry: "Konto", title: "Dein Konto", body: "Hier kannst du dich abmelden oder dein Konto löschen. Hey Hermes selbst braucht einen aktiven Plan.", signedInAs: "Angemeldet als {email}", back: "Zurück" },
+  fr: { entry: "Compte", title: "Votre compte", body: "Vous pouvez vous déconnecter ou supprimer votre compte ici. Hey Hermes lui-même nécessite un forfait actif.", signedInAs: "Connecté en tant que {email}", back: "Retour" },
+  es: { entry: "Cuenta", title: "Tu cuenta", body: "Aquí puedes cerrar sesión o eliminar tu cuenta. Hey Hermes en sí requiere un plan activo.", signedInAs: "Sesión iniciada como {email}", back: "Volver" },
+  it: { entry: "Account", title: "Il tuo account", body: "Qui puoi uscire o eliminare il tuo account. Hey Hermes richiede un piano attivo.", signedInAs: "Accesso effettuato come {email}", back: "Indietro" },
+  "pt-BR": { entry: "Conta", title: "Sua conta", body: "Aqui você pode sair ou excluir sua conta. O Hey Hermes em si precisa de um plano ativo.", signedInAs: "Conectado como {email}", back: "Voltar" },
+  ja: { entry: "アカウント", title: "あなたのアカウント", body: "ここでサインアウトやアカウントの削除ができます。Hey Hermes 本体のご利用には有効なプランが必要です。", signedInAs: "{email} でサインイン中", back: "戻る" },
+  ko: { entry: "계정", title: "내 계정", body: "여기에서 로그아웃하거나 계정을 삭제할 수 있습니다. Hey Hermes 자체를 이용하려면 활성 요금제가 필요합니다.", signedInAs: "{email}(으)로 로그인됨", back: "뒤로" },
+};
+
+export function heyPaywallAccountCopy(locale: AppLocale): HeyPaywallAccountCopy {
+  return paywallAccountCopyByLocale[locale] ?? paywallAccountCopyByLocale.en;
+}
