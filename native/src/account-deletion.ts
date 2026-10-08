@@ -42,9 +42,11 @@ export function deletionSummary(receipt: HeyAccountDeletionReceipt) {
   // The purge normally runs with the confirmation. When it could not, say so plainly and
   // give the committed deadline rather than implying the data is already gone.
   const data = receipt.purge
-    ? "Your active Hey data has been deleted."
-    : `Your active Hey data will be deleted by ${formatDeadline(receipt.activeDataPurgeDueAt)}.`;
-  return `${base} ${data} Your App Store subscription was not cancelled.`;
+    ? "Your Hey account data has been deleted."
+    : `Your Hey account data will be deleted by ${formatDeadline(receipt.activeDataPurgeDueAt)}.`;
+  // HPD-1027: the private server, its memory and its backups go only with the Owner's
+  // server deletion; account deletion suspends it (privacy policy section 7).
+  return `${base} ${data} Any private server is suspended, not deleted. Your App Store subscription was not cancelled.`;
 }
 
 export function deletionErrorMessage(error: unknown) {
