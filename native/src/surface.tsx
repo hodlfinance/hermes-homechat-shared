@@ -450,7 +450,7 @@ import {
   type MobileRevenueCatPackageId,
 } from "./revenuecat-purchases";
 import type { HeyHermesSalesStatus } from "../core/hermes-api";
-import { heyNoAccessCopy, heyPreparingBody, heyPreparingCopy, heyReadyEmailPromised } from "./hey-preparing";
+import { heyNoAccessCopy, heyPaywallAccountCopy, heyPreparingBody, heyPreparingCopy, heyReadyEmailPromised } from "./hey-preparing";
 import {
   iosPaywallCopy,
   iosPaywallSalesView,
@@ -1670,6 +1670,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [googleChallenge, setGoogleChallenge] = useState<{ id: string; mode: "link" | "login"; nonce: string } | null>(null);
   const [googleChallengeVersion, setGoogleChallengeVersion] = useState(0);
   const [accountDeletionNativeReauthenticationRequired, setAccountDeletionNativeReauthenticationRequired] = useState(false);
+  // HPD-1102: the purchase and preparing screens open a small account panel
+  // (Sign out, delete account) so deletion stays reachable without a plan.
+  const [paywallAccountOpen, setPaywallAccountOpen] = useState(false);
   const [googleDeletionChallenge, setGoogleDeletionChallenge] = useState<{ expiresAt: string; id: string; nonce: string } | null>(null);
   const [googleDeletionChallengeVersion, setGoogleDeletionChallengeVersion] = useState(0);
   const [input, setInput] = useState(initialDraft);
@@ -2676,6 +2679,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     homeChatRefreshSingleFlight.clear();
     activateAccountSession(null);
     setAccountDeletionEmailReauthenticationAccountId(null);
+    setPaywallAccountOpen(false);
     mobilePurchasesController.suspend();
     setMobilePurchasePlans([]);
     setMobilePurchaseAccountReady(false);
@@ -5287,6 +5291,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       setEmailMagicLinkPhase("idle");
       if (session.purpose === "account_deletion_reauthenticate") {
         setAccountDeletionEmailReauthenticationAccountId(session.account.id);
+        setPaywallAccountOpen(true);
         selectMobileScreen("account");
       } else {
         setAccountDeletionEmailReauthenticationAccountId(null);
@@ -8292,6 +8297,67 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     formatSecurityDateValue,
   );
 
+  // HPD-1102: one deletion element, rendered in Settings and in the paywall's
+  // account panel, so both run the same flow with the same reauthentication.
+  const accountDeletionPanel = host.session.mode === "standalone" && snapshot ? (
+    <AccountDeletionSection
+      accountId={snapshot.me.id}
+      api={api}
+      busy={busy}
+      onDeleted={logout}
+      copy={t.systemPages.account.deletion}
+      locale={appLocale}
+      emailReauthenticationCompleted={accountDeletionEmailReauthenticationAccountId === snapshot.me.id}
+      onNativeReauthenticationChange={setAccountDeletionNativeReauthenticationRequired}
+      reauthenticationActions={(linkedProviders) => (
+        <View style={styles.nativeAuthGroup}>
+          {linkedProviders.includes("google") && nativeAuthConfig?.providers.google ? (
+            <Pressable
+              style={[styles.secondaryButtonWide, (!googleDeletionAuthRequest || !googleDeletionChallenge || Boolean(nativeAuthBusy)) && styles.disabledButton]}
+              onPress={() => void reauthenticateAccountDeletionWithGoogle()}
+              disabled={!googleDeletionAuthRequest || !googleDeletionChallenge || Boolean(nativeAuthBusy)}
+              accessibilityRole="button"
+            >
+              {nativeAuthBusy === "google" ? <ActivityIndicator color={palette.teal} /> : <Text style={styles.secondaryButtonText}>{accountDeletionNativeReauthenticationCopy(appLocale).googleAction}</Text>}
+            </Pressable>
+          ) : null}
+          {linkedProviders.includes("apple") && nativeAuthConfig?.providers.apple && appleSignInAvailable ? (
+            nativeAuthBusy === "apple" ? <ActivityIndicator color={palette.teal} /> : (
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                cornerRadius={8}
+                onPress={() => void signInWithApple("reauthenticate")}
+                style={styles.appleAuthButton}
+              />
+            )
+          ) : null}
+        </View>
+      )}
+    />
+  ) : null;
+
+  // HPD-1102: the account panel replaces the purchase or preparing screen
+  // while open. It offers Sign out and deletion only; no Hermes function
+  // becomes reachable without a plan.
+  if (paywallAccountOpen && (pendingProductAccess || productAccessScreen === "no_access" || productAccessScreen === "purchase")) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
+        <ScrollView contentContainerStyle={styles.paywallScreen} keyboardShouldPersistTaps="handled">
+          <HeyPaywallAccountPanel
+            locale={appLocale}
+            email={snapshot.me.email}
+            deletion={accountDeletionPanel}
+            onBack={() => setPaywallAccountOpen(false)}
+            signOutLabel={staticUiCopy(appLocale)["Sign out"]}
+            onSignOut={() => void logout()}
+          />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   // HPD-1090: after the purchase and until the server reports the runtime
   // ready, a full screen in the paywall's design says what is happening,
   // instead of a chat whose input is locked without explanation.
@@ -8307,6 +8373,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             capacityCopy={mobilePendingAccessVariant(workspaceStatusTruth) === "capacity" ? pendingAccessCopy : null}
             busy={productAccessRefreshing}
             onCheckAgain={refreshProductAccess}
+            accountLabel={heyPaywallAccountCopy(appLocale).entry}
+            onOpenAccount={() => setPaywallAccountOpen(true)}
             signOutLabel={staticUiCopy(appLocale)["Sign out"]}
             onSignOut={() => void logout()}
           />
@@ -8335,6 +8403,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             onJoinWaitlist={joinMobileWaitlist}
             onRestore={restoreMobilePurchases}
             onManage={manageMobileSubscription}
+            accountLabel={heyPaywallAccountCopy(appLocale).entry}
+            onOpenAccount={() => setPaywallAccountOpen(true)}
             signOutLabel={staticUiCopy(appLocale)["Sign out"]}
             onSignOut={() => void logout()}
           />
@@ -9652,41 +9722,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                     {host.session.mode === "standalone" && snapshot ? (
                       <MobileSystemSection title={mobileDangerZoneText(appLocale)}>
                         <View style={styles.systemSurfaceNotice}>
-                          <AccountDeletionSection
-                            accountId={snapshot.me.id}
-                            api={api}
-                            busy={busy}
-                            onDeleted={logout}
-                            copy={t.systemPages.account.deletion}
-                            locale={appLocale}
-                            emailReauthenticationCompleted={accountDeletionEmailReauthenticationAccountId === snapshot.me.id}
-                            onNativeReauthenticationChange={setAccountDeletionNativeReauthenticationRequired}
-                            reauthenticationActions={(linkedProviders) => (
-                              <View style={styles.nativeAuthGroup}>
-                                {linkedProviders.includes("google") && nativeAuthConfig?.providers.google ? (
-                                  <Pressable
-                                    style={[styles.secondaryButtonWide, (!googleDeletionAuthRequest || !googleDeletionChallenge || Boolean(nativeAuthBusy)) && styles.disabledButton]}
-                                    onPress={() => void reauthenticateAccountDeletionWithGoogle()}
-                                    disabled={!googleDeletionAuthRequest || !googleDeletionChallenge || Boolean(nativeAuthBusy)}
-                                    accessibilityRole="button"
-                                  >
-                                    {nativeAuthBusy === "google" ? <ActivityIndicator color={palette.teal} /> : <Text style={styles.secondaryButtonText}>{accountDeletionNativeReauthenticationCopy(appLocale).googleAction}</Text>}
-                                  </Pressable>
-                                ) : null}
-                                {linkedProviders.includes("apple") && nativeAuthConfig?.providers.apple && appleSignInAvailable ? (
-                                  nativeAuthBusy === "apple" ? <ActivityIndicator color={palette.teal} /> : (
-                                    <AppleAuthentication.AppleAuthenticationButton
-                                      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-                                      cornerRadius={8}
-                                      onPress={() => void signInWithApple("reauthenticate")}
-                                      style={styles.appleAuthButton}
-                                    />
-                                  )
-                                ) : null}
-                              </View>
-                            )}
-                          />
+                          {accountDeletionPanel}
                         </View>
                       </MobileSystemSection>
                     ) : null}
@@ -9795,10 +9831,15 @@ function HeyPreparingPanel({
   capacityCopy,
   busy,
   onCheckAgain,
+  accountLabel,
+  onOpenAccount,
   signOutLabel,
   onSignOut,
 }: {
   locale: AppLocale;
+  /** HPD-1102: opens the account panel (Sign out, delete account). */
+  accountLabel: string;
+  onOpenAccount: () => void;
   /** HPD-1090: never paid; nothing is being set up, so no progress and no email promise. */
   noAccess: boolean;
   /** HPD-1090: the ready email is promised only while email notifications are on. */
@@ -9851,9 +9892,58 @@ function HeyPreparingPanel({
         </Pressable>
       </View>
       <View style={styles.paywallFooter}>
+        <Pressable onPress={onOpenAccount} accessibilityRole="button" accessibilityLabel={accountLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+          <Text style={styles.paywallFooterLink}>{accountLabel}</Text>
+        </Pressable>
         <Pressable onPress={onSignOut} accessibilityRole="button" accessibilityLabel={signOutLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
           <Text style={styles.paywallFooterLink}>{signOutLabel}</Text>
         </Pressable>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * HPD-1102: the account panel behind the purchase and preparing screens'
+ * "Account" link, in the same quiet paywall design. Apple 5.1.1(v): deletion
+ * stays reachable for an account without a plan. It shows the signed-in
+ * address, Sign out and the existing deletion flow; nothing of Hermes.
+ */
+function HeyPaywallAccountPanel({
+  locale,
+  email,
+  deletion,
+  onBack,
+  signOutLabel,
+  onSignOut,
+}: {
+  locale: AppLocale;
+  email: string;
+  deletion: ReactNode;
+  onBack: () => void;
+  signOutLabel: string;
+  onSignOut: () => void;
+}) {
+  const copy = heyPaywallAccountCopy(locale);
+  return (
+    <View style={styles.paywallOffer}>
+      <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel={copy.back} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }} style={styles.paywallQuietAction}>
+        <ChevronLeft size={16} color={palette.muted} />
+        <Text style={styles.paywallQuietText}>{copy.back}</Text>
+      </Pressable>
+      <Text style={styles.paywallEyebrow}>{copy.entry}</Text>
+      <Text style={styles.paywallOfferTitle} accessibilityRole="header">{copy.title}</Text>
+      <Text style={styles.preparingBody}>{copy.body}</Text>
+      <View style={styles.paywallAccountActions}>
+        {email && !/\.invalid$/i.test(email) ? <Text style={styles.paywallQuietText}>{copy.signedInAs.replace("{email}", email)}</Text> : null}
+        <Pressable style={styles.secondaryButtonWide} onPress={onSignOut} accessibilityRole="button" accessibilityLabel={signOutLabel}>
+          <Text style={styles.secondaryButtonText}>{signOutLabel}</Text>
+        </Pressable>
+        {deletion ? (
+          <MobileSystemSection title={mobileDangerZoneText(locale)}>
+            <View style={styles.systemSurfaceNotice}>{deletion}</View>
+          </MobileSystemSection>
+        ) : null}
       </View>
     </View>
   );
@@ -9882,9 +9972,14 @@ function IosPaywallPanel({ locale,
   salesError = null,
   waitlistJoining = false,
   onJoinWaitlist,
+  accountLabel,
+  onOpenAccount,
   signOutLabel,
   onSignOut,
 }: { locale: AppLocale } & {
+  /** HPD-1102: the full purchase screen opens the account panel from its quiet footer. */
+  accountLabel?: string;
+  onOpenAccount?: () => void;
   /** HPD-1085: the full purchase screen carries Sign out in its quiet footer. */
   signOutLabel?: string;
   onSignOut?: () => void;
@@ -9926,6 +10021,8 @@ function IosPaywallPanel({ locale,
         salesError={salesError}
         waitlistJoining={waitlistJoining}
         onJoinWaitlist={onJoinWaitlist}
+        accountLabel={accountLabel}
+        onOpenAccount={onOpenAccount}
         signOutLabel={signOutLabel}
         onSignOut={onSignOut}
       />
@@ -10073,6 +10170,8 @@ function IosPaywallOfferPanel({ locale,
   salesError = null,
   waitlistJoining = false,
   onJoinWaitlist,
+  accountLabel,
+  onOpenAccount,
   signOutLabel,
   onSignOut,
 }: {
@@ -10091,6 +10190,8 @@ function IosPaywallOfferPanel({ locale,
   salesError?: string | null;
   waitlistJoining?: boolean;
   onJoinWaitlist?: () => Promise<void>;
+  accountLabel?: string;
+  onOpenAccount?: () => void;
   signOutLabel?: string;
   onSignOut?: () => void;
 }) {
@@ -10202,6 +10303,11 @@ function IosPaywallOfferPanel({ locale,
             <Text style={styles.paywallFooterLink}>{link.label}</Text>
           </Pressable>
         ))}
+        {onOpenAccount && accountLabel ? (
+          <Pressable onPress={onOpenAccount} accessibilityRole="button" accessibilityLabel={accountLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+            <Text style={styles.paywallFooterLink}>{accountLabel}</Text>
+          </Pressable>
+        ) : null}
         {onSignOut && signOutLabel ? (
           <Pressable onPress={onSignOut} accessibilityRole="button" accessibilityLabel={signOutLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
             <Text style={styles.paywallFooterLink}>{signOutLabel}</Text>
@@ -15284,6 +15390,10 @@ const styles = StyleSheet.create({
     color: palette.muted,
     fontSize: 13,
     fontWeight: "600",
+  },
+  paywallAccountActions: {
+    marginTop: 18,
+    gap: 14,
   },
   paywallFooter: {
     marginTop: 6,

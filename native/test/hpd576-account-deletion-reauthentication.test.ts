@@ -66,7 +66,12 @@ test("the deletion section reveals provider sign-in actions only for that stable
   assert.match(surface, /signInWithApple\("reauthenticate"\)/);
   assert.match(surface, /!accountDeletionNativeReauthenticationRequired/);
   assert.match(surface, /mobileNativeAuthChallengeRefreshDelayMs\(/);
-  assert.doesNotMatch(surface, /reauthenticationActions=\{[\s\S]*?signInWithGoogle\("link"\)/);
+  // HPD-1102: the deletion element is defined once, before the screens that use it, so the
+  // check is bounded to its own reauthentication actions.
+  const actionsAt = surface.indexOf("reauthenticationActions={(linkedProviders) =>");
+  const actions = surface.slice(actionsAt, surface.indexOf("\n    />", actionsAt));
+  assert.match(actions, /signInWithApple\("reauthenticate"\)/);
+  assert.doesNotMatch(actions, /signInWithGoogle\("link"\)/);
 });
 
 test("an on-demand Google deletion challenge refreshes before or immediately after expiry", () => {
