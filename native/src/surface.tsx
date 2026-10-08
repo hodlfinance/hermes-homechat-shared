@@ -506,6 +506,8 @@ import { serverAccessVisible } from "./server-access";
 import { ServerFullExportSection } from "./ServerFullExportSection";
 import { SERVER_FULL_EXPORT_DOWNLOAD_HREF, serverFullExportVisible } from "./server-full-export";
 import { ServerOwnerDeletionSection } from "./ServerOwnerDeletionSection";
+import { LapseExportSection } from "./LapseExportSection";
+import { LAPSE_EXPORT_DOWNLOAD_HREF } from "./lapse-export";
 import { serverOwnerDeletionVisible } from "./server-owner-deletion";
 import {
   MobileSwipeRemoveRow,
@@ -9590,6 +9592,24 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                             api,
                             apiBase: API_BASE,
                             href: SERVER_FULL_EXPORT_DOWNLOAD_HREF,
+                            openUrl: (url) => Linking.openURL(url),
+                            openPrivateUrl: (url) => WebBrowser.openBrowserAsync(url),
+                          });
+                        }}
+                      />
+                    ) : null}
+                    {/* HPD-1027 S6(b): after the subscription ended, the paused server's backup and its one-time key.
+                        Only the Hey app's own session; the Plane answers only the Owner of a lapsed server. */}
+                    {host.session.mode === "standalone" ? (
+                      <LapseExportSection
+                        client={api}
+                        locale={appLocale}
+                        formatDate={formatSecurityDateValue}
+                        onDownload={async () => {
+                          await openMobileBrowserHref({
+                            api,
+                            apiBase: API_BASE,
+                            href: LAPSE_EXPORT_DOWNLOAD_HREF,
                             openUrl: (url) => Linking.openURL(url),
                             openPrivateUrl: (url) => WebBrowser.openBrowserAsync(url),
                           });

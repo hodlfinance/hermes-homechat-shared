@@ -3071,6 +3071,27 @@ export interface ServerOwnerDeletionStatus {
   request: ServerOwnerDeletionRequestView | null;
 }
 
+/** HPD-1027 S6(b): the lapse export on the account screen (signed-in Owner only). */
+export interface LapseExportOwnerView {
+  schemaVersion: "heyhermes.lapse-export-owner/v1";
+  state: string;
+  exportDueAt: string;
+  deleteDueAt: string;
+  exportedAt: string | null;
+  expiresAt: string | null;
+  ready: boolean;
+  format: "full" | "readable" | null;
+  bytes: number | null;
+  sha256: string | null;
+  keyAvailable: boolean;
+  keyShownAt: string | null;
+}
+
+export interface LapseExportKey {
+  identity: string;
+  fileName: string;
+}
+
 export interface ServerOwnerDeletionConfirmation {
   operationId: string;
   confirmServerId: string;
