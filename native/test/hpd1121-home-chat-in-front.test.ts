@@ -25,3 +25,12 @@ test("the signal needs the chat tab, the host in view, the app in front and the 
   // appInFront follows AppState, so a return from the background fires it again.
   assert.ok(surface.indexOf("const [appInFront, setAppInFront]") < start);
 });
+
+test("typing in the Home chat in front calls the optional typing hook with the newest message time", () => {
+  assert.match(host, /onHomeChatTyping\?: \(input: \{ token: string; lastMessageAt: string \| null \}\) => void;/);
+  const start = surface.indexOf("const homeChatTypingDraft");
+  assert.ok(start > 0);
+  const block = surface.slice(start, surface.indexOf("}, [token, homeChatTypingDraft, lastHomeMessageAt]);", start));
+  assert.match(block, /homeChatInFrontSignal && input\.trim\(\)\.length > 0/);
+  assert.match(block, /try \{\s*host\.onHomeChatTyping\?\.\(\{ token, lastMessageAt: lastHomeMessageAt \}\);\s*\} catch/);
+});
