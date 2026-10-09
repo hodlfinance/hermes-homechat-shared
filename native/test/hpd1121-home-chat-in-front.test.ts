@@ -21,7 +21,7 @@ test("the signal needs the chat tab, the host in view, the app in front and the 
   assert.match(block, /tab === "chat" && hostVisible && appInFront/);
   assert.match(block, /\?\.role === "home"/);
   assert.match(block, /if \(!token \|\| !homeChatInFrontSignal\) return;/);
-  assert.match(block, /host\.onHomeChatInFront\?\.\(\{ token \}\);/);
+  assert.match(block, /try \{\s*host\.onHomeChatInFront\?\.\(\{ token \}\);\s*\} catch/);
   // appInFront follows AppState, so a return from the background fires it again.
   assert.ok(surface.indexOf("const [appInFront, setAppInFront]") < start);
 });

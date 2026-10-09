@@ -2564,7 +2564,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     && chatSessions.find((session) => session.id === activeConversationSessionId)?.role === "home";
   useEffect(() => {
     if (!token || !homeChatInFrontSignal) return;
-    host.onHomeChatInFront?.({ token });
+    // A signal only: nothing the host does may reach the chat.
+    try {
+      host.onHomeChatInFront?.({ token });
+    } catch {
+      // Ignored on purpose.
+    }
   }, [token, homeChatInFrontSignal]);
   const acknowledgedReadRef = useRef(new Map<string, string>());
   const threadReadTarget = automationThreadReadTarget({
