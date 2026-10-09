@@ -7919,8 +7919,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 Google follow as equal buttons; the password form stays behind
                 a small link (HPD-1087); the mode switch is one quiet line. */}
             <View style={[styles.authCard, styles.paywallOffer]}>
-              <View style={[styles.paywallArt, styles.authArt, resolvedColorScheme === "dark" && styles.paywallArtDark]}>
-                <Image source={resolvedColorScheme === "dark" ? paywallIllustrationDark : paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors accessibilityLabel="Hey Hermes" />
+              <View style={[styles.paywallArt, styles.authArt, Platform.OS === "ios" && resolvedColorScheme === "dark" && styles.paywallArtDark]}>
+                <Image source={Platform.OS === "ios" && resolvedColorScheme === "dark" ? paywallIllustrationDark : paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors accessibilityLabel="Hey Hermes" />
               </View>
               <Text style={styles.paywallEyebrow}>{signInCopy.eyebrow}</Text>
               <Text style={styles.paywallOfferTitle} accessibilityRole="header">
@@ -10346,7 +10346,9 @@ const paywallIllustrationDark = require("../assets/paywall-ink-key-dark.png");
  * follows that choice.
  */
 function PaywallArt() {
-  const dark = useColorScheme() === "dark";
+  // Android keeps the light palette (mobile-palette.ts), so only iOS goes dark.
+  const scheme = useColorScheme();
+  const dark = Platform.OS === "ios" && scheme === "dark";
   return (
     <View style={[styles.paywallArt, dark && styles.paywallArtDark]}>
       <Image source={dark ? paywallIllustrationDark : paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors />

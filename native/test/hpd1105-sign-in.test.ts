@@ -56,7 +56,7 @@ test("HPD-1105: Apple and Google share one look; the switch is one quiet line", 
 
 test("HPD-1085/HPD-1090: paywall, offer and preparing screens use the transparent dark dragon in dark mode", () => {
   const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
-  assert.match(source, /function PaywallArt\(\)[\s\S]*?useColorScheme\(\) === "dark"[\s\S]*?paywallIllustrationDark : paywallIllustration/);
+  assert.match(source, /function PaywallArt\(\)[\s\S]*?Platform\.OS === "ios" && scheme === "dark"[\s\S]*?paywallIllustrationDark : paywallIllustration/);
   assert.equal(source.match(/<PaywallArt \/>/g)?.length, 3);
   assert.doesNotMatch(source, /<View style=\{styles\.paywallArt\}>/);
 });
