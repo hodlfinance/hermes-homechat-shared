@@ -2576,7 +2576,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // applies its own quiet-time rule.
   const homeChatTypingDraft = homeChatInFrontSignal && input.trim().length > 0 ? input : "";
   const lastHomeMessageAt = homeChatInFrontSignal
-    ? messages.reduce<string | null>((latest, entry) => (entry.createdAt && (!latest || entry.createdAt > latest) ? entry.createdAt : latest), null)
+    ? messages.reduce<string | null>((latest, entry) => {
+      const at = Date.parse(entry.createdAt ?? "");
+      return Number.isFinite(at) && (!latest || at > Date.parse(latest)) ? entry.createdAt : latest;
+    }, null)
     : null;
   useEffect(() => {
     if (!token || !homeChatTypingDraft) return;
