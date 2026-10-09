@@ -60,17 +60,25 @@ test("HPD-1085/HPD-1090: paywall, offer and preparing screens use the transparen
   assert.doesNotMatch(source, /<View style=\{styles\.paywallArt\}>/);
 });
 
-test("HPD-1105 v2: sign-in shows the previous front-facing baby dragon head, centered title and benefit", () => {
+test("HPD-1105 v2 (B1): sign-in keeps the ink dragon, dark mode uses the filled variant, headline centered", () => {
   const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   const start = source.indexOf("HPD-1105: the signed-out screen in the HPD-1085 paywall design.");
   const screen = source.slice(start, source.indexOf("</KeyboardAvoidingView>", start));
-  assert.match(screen, /<View style=\{styles\.authArt\}>\s*<MobileWorkingDragon animated=\{false\}/);
-  // No illustration and no white panel behind it on the sign-in screen.
-  assert.doesNotMatch(screen, /paywallIllustration/);
-  assert.doesNotMatch(screen, /styles\.paywallArt/);
+  assert.match(screen, /resolvedColorScheme === "dark" \? paywallIllustrationDark : paywallIllustration/);
+  assert.match(screen, /styles\.paywallArtDark/);
+  assert.doesNotMatch(screen, /<MobileWorkingDragon/);
+  assert.match(source, /const paywallIllustrationDark = require\("\.\.\/assets\/paywall-ink-key-dark\.png"\)/);
+  assert.match(screen, /\[styles\.paywallEyebrow, styles\.authCentered\]/);
   assert.match(screen, /\[styles\.paywallOfferTitle, styles\.authCentered\]/);
   assert.match(screen, /\[styles\.authBenefit, styles\.authCentered\]/);
   assert.match(source, /authCentered: \{\s*textAlign: "center"/);
-  // The paywall, offer and preparing screens keep their ink dragon.
+  // The paywall, offer, preparing and deleted screens share one component.
   assert.equal(source.match(/<PaywallArt \/>/g)?.length, 3);
+});
+
+test("HPD-1105 v2 (B1): the dark dragon is the filled drawing, transparent around the figure", () => {
+  const png = readFileSync(new URL("../assets/paywall-ink-key-dark.png", import.meta.url));
+  assert.equal(png.readUInt32BE(16), 720);
+  assert.equal(png.readUInt32BE(20), 480);
+  assert.equal(png[25], 6, "RGBA");
 });

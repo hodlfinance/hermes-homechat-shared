@@ -7943,12 +7943,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 Google follow as equal buttons; the password form stays behind
                 a small link (HPD-1087); the mode switch is one quiet line. */}
             <View style={[styles.authCard, styles.paywallOffer]}>
-              {/* HPD-1105 v2 (Justus, 2026-10-09): the sign-in screens keep the
-                  previous icon, the baby dragon head from the front. The image
-                  is transparent, so light and dark mode need no panel. The
-                  paywall and preparing screens keep their ink dragon. */}
-              <View style={styles.authArt}>
-                <MobileWorkingDragon animated={false} accessibilityLabel="Hey Hermes" size={96} />
+              <View style={[styles.paywallArt, styles.authArt, Platform.OS === "ios" && resolvedColorScheme === "dark" && styles.paywallArtDark]}>
+                <Image source={Platform.OS === "ios" && resolvedColorScheme === "dark" ? paywallIllustrationDark : paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors accessibilityLabel="Hey Hermes" />
               </View>
               <Text style={[styles.paywallEyebrow, styles.authCentered]}>{signInCopy.eyebrow}</Text>
               <Text style={[styles.paywallOfferTitle, styles.authCentered]} accessibilityRole="header">
@@ -10368,7 +10364,9 @@ const paywallBrandColor = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4
 const paywallCtaColor = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4ed8", dark: "#3563e9" }) : "#1d4ed8";
 const paywallCheckBackground = Platform.OS === "ios" ? DynamicColorIOS({ light: "#e8eefc", dark: "#1e2742" }) : "#e8eefc";
 const paywallIllustration = require("../assets/paywall-ink-key.png");
-// HPD-1105: transparent light-ink variant for dark mode (no white panel).
+// HPD-1105 v2 (Justus chose variant B1, 2026-10-09): for dark mode the same
+// drawing with its figure filled light and the paper cut away - crisp on a dark
+// background, no white panel. The earlier outline-only variant read faint.
 const paywallIllustrationDark = require("../assets/paywall-ink-key-dark.png");
 
 /**
@@ -13677,9 +13675,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   authArt: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 8,
+    height: 120,
   },
   authCentered: {
     textAlign: "center",
