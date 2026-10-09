@@ -179,6 +179,8 @@ import {
   isAllowedHeyLegalHref,
   runtimeBoundAccessView,
   shouldPollChatGptConnection,
+  apiErrorCode,
+  type ServerDeletedSnapshotView,
 } from "../core/index";
 import {
   mobileAiAccessRouteLogoKey,
@@ -279,7 +281,7 @@ import {
   type MobileSecurityStateWords,
   type MobileSystemPagesCopy,
 } from "./appI18n";
-import { mobileProductAccessScreen, mobilePendingAccessVariant } from "./mobile-product-access";
+import { hasValidMobileProductAccess, mobileProductAccessScreen, mobilePendingAccessVariant } from "./mobile-product-access";
 import {
   startMobileAiAccessOauth,
   type MobileAiAccessOauthStartOutcome,
@@ -451,6 +453,8 @@ import {
 } from "./revenuecat-purchases";
 import type { HeyHermesSalesStatus } from "../core/hermes-api";
 import { heyNoAccessCopy, heyPaywallAccountCopy, heyPreparingBody, heyPreparingCopy, heyReadyEmailPromised } from "./hey-preparing";
+import { mobileWebSubscriptionManagementHref } from "./subscription-management";
+import { heyServerDeletedCopy, heyServerDeletedDateLine, heyServerDeletedErrorMessage, heyServerDeletedModel, heyServerDeletedReceiptLine } from "./hey-server-deleted";
 import { deviceAppLocale, heySignInCopy, heySignInHeadline } from "./hey-sign-in";
 import { MobileGoogleMark } from "./mobile-google-mark";
 import {
@@ -1676,6 +1680,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // HPD-1102: the purchase and preparing screens open a small account panel
   // (Sign out, delete account) so deletion stays reachable without a plan.
   const [paywallAccountOpen, setPaywallAccountOpen] = useState(false);
+  // HPD-1106: the deleted-server screen's purchase opens the paywall while the subscription is ended.
+  const [deletedPaywallOpen, setDeletedPaywallOpen] = useState(false);
   const [googleDeletionChallenge, setGoogleDeletionChallenge] = useState<{ expiresAt: string; id: string; nonce: string } | null>(null);
   const [googleDeletionChallengeVersion, setGoogleDeletionChallengeVersion] = useState(0);
   const [input, setInput] = useState(initialDraft);
@@ -3339,8 +3345,19 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
 
   async function manageMobileSubscription() {
     setMobilePurchaseNotice(null);
+    // HPD-1106: a web subscriber manages the subscription on the web, not in the App Store. The
+    // Plane names the place; an unreadable or failed answer keeps the App Store as before.
+    let webHref: string | null = null;
+    if (snapshot) {
+      try {
+        webHref = mobileWebSubscriptionManagementHref(await api.revenueCatManagement(), { accountId: snapshot.me.id, workspaceId: snapshot.workspace.id });
+      } catch {
+        webHref = null;
+      }
+    }
     try {
-      await openIosSubscriptionManagement((url) => Linking.openURL(url));
+      if (webHref) await Linking.openURL(webHref);
+      else await openIosSubscriptionManagement((url) => Linking.openURL(url));
     } catch {
       setMobilePurchaseNotice(
         iosPaywallView({
@@ -8364,7 +8381,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // HPD-1102: the account panel replaces the purchase or preparing screen
   // while open. It offers Sign out and deletion only; no Hermes function
   // becomes reachable without a plan.
-  if (paywallAccountOpen && (pendingProductAccess || productAccessScreen === "no_access" || productAccessScreen === "purchase")) {
+  if (paywallAccountOpen && (pendingProductAccess || productAccessScreen === "no_access" || productAccessScreen === "purchase" || productAccessScreen === "deleted")) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
@@ -8374,6 +8391,36 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             email={snapshot.me.email}
             deletion={accountDeletionPanel}
             onBack={() => setPaywallAccountOpen(false)}
+            signOutLabel={staticUiCopy(appLocale)["Sign out"]}
+            onSignOut={() => void logout()}
+          />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // HPD-1106: the Owner deleted the server. The account no longer waits for a
+  // server that the deletion fence never lets come: it reads that the server is
+  // gone, and while the subscription runs it may ask for a fresh one.
+  if (productAccessScreen === "deleted" && snapshot.serverDeletion && !(deletedPaywallOpen && !hasValidMobileProductAccess(snapshot.entitlement))) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
+        <ScrollView contentContainerStyle={styles.paywallScreen}>
+          <HeyServerDeletedPanel
+            locale={appLocale}
+            deletion={snapshot.serverDeletion}
+            subscriptionActive={hasValidMobileProductAccess(snapshot.entitlement)}
+            formatDate={(value) => formatSecurityDate(value, appLocale)}
+            onNewServer={async () => {
+              await api.requestNewServerAfterDeletion();
+              await refresh();
+            }}
+            onManage={Platform.OS === "ios" ? () => void manageMobileSubscription() : null}
+            onPurchase={Platform.OS === "ios" ? () => setDeletedPaywallOpen(true) : null}
+            manageNotice={mobilePurchaseNotice}
+            accountLabel={heyPaywallAccountCopy(appLocale).entry}
+            onOpenAccount={() => setPaywallAccountOpen(true)}
             signOutLabel={staticUiCopy(appLocale)["Sign out"]}
             onSignOut={() => void logout()}
           />
@@ -8407,7 +8454,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     );
   }
 
-  if (productAccessScreen === "purchase") {
+  if (productAccessScreen === "purchase" || (productAccessScreen === "deleted" && deletedPaywallOpen && !hasValidMobileProductAccess(snapshot.entitlement))) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
@@ -9839,6 +9886,126 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       )}
 
     </SafeAreaView>
+  );
+}
+
+/**
+ * HPD-1106: the screen after the Owner deleted the server, in the HPD-1085
+ * paywall design, in place of the preparing screen that never ended. The date
+ * and a count-only receipt summary; while the subscription runs "Set up a new
+ * server" (only after the explicit fresh-server confirmation) and "Manage
+ * subscription"; once it has ended only the account entry and Sign out.
+ */
+function HeyServerDeletedPanel({
+  locale,
+  deletion,
+  subscriptionActive,
+  formatDate,
+  onNewServer,
+  onManage,
+  onPurchase,
+  manageNotice,
+  accountLabel,
+  onOpenAccount,
+  signOutLabel,
+  onSignOut,
+}: {
+  locale: AppLocale;
+  deletion: ServerDeletedSnapshotView;
+  subscriptionActive: boolean;
+  formatDate: (value: string) => string;
+  onNewServer: () => Promise<void>;
+  /** iOS: the App Store subscription settings; absent elsewhere. */
+  onManage: (() => void) | null;
+  /** iOS: once the subscription has ended, opens the paywall (a new purchase brings a fresh server). */
+  onPurchase: (() => void) | null;
+  manageNotice: string | null;
+  accountLabel: string;
+  onOpenAccount: () => void;
+  signOutLabel: string;
+  onSignOut: () => void;
+}) {
+  const copy = heyServerDeletedCopy(locale);
+  const model = heyServerDeletedModel({ deletion, subscriptionActive });
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dateLine = heyServerDeletedDateLine(locale, deletion.deletedAt, formatDate);
+  const receiptLine = heyServerDeletedReceiptLine(locale, deletion.receipt);
+  const accentAt = copy.title.indexOf(copy.titleAccent);
+  const confirmNewServer = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onNewServer();
+    } catch (failure) {
+      setError(heyServerDeletedErrorMessage(locale, apiErrorCode(failure)));
+      setConfirming(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <View style={styles.paywallOffer} accessibilityLiveRegion="polite">
+      <View style={styles.paywallArt}>
+        <Image source={paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors />
+      </View>
+      <Text style={styles.paywallEyebrow}>{copy.eyebrow}</Text>
+      <Text style={styles.paywallOfferTitle} accessibilityRole="header">
+        {accentAt >= 0 ? (
+          <>
+            {copy.title.slice(0, accentAt)}
+            <Text style={styles.paywallOfferTitleAccent}>{copy.titleAccent}</Text>
+            {copy.title.slice(accentAt + copy.titleAccent.length)}
+          </>
+        ) : copy.title}
+      </Text>
+      {dateLine ? <Text style={styles.preparingBody}>{dateLine}</Text> : null}
+      {receiptLine ? <Text style={styles.preparingBody}>{receiptLine}</Text> : null}
+      <Text style={styles.preparingBody}>{model.subscriptionActive ? copy.bodyActive : copy.bodyEnded}</Text>
+      {error ? <Text style={styles.preparingBody} accessibilityRole="alert">{error}</Text> : null}
+      {manageNotice ? <Text style={styles.preparingBody}>{manageNotice}</Text> : null}
+      {model.newServerOffered && !confirming ? (
+        <Pressable onPress={() => setConfirming(true)} accessibilityRole="button" accessibilityLabel={copy.newServer} style={styles.paywallCta}>
+          <Text style={styles.paywallCtaText}>{copy.newServer}</Text>
+        </Pressable>
+      ) : null}
+      {model.newServerOffered && confirming ? (
+        <View accessibilityRole="alert">
+          <Text style={styles.paywallHeroTitle}>{copy.confirmTitle}</Text>
+          <Text style={styles.preparingBody}>{copy.confirmBody}</Text>
+          <Pressable disabled={busy} onPress={() => void confirmNewServer()} accessibilityRole="button" accessibilityLabel={copy.confirmAction}
+            style={[styles.paywallCta, busy && styles.disabledButton]}>
+            {busy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.paywallCtaText}>{copy.confirmAction}</Text>}
+          </Pressable>
+          <View style={styles.paywallQuietRow}>
+            <Pressable disabled={busy} onPress={() => setConfirming(false)} accessibilityRole="button" accessibilityLabel={copy.cancel} style={styles.paywallQuietAction}>
+              <Text style={styles.paywallQuietText}>{copy.cancel}</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+      {model.purchaseOffered && onPurchase ? (
+        <Pressable onPress={onPurchase} accessibilityRole="button" accessibilityLabel={copy.purchase} style={styles.paywallCta}>
+          <Text style={styles.paywallCtaText}>{copy.purchase}</Text>
+        </Pressable>
+      ) : null}
+      {model.manageOffered && onManage ? (
+        <View style={styles.paywallQuietRow}>
+          <Pressable onPress={onManage} accessibilityRole="button" accessibilityLabel={copy.manage} style={styles.paywallQuietAction}>
+            <Text style={styles.paywallQuietText}>{copy.manage}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      <View style={styles.paywallFooter}>
+        <Pressable onPress={onOpenAccount} accessibilityRole="button" accessibilityLabel={accountLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+          <Text style={styles.paywallFooterLink}>{accountLabel}</Text>
+        </Pressable>
+        <Pressable onPress={onSignOut} accessibilityRole="button" accessibilityLabel={signOutLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+          <Text style={styles.paywallFooterLink}>{signOutLabel}</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 

@@ -34,10 +34,14 @@ export function mobileProductAccessScreen(input: {
   standalone: boolean;
   ios: boolean;
   showPaywallOnboarding: boolean;
-  snapshot: Pick<AppSnapshot, "me" | "workspace" | "entitlement">;
+  snapshot: Pick<AppSnapshot, "me" | "workspace" | "entitlement" | "serverDeletion">;
   status: WorkspaceStatusTruthView | null;
-}): "purchase" | "no_access" | "preparing" | "home" {
+}): "purchase" | "no_access" | "deleted" | "preparing" | "home" {
   if (!input.standalone) return "home";
+  // HPD-1106: the Owner deleted the server. Nothing is being set up (the deletion fences
+  // provisioning), so neither the preparing screen nor the paywall: the deleted screen, which
+  // offers a fresh server while the subscription runs and the account entry once it has ended.
+  if (input.snapshot.serverDeletion?.state === "deleted") return "deleted";
   // Buying access must remain possible before the private runtime is ready.
   if (input.ios && input.showPaywallOnboarding) return "purchase";
   // HPD-1090: an account that never paid has nothing being prepared (Android,

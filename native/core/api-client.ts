@@ -133,6 +133,7 @@ import type {
   ServerFullExportStatus,
   ServerOwnerDeletionConfirmation,
   ServerOwnerDeletionStatus,
+  ServerOwnerNewServerResult,
   LapseExportOwnerView,
   LapseExportKey,
   ServerOwnerSshKey,
@@ -742,6 +743,8 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     planChangePreview: (body: BillingPlanChangePreviewRequest) =>
       request<BillingPlanChangePreview>("/billing/plan-preview", { method: "POST", body: JSON.stringify(body) }),
     revenueCatEvents: () => request<RevenueCatWebhookEvent[]>("/billing/revenuecat/events"),
+    /** HPD-1106: where this account's subscription is managed (App Store or the web billing portal); validate before opening. */
+    revenueCatManagement: () => request<unknown>("/billing/revenuecat/management", { method: "POST", body: "{}" }),
     topUps: () => request<TopUpSummary>("/billing/top-ups"),
     usage: () => request<UsageSummary>("/usage"),
     usageLimits: () => request<UsageLimitStatus>("/usage/limits"),
@@ -777,6 +780,9 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     createServerFullExport: () => request<ServerFullExportStatus>("/workspace/server/export", { method: "POST" }),
     /** HPD-1027 S6a: what a server deletion removes and keeps, and where the Owner's request stands. */
     serverOwnerDeletion: () => request<ServerOwnerDeletionStatus>("/workspace/server/deletion"),
+    /** HPD-1106: a fresh server after the Owner's deletion; the body carries the explicit confirmation. */
+    requestNewServerAfterDeletion: () =>
+      request<ServerOwnerNewServerResult>("/workspace/server/deletion/new-server", { method: "POST", body: JSON.stringify({ acknowledgeFreshServer: true }) }),
     requestServerOwnerDeletion: (body: ServerOwnerDeletionConfirmation) =>
       request<ServerOwnerDeletionStatus>("/workspace/server/deletion", { method: "POST", body: JSON.stringify(body) }),
     /** HPD-1027 S6(b): the lapse export and its one-time fresh key, on the account screen. */
