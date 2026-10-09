@@ -44,10 +44,9 @@ test("HPD-1105: Apple and Google share one look; the switch is one quiet line", 
   assert.ok(start > 0);
   const screen = source.slice(start, source.indexOf("</KeyboardAvoidingView>", start));
   assert.match(screen, /AppleAuthenticationButtonStyle\.BLACK/);
-  // Dark mode: Google's own dark variant and a transparent dragon, no white boxes.
+  // Dark mode: Google's own dark variant, no white boxes.
   assert.doesNotMatch(screen, /AppleAuthenticationButtonStyle\.WHITE/);
   assert.match(source, /authProviderGoogleDark: \{\s*backgroundColor: "#131314"/);
-  assert.match(screen, /paywallIllustrationDark/);
   assert.match(screen, /<MobileGoogleMark/);
   assert.match(screen, /styles\.paywallCta/);
   assert.match(screen, /signInCopy\.newHere : signInCopy\.haveAccount/);
@@ -59,4 +58,19 @@ test("HPD-1085/HPD-1090: paywall, offer and preparing screens use the transparen
   assert.match(source, /function PaywallArt\(\)[\s\S]*?Platform\.OS === "ios" && scheme === "dark"[\s\S]*?paywallIllustrationDark : paywallIllustration/);
   assert.equal(source.match(/<PaywallArt \/>/g)?.length, 3);
   assert.doesNotMatch(source, /<View style=\{styles\.paywallArt\}>/);
+});
+
+test("HPD-1105 v2: sign-in shows the previous front-facing baby dragon head, centered title and benefit", () => {
+  const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  const start = source.indexOf("HPD-1105: the signed-out screen in the HPD-1085 paywall design.");
+  const screen = source.slice(start, source.indexOf("</KeyboardAvoidingView>", start));
+  assert.match(screen, /<View style=\{styles\.authArt\}>\s*<MobileWorkingDragon animated=\{false\}/);
+  // No illustration and no white panel behind it on the sign-in screen.
+  assert.doesNotMatch(screen, /paywallIllustration/);
+  assert.doesNotMatch(screen, /styles\.paywallArt/);
+  assert.match(screen, /\[styles\.paywallOfferTitle, styles\.authCentered\]/);
+  assert.match(screen, /\[styles\.authBenefit, styles\.authCentered\]/);
+  assert.match(source, /authCentered: \{\s*textAlign: "center"/);
+  // The paywall, offer and preparing screens keep their ink dragon.
+  assert.equal(source.match(/<PaywallArt \/>/g)?.length, 3);
 });

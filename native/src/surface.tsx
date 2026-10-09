@@ -7943,11 +7943,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 Google follow as equal buttons; the password form stays behind
                 a small link (HPD-1087); the mode switch is one quiet line. */}
             <View style={[styles.authCard, styles.paywallOffer]}>
-              <View style={[styles.paywallArt, styles.authArt, Platform.OS === "ios" && resolvedColorScheme === "dark" && styles.paywallArtDark]}>
-                <Image source={Platform.OS === "ios" && resolvedColorScheme === "dark" ? paywallIllustrationDark : paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors accessibilityLabel="Hey Hermes" />
+              {/* HPD-1105 v2 (Justus, 2026-10-09): the sign-in screens keep the
+                  previous icon, the baby dragon head from the front. The image
+                  is transparent, so light and dark mode need no panel. The
+                  paywall and preparing screens keep their ink dragon. */}
+              <View style={styles.authArt}>
+                <MobileWorkingDragon animated={false} accessibilityLabel="Hey Hermes" size={96} />
               </View>
-              <Text style={styles.paywallEyebrow}>{signInCopy.eyebrow}</Text>
-              <Text style={styles.paywallOfferTitle} accessibilityRole="header">
+              <Text style={[styles.paywallEyebrow, styles.authCentered]}>{signInCopy.eyebrow}</Text>
+              <Text style={[styles.paywallOfferTitle, styles.authCentered]} accessibilityRole="header">
                 {signInTitleAccentAt >= 0 ? (
                   <>
                     {signInHeadline.title.slice(0, signInTitleAccentAt)}
@@ -7956,7 +7960,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   </>
                 ) : signInHeadline.title}
               </Text>
-              <Text style={styles.authBenefit}>{signInHeadline.body}</Text>
+              <Text style={[styles.authBenefit, styles.authCentered]}>{signInHeadline.body}</Text>
 
               {authEntryMode === "sign_in" && signInWithPassword ? (
                 <View style={styles.authFields}>
@@ -13673,7 +13677,12 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   authArt: {
-    height: 120,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 8,
+  },
+  authCentered: {
+    textAlign: "center",
   },
   authBenefit: {
     marginTop: 10,
