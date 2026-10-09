@@ -70,7 +70,7 @@ export type NativeR8Platform = {
     AppleAuthenticationScope: { FULL_NAME: string | number; EMAIL: string | number };
     AppleAuthenticationCredentialState: { AUTHORIZED: string | number };
     AppleAuthenticationButton: ComponentType<{ buttonStyle: string | number; buttonType: string | number; cornerRadius: number; onPress(): void; style: StyleProp<ViewStyle> }>;
-    AppleAuthenticationButtonStyle: { BLACK: string | number };
+    AppleAuthenticationButtonStyle: { BLACK: string | number; WHITE: string | number };
     AppleAuthenticationButtonType: { CONTINUE: string | number; SIGN_UP: string | number };
   };
   Google: {
