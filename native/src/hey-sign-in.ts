@@ -144,7 +144,7 @@ const signInCopyByLocale: Record<AppLocale, HeySignInCopy> = {
     newHere: "Hey Hermes は初めてですか？",
     createLink: "アカウントを作成",
     haveAccount: "アカウントをお持ちですか？",
-    signInLink: "サインイン",
+    signInLink: "ログイン",
   },
   ko: {
     eyebrow: "Hey Hermes",

@@ -13438,72 +13438,6 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     width: "100%",
   },
-  authHero: {
-    alignItems: "center",
-    gap: 7,
-    marginBottom: 6,
-  },
-  authTitle: {
-    color: palette.ink,
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: "600",
-    letterSpacing: -0.5,
-  },
-  authSubtitle: {
-    color: palette.muted,
-    fontSize: 15,
-    lineHeight: 21,
-    textAlign: "center",
-  },
-  authModeSwitch: {
-    backgroundColor: palette.tealSoft,
-    borderColor: palette.lineStrong,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    padding: 3,
-  },
-  authModeButton: {
-    alignItems: "center",
-    borderRadius: 8,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 42,
-    paddingHorizontal: 10,
-  },
-  authModeButtonSelected: {
-    backgroundColor: palette.surface,
-    borderColor: palette.line,
-    borderWidth: 1,
-  },
-  authModeText: {
-    color: palette.muted,
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  authModeTextSelected: {
-    color: palette.ink,
-  },
-  authForm: {
-    gap: 10,
-  },
-  authModeIntro: {
-    color: palette.muted,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
-  },
-  authSupportButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  authSupportText: {
-    color: palette.teal,
-    fontSize: 15,
-    fontWeight: "500",
-  },
   authPasswordToggleText: {
     color: palette.muted,
     fontSize: 14,
@@ -13629,11 +13563,6 @@ const styles = StyleSheet.create({
     color: paywallBrandColor,
     fontSize: 15,
     fontWeight: "700",
-  },
-  nativeAuthDivider: {
-    color: palette.muted,
-    fontSize: 13,
-    textAlign: "center",
   },
   loading: {
     flex: 1,
