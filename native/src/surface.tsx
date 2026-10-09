@@ -7863,9 +7863,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     const signInCopy = heySignInCopy(appLocale);
     const signInHeadline = heySignInHeadline(appLocale, authEntryMode);
     const signInTitleAccentAt = signInHeadline.titleAccent ? signInHeadline.title.indexOf(signInHeadline.titleAccent) : -1;
-    // HPD-1105: Apple and Google look alike - black in light mode, white in dark mode.
-    const authProviderTone = resolvedColorScheme === "dark" ? styles.authProviderLight : styles.authProviderDark;
-    const authProviderTextColor = resolvedColorScheme === "dark" ? "#1f1f1f" : "#ffffff";
+    // HPD-1105: Apple and Google look alike - black in light mode; in dark mode
+    // Google's own dark variant (#131314, grey outline) and Apple's black button.
+    const authProviderTone = resolvedColorScheme === "dark" ? styles.authProviderGoogleDark : styles.authProviderDark;
+    const authProviderTextColor = resolvedColorScheme === "dark" ? "#e3e3e3" : "#ffffff";
     if (signedOutSupportOpen) {
       return (
         <SafeAreaView style={styles.safe}>
@@ -7901,8 +7902,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 Google follow as equal buttons; the password form stays behind
                 a small link (HPD-1087); the mode switch is one quiet line. */}
             <View style={[styles.authCard, styles.paywallOffer]}>
-              <View style={[styles.paywallArt, styles.authArt]}>
-                <Image source={paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors accessibilityLabel="Hey Hermes" />
+              <View style={[styles.paywallArt, styles.authArt, resolvedColorScheme === "dark" && styles.paywallArtDark]}>
+                <Image source={resolvedColorScheme === "dark" ? paywallIllustrationDark : paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors accessibilityLabel="Hey Hermes" />
               </View>
               <Text style={styles.paywallEyebrow}>{signInCopy.eyebrow}</Text>
               <Text style={styles.paywallOfferTitle} accessibilityRole="header">
@@ -8002,9 +8003,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                     ) : (
                       <AppleAuthentication.AppleAuthenticationButton
                         key={`apple-${resolvedColorScheme}`}
-                        buttonStyle={resolvedColorScheme === "dark"
-                          ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
-                          : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
                         // HPD-1105: "Continue" in both modes. Apple's own "Sign up"
                         // title reads "Mit Apple anmelden" in German, next to
                         // "Mit Google registrieren"; Continue matches Google.
@@ -10173,6 +10172,8 @@ const paywallBrandColor = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4
 const paywallCtaColor = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4ed8", dark: "#3563e9" }) : "#1d4ed8";
 const paywallCheckBackground = Platform.OS === "ios" ? DynamicColorIOS({ light: "#e8eefc", dark: "#1e2742" }) : "#e8eefc";
 const paywallIllustration = require("../assets/paywall-ink-key.png");
+// HPD-1105: transparent light-ink variant for dark mode (no white panel).
+const paywallIllustrationDark = require("../assets/paywall-ink-key-dark.png");
 
 /**
  * HPD-1085: the full-screen purchase offer. The free week leads when the Store
@@ -13535,8 +13536,10 @@ const styles = StyleSheet.create({
   authProviderDark: {
     backgroundColor: "#000000",
   },
-  authProviderLight: {
-    backgroundColor: "#ffffff",
+  authProviderGoogleDark: {
+    backgroundColor: "#131314",
+    borderWidth: 1,
+    borderColor: "#8e918f",
   },
   authProviderText: {
     fontSize: 19,
@@ -15324,6 +15327,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+  },
+  paywallArtDark: {
+    backgroundColor: "transparent",
   },
   paywallArtImage: {
     width: "100%",
