@@ -9946,9 +9946,7 @@ function HeyServerDeletedPanel({
   };
   return (
     <View style={styles.paywallOffer} accessibilityLiveRegion="polite">
-      <View style={styles.paywallArt}>
-        <Image source={paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors />
-      </View>
+      <PaywallArt />
       <Text style={styles.paywallEyebrow}>{copy.eyebrow}</Text>
       <Text style={styles.paywallOfferTitle} accessibilityRole="header">
         {accentAt >= 0 ? (
@@ -10048,9 +10046,7 @@ function HeyPreparingPanel({
   const accentAt = titleAccent ? title.indexOf(titleAccent) : -1;
   return (
     <View style={styles.paywallOffer} accessibilityLiveRegion="polite">
-      <View style={styles.paywallArt}>
-        <Image source={paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors />
-      </View>
+      <PaywallArt />
       <Text style={styles.paywallEyebrow}>{copy.eyebrow}</Text>
       <Text style={styles.paywallOfferTitle} accessibilityRole="header">
         {accentAt >= 0 ? (
@@ -10343,6 +10339,22 @@ const paywallIllustration = require("../assets/paywall-ink-key.png");
 const paywallIllustrationDark = require("../assets/paywall-ink-key-dark.png");
 
 /**
+ * HPD-1085/HPD-1090: the dragon on the paywall, offer and preparing screens.
+ * In dark mode the transparent light-ink variant without the white panel
+ * (as on the sign-in card, HPD-1105); light mode unchanged. The app sets
+ * Appearance.setColorScheme from the account preference, so useColorScheme
+ * follows that choice.
+ */
+function PaywallArt() {
+  const dark = useColorScheme() === "dark";
+  return (
+    <View style={[styles.paywallArt, dark && styles.paywallArtDark]}>
+      <Image source={dark ? paywallIllustrationDark : paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors />
+    </View>
+  );
+}
+
+/**
  * HPD-1085: the full-screen purchase offer. The free week leads when the Store
  * confirms eligibility; price, period, renewal and trial terms stay next to
  * the button (App Review 3.1.2); restore, manage, legal and sign-out are quiet.
@@ -10396,9 +10408,7 @@ function IosPaywallOfferPanel({ locale,
   const accentAt = titleAccent ? title.indexOf(titleAccent) : -1;
   return (
     <View style={styles.paywallOffer}>
-      <View style={styles.paywallArt}>
-        <Image source={paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors />
-      </View>
+      <PaywallArt />
       <Text style={styles.paywallEyebrow}>{offer.eyebrow}</Text>
       <Text style={styles.paywallOfferTitle} accessibilityRole="header">
         {accentAt >= 0 ? (
