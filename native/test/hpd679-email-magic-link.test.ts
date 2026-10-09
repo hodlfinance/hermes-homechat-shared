@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createApiClient } from "../core/index";
 import { authUiCopy } from "../core/auth-ui-copy";
+import { heySignInCopy } from "../src/hey-sign-in";
 import {
   EmailMagicLinkAbuseError,
   emailMagicLinkTokenFromUrl,
@@ -96,21 +97,24 @@ test("the native client obtains abuse proof before the public request and suppor
 
 test("the create-account surface keeps Google and Apple and adds neutral email signup", () => {
   const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
-  assert.match(source, /Create your account with email, Google, or Apple/);
+  // HPD-1105: the headline and benefit line come from the shared sign-in copy.
+  assert.match(source, /heySignInHeadline\(appLocale, authEntryMode\)/);
   assert.match(source, /requestEmailMagicLink\(\)/);
   assert.match(source, /requestEmailMagicLinkWithAbuseProof\(\{/);
   assert.match(source, /const run = emailMagicLinkRunRef\.current;\s+if \(!run\) return;\s+\/\/[^\n]*\n[^\n]*\n\s+if \(state === "background"\) \{\s+run\.suspended = true;/);
   assert.match(source, /requestEmailMagicLinkRef\.current\(true\)/);
-  // HPD-1087 moved the link wording into the shared copy table, in all eight languages.
-  assert.match(source, /staticUiCopy\(appLocale\)\["Email me a sign-in link"\]/);
-  assert.equal(authUiCopy("de")["Email me a sign-in link"], "Link per E-Mail senden");
+  // HPD-1105: the big button reads "Anmeldelink senden", from the sign-in copy in all eight languages.
+  assert.match(source, /signInCopy\.sendLink/);
+  assert.equal(heySignInCopy("de").sendLink, "Anmeldelink senden");
   assert.match(source, /If this email can be used with Hey Hermes, a sign-in link is on its way/);
   assert.match(source, /Linking\.getInitialURL\(\)/);
   assert.match(source, /Linking\.addEventListener\("url"/);
   assert.match(source, /setAccountDeletionEmailReauthenticationAccountId\(session\.account\.id\)/);
   assert.match(source, /emailReauthenticationCompleted=\{accountDeletionEmailReauthenticationAccountId === snapshot\.me\.id\}/);
   assert.match(source, /signInWithGoogle\(\)/);
-  assert.match(source, /AppleAuthenticationButtonType\.SIGN_UP/);
+  // HPD-1105: Apple says "Continue" in both modes, level with "Continue with Google".
+  assert.match(source, /AppleAuthenticationButtonType\.CONTINUE/);
+  assert.doesNotMatch(source, /AppleAuthenticationButtonType\.SIGN_UP/);
 });
 
 const proofChallenge = (overrides: Partial<{ challenge: string; difficulty: number; expiresAt: string; id: string }> = {}) => ({
@@ -233,7 +237,8 @@ test("HPD-1087: sign-in opens on the email link; the password form sits behind a
   assert.match(passwordBranch, /Use a sign-in link instead/);
   assert.doesNotMatch(linkBranch, /secureTextEntry|loginPassword|accessCode/);
   assert.match(linkBranch, /requestEmailMagicLink\(\)/);
-  assert.match(linkBranch, /authEntryMode === "sign_in" \? \(\s+<Pressable[\s\S]*setSignInWithPassword\(true\)[\s\S]*"Sign in with password"/);
+  // HPD-1105: the small password link sits below Apple and Google, sign-in only.
+  assert.match(source, /authEntryMode === "sign_in" && !signInWithPassword \? \(\s+<View[^>]*>\s+<Pressable[\s\S]*?setSignInWithPassword\(true\)[\s\S]*?"Sign in with password"/);
   assert.match(source, /const \[signInWithPassword, setSignInWithPassword\] = useState\(false\)/);
   for (const locale of ["en", "de", "fr", "es", "it", "pt-BR", "ja", "ko"] as const) {
     const copy = authUiCopy(locale);
