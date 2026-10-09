@@ -165,6 +165,12 @@ export type NativeR8Host = {
    * the surface never waits for it and nothing it does is shown.
    */
   onHomeChatInFront?: (input: { token: string }) => void;
+  /**
+   * HPD-1121 (Justus, 2026-10-09): called on every change of a non-empty draft
+   * in the Home chat while it is in front, with the newest Home message time.
+   * The host decides whether to warm (Hey: three quiet minutes). Fire and forget.
+   */
+  onHomeChatTyping?: (input: { token: string; lastMessageAt: string | null }) => void;
   apiBaseUrl: string;
   storageNamespace: string;
   identity: {

@@ -2571,6 +2571,24 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       // Ignored on purpose.
     }
   }, [token, homeChatInFrontSignal]);
+  // HPD-1121 (Justus, 2026-10-09): typing in the Home chat. Every change of a
+  // non-empty draft goes to the host with the newest message time; the host
+  // applies its own quiet-time rule.
+  const homeChatTypingDraft = homeChatInFrontSignal && input.trim().length > 0 ? input : "";
+  const lastHomeMessageAt = homeChatInFrontSignal
+    ? messages.reduce<string | null>((latest, entry) => {
+      const at = Date.parse(entry.createdAt ?? "");
+      return Number.isFinite(at) && (!latest || at > Date.parse(latest)) ? entry.createdAt : latest;
+    }, null)
+    : null;
+  useEffect(() => {
+    if (!token || !homeChatTypingDraft) return;
+    try {
+      host.onHomeChatTyping?.({ token, lastMessageAt: lastHomeMessageAt });
+    } catch {
+      // Ignored on purpose.
+    }
+  }, [token, homeChatTypingDraft, lastHomeMessageAt]);
   const acknowledgedReadRef = useRef(new Map<string, string>());
   const threadReadTarget = automationThreadReadTarget({
     session: chatSessions.find((session) => session.id === activeConversationSessionId),
