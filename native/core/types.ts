@@ -2962,6 +2962,8 @@ export interface AppSnapshot {
   chatRoutePreference: ChatRoutePreference;
   server: WorkspaceServer;
   runtimeReadiness: RuntimeReadiness;
+  /** HPD-1106: the Owner deleted this workspace's server; shown instead of "being set up". */
+  serverDeletion?: ServerDeletedSnapshotView | null;
   tasks: KanbanTask[];
   integrations: IntegrationStatus[];
   bookmarks: WorkspaceBookmark[];
@@ -3063,6 +3065,22 @@ export interface ServerOwnerDeletionConsequences {
   offHostBackups: string;
   separateActions: string[];
   irreversible: true;
+}
+
+/**
+ * HPD-1106: in the snapshot after the Owner deleted the server. `newServer` is "available" while
+ * the subscription runs and the Owner may ask for a fresh server (POST
+ * /workspace/server/deletion/new-server); otherwise "unavailable".
+ */
+export interface ServerDeletedSnapshotView {
+  state: "deleted";
+  deletedAt: string | null;
+  receipt: ServerOwnerDeletionReceiptSummary | null;
+  newServer: "available" | "unavailable";
+}
+
+export interface ServerOwnerNewServerResult {
+  newServer: "requested";
 }
 
 export interface ServerOwnerDeletionStatus {

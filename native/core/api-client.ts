@@ -133,6 +133,7 @@ import type {
   ServerFullExportStatus,
   ServerOwnerDeletionConfirmation,
   ServerOwnerDeletionStatus,
+  ServerOwnerNewServerResult,
   LapseExportOwnerView,
   LapseExportKey,
   ServerOwnerSshKey,
@@ -777,6 +778,9 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     createServerFullExport: () => request<ServerFullExportStatus>("/workspace/server/export", { method: "POST" }),
     /** HPD-1027 S6a: what a server deletion removes and keeps, and where the Owner's request stands. */
     serverOwnerDeletion: () => request<ServerOwnerDeletionStatus>("/workspace/server/deletion"),
+    /** HPD-1106: a fresh server after the Owner's deletion; the body carries the explicit confirmation. */
+    requestNewServerAfterDeletion: () =>
+      request<ServerOwnerNewServerResult>("/workspace/server/deletion/new-server", { method: "POST", body: JSON.stringify({ acknowledgeFreshServer: true }) }),
     requestServerOwnerDeletion: (body: ServerOwnerDeletionConfirmation) =>
       request<ServerOwnerDeletionStatus>("/workspace/server/deletion", { method: "POST", body: JSON.stringify(body) }),
     /** HPD-1027 S6(b): the lapse export and its one-time fresh key, on the account screen. */
