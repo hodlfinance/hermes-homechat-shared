@@ -454,6 +454,8 @@ import {
 import type { HeyHermesSalesStatus } from "../core/hermes-api";
 import { heyNoAccessCopy, heyPaywallAccountCopy, heyPreparingBody, heyPreparingCopy, heyReadyEmailPromised } from "./hey-preparing";
 import { heyServerDeletedCopy, heyServerDeletedDateLine, heyServerDeletedErrorMessage, heyServerDeletedModel, heyServerDeletedReceiptLine } from "./hey-server-deleted";
+import { deviceAppLocale, heySignInCopy, heySignInHeadline } from "./hey-sign-in";
+import { MobileGoogleMark } from "./mobile-google-mark";
 import {
   iosPaywallCopy,
   iosPaywallSalesView,
@@ -1644,7 +1646,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [tab, setTab] = useState<Tab>("chat");
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [appLocale, setAppLocale] = useState<AppLocale>(hostAppLocale ?? "en");
+  // HPD-1105: before sign-in there is no account preference; follow the device language.
+  const [appLocale, setAppLocale] = useState<AppLocale>(() => hostAppLocale ?? deviceAppLocale());
   const t = mobileText(appLocale);
   const accountPage = accountPageCopy(appLocale);
   const systemPageCopy = t.systemPages;
@@ -2714,7 +2717,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     setToken(null);
     snapshotStateRef.current = null;
     setSnapshot(null);
-    setAppLocale("en");
+    setAppLocale(hostAppLocale ?? deviceAppLocale());
     setMenuOpen(false);
     setMessages([]);
     setChatEventsByRunId({});
@@ -7873,6 +7876,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
 
   if (!token) {
     const canSubmitLogin = Boolean(email.trim() && (loginPassword || accessCode.trim())) && !busy;
+    const signInCopy = heySignInCopy(appLocale);
+    const signInHeadline = heySignInHeadline(appLocale, authEntryMode);
+    const signInTitleAccentAt = signInHeadline.titleAccent ? signInHeadline.title.indexOf(signInHeadline.titleAccent) : -1;
+    // HPD-1105: Apple and Google look alike - black in light mode, white in dark mode.
+    const authProviderTone = resolvedColorScheme === "dark" ? styles.authProviderLight : styles.authProviderDark;
+    const authProviderTextColor = resolvedColorScheme === "dark" ? "#1f1f1f" : "#ffffff";
     if (signedOutSupportOpen) {
       return (
         <SafeAreaView style={styles.safe}>
@@ -7899,76 +7908,65 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <ScrollView
-            contentContainerStyle={styles.authScreen}
+            contentContainerStyle={[styles.authScreen, styles.authScreenCompact]}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.authCard}>
-              <View style={styles.authHero}>
-                <MobileWorkingDragon animated={false} accessibilityLabel="Hey Hermes" size={88} />
-                <Text style={styles.authTitle}>{appCopy.productName}</Text>
-                <Text style={styles.authSubtitle}>{staticUiCopy(appLocale)["Your private assistant, ready when you are."]}</Text>
+            {/* HPD-1105: the signed-out screen in the HPD-1085 paywall design.
+                Dragon, eyebrow, calm headline with a blue accent, one line of
+                benefit, one big primary action (the email link). Apple and
+                Google follow as equal buttons; the password form stays behind
+                a small link (HPD-1087); the mode switch is one quiet line. */}
+            <View style={[styles.authCard, styles.paywallOffer]}>
+              <View style={[styles.paywallArt, styles.authArt]}>
+                <Image source={paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors accessibilityLabel="Hey Hermes" />
               </View>
-
-              <View style={styles.authModeSwitch} accessibilityLabel={staticUiCopy(appLocale)["Account access"]}>
-                <Pressable
-                  style={[styles.authModeButton, authEntryMode === "sign_in" && styles.authModeButtonSelected]}
-                  onPress={() => setAuthEntryMode("sign_in")}
-                  accessibilityRole="button"
-                  accessibilityLabel={staticUiCopy(appLocale)["Sign in"]}
-                  accessibilityState={{ selected: authEntryMode === "sign_in" }}
-                >
-                  <Text style={[styles.authModeText, authEntryMode === "sign_in" && styles.authModeTextSelected]}>{staticUiCopy(appLocale)["Sign in"]}</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.authModeButton, authEntryMode === "create_account" && styles.authModeButtonSelected]}
-                  onPress={() => setAuthEntryMode("create_account")}
-                  accessibilityRole="button"
-                  accessibilityLabel={staticUiCopy(appLocale)["Create account"]}
-                  accessibilityState={{ selected: authEntryMode === "create_account" }}
-                >
-                  <Text style={[styles.authModeText, authEntryMode === "create_account" && styles.authModeTextSelected]}>{staticUiCopy(appLocale)["Create account"]}</Text>
-                </Pressable>
-              </View>
+              <Text style={styles.paywallEyebrow}>{signInCopy.eyebrow}</Text>
+              <Text style={styles.paywallOfferTitle} accessibilityRole="header">
+                {signInTitleAccentAt >= 0 ? (
+                  <>
+                    {signInHeadline.title.slice(0, signInTitleAccentAt)}
+                    <Text style={styles.paywallOfferTitleAccent}>{signInHeadline.titleAccent}</Text>
+                    {signInHeadline.title.slice(signInTitleAccentAt + signInHeadline.titleAccent.length)}
+                  </>
+                ) : signInHeadline.title}
+              </Text>
+              <Text style={styles.authBenefit}>{signInHeadline.body}</Text>
 
               {authEntryMode === "sign_in" && signInWithPassword ? (
-                <View style={styles.authForm}>
+                <View style={styles.authFields}>
                   {/* textContentType is what iOS actually reads; autoComplete alone
                       is Android. Without it iOS guesses, and it guessed "new
                       password" on a sign-in form and offered to invent one. */}
-                  <TextInput value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="email" textContentType="username" keyboardType="email-address" placeholder={staticUiCopy(appLocale)["Email"]} style={styles.input} />
+                  <TextInput value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="email" textContentType="username" keyboardType="email-address" placeholder={staticUiCopy(appLocale)["Email"]} placeholderTextColor={palette.muted} style={styles.authInput} />
                   {/* Two credentials really exist. Someone who redeemed an invite has
                       only a password; someone who has not redeemed yet has only an
                       access code. One field labelled "Access code" asked most people
                       for a credential they do not have. */}
-                  <TextInput value={loginPassword} onChangeText={setLoginPassword} autoCapitalize="none" autoComplete="current-password" textContentType="password" secureTextEntry placeholder={staticUiCopy(appLocale)["Password"]} style={styles.input} />
+                  <TextInput value={loginPassword} onChangeText={setLoginPassword} autoCapitalize="none" autoComplete="current-password" textContentType="password" secureTextEntry placeholder={staticUiCopy(appLocale)["Password"]} placeholderTextColor={palette.muted} style={styles.authInput} />
                   {/* Deliberately not secureTextEntry. An access code is issued in
                       plain text by an owner and pasted in, and a second masked field
                       next to the password made iOS read the form as account
                       creation - it offered to generate a password on a sign-in
                       screen. */}
-                  <TextInput value={accessCode} onChangeText={setAccessCode} autoCapitalize="none" autoCorrect={false} autoComplete="off" textContentType="none" placeholder={staticUiCopy(appLocale)["Access code (if you have not set a password)"]} style={styles.input} />
-                  <Pressable style={[styles.primaryButtonWide, !canSubmitLogin && styles.disabledButton]} onPress={login} disabled={!canSubmitLogin}>
-                    {busy ? <ActivityIndicator color={palette.accentText} /> : <ShieldCheck size={18} color={palette.accentText} />}
-                    <Text style={styles.primaryButtonText}>{busyLabel ? staticUiMessage(appLocale, busyLabel) : staticUiCopy(appLocale)["Sign in"]}</Text>
+                  <TextInput value={accessCode} onChangeText={setAccessCode} autoCapitalize="none" autoCorrect={false} autoComplete="off" textContentType="none" placeholder={staticUiCopy(appLocale)["Access code (if you have not set a password)"]} placeholderTextColor={palette.muted} style={styles.authInput} />
+                  <Pressable style={[styles.paywallCta, styles.authCta, !canSubmitLogin && styles.disabledButton]} onPress={login} disabled={!canSubmitLogin} accessibilityRole="button">
+                    {busy ? <ActivityIndicator color="#ffffff" /> : null}
+                    <Text style={styles.paywallCtaText}>{busyLabel ? staticUiMessage(appLocale, busyLabel) : staticUiCopy(appLocale)["Sign in"]}</Text>
                   </Pressable>
                   <Pressable
-                    style={styles.authSupportButton}
+                    style={styles.authQuietLink}
                     onPress={() => {
                       if (!emailSignupEmail.trim() && email.trim()) setEmailSignupEmail(email.trim());
                       setSignInWithPassword(false);
                     }}
                     accessibilityRole="button"
+                    hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
                   >
                     <Text style={styles.authPasswordToggleText}>{staticUiCopy(appLocale)["Use a sign-in link instead"]}</Text>
                   </Pressable>
                 </View>
               ) : (
-                <View style={styles.authForm}>
-                  <Text style={styles.authModeIntro}>
-                    {authEntryMode === "sign_in"
-                      ? staticUiCopy(appLocale)["We’ll email you a secure sign-in link. No password needed."]
-                      : staticUiCopy(appLocale)["Create your account with email, Google, or Apple."]}
-                  </Text>
+                <View style={styles.authFields}>
                   <TextInput
                     value={emailSignupEmail}
                     onChangeText={(value) => { setEmailSignupEmail(value); if (emailMagicLinkPhase === "sent") setEmailMagicLinkPhase("idle"); }}
@@ -7976,90 +7974,116 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                     autoComplete="email"
                     textContentType="emailAddress"
                     keyboardType="email-address"
-                    placeholder={staticUiCopy(appLocale)["Email"]}
-                    style={styles.input}
+                    placeholder={signInCopy.emailPlaceholder}
+                    placeholderTextColor={palette.muted}
+                    accessibilityLabel={staticUiCopy(appLocale)["Email"]}
+                    style={styles.authInput}
                     editable={emailMagicLinkPhase !== "sending" && emailMagicLinkPhase !== "completing"}
                   />
                   <Pressable
-                    style={[styles.primaryButtonWide, (!emailSignupEmail.trim() || emailMagicLinkPhase === "sending" || emailMagicLinkPhase === "completing") && styles.disabledButton]}
+                    style={[styles.paywallCta, styles.authCta, (!emailSignupEmail.trim() || emailMagicLinkPhase === "sending" || emailMagicLinkPhase === "completing") && styles.disabledButton]}
                     onPress={() => void requestEmailMagicLink()}
                     disabled={!emailSignupEmail.trim() || emailMagicLinkPhase === "sending" || emailMagicLinkPhase === "completing"}
                     accessibilityRole="button"
                   >
                     {emailMagicLinkPhase === "sending" || emailMagicLinkPhase === "completing"
-                      ? <ActivityIndicator color={palette.accentText} />
-                      : <Mail size={18} color={palette.accentText} />}
-                    <Text style={styles.primaryButtonText}>
+                      ? <ActivityIndicator color="#ffffff" />
+                      : null}
+                    <Text style={styles.paywallCtaText}>
                       {emailMagicLinkPhase === "sending"
                         ? staticUiCopy(appLocale)["Sending link…"]
                         : emailMagicLinkPhase === "completing"
                           ? staticUiCopy(appLocale)["Finishing sign-in…"]
-                          : staticUiCopy(appLocale)["Email me a sign-in link"]}
+                          : signInCopy.sendLink}
                     </Text>
                   </Pressable>
-                  {emailMagicLinkPhase === "sent" ? (
-                    <Text style={styles.authModeIntro} accessibilityRole="alert">
-                      {staticUiCopy(appLocale)["If this email can be used with Hey Hermes, a sign-in link is on its way."]}
-                    </Text>
-                  ) : null}
-                  {authEntryMode === "sign_in" ? (
-                    <Pressable
-                      style={styles.authSupportButton}
-                      onPress={() => {
-                        if (!email.trim() && emailSignupEmail.trim()) setEmail(emailSignupEmail.trim());
-                        setSignInWithPassword(true);
-                      }}
-                      accessibilityRole="button"
-                    >
-                      <Text style={styles.authPasswordToggleText}>{staticUiCopy(appLocale)["Sign in with password"]}</Text>
-                    </Pressable>
-                  ) : null}
+                  <Text style={styles.authHint} accessibilityRole={emailMagicLinkPhase === "sent" ? "alert" : undefined}>
+                    {emailMagicLinkPhase === "sent"
+                      ? staticUiCopy(appLocale)["If this email can be used with Hey Hermes, a sign-in link is on its way."]
+                      : signInCopy.linkHint}
+                  </Text>
                 </View>
               )}
 
               {Platform.OS === "ios" && (nativeAuthConfig?.providers.google || (nativeAuthConfig?.providers.apple && appleSignInAvailable)) ? (
-                <View style={styles.nativeAuthGroup}>
-                  <Text style={styles.nativeAuthDivider}>
-                    {authEntryMode === "sign_in" ? staticUiCopy(appLocale)["or continue with"] : staticUiCopy(appLocale)["Choose a sign-up method"]}
-                  </Text>
-                  {nativeAuthConfig?.providers.google ? (
-                    <Pressable
-                      style={[styles.secondaryButtonWide, (!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "login" || !googleSignInReady || Boolean(nativeAuthBusy)) && styles.disabledButton]}
-                      onPress={() => void signInWithGoogle()}
-                      disabled={!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "login" || !googleSignInReady || Boolean(nativeAuthBusy)}
-                    >
-                      {nativeAuthBusy === "google" ? <ActivityIndicator color={palette.teal} /> : <Text style={styles.secondaryButtonText}>G</Text>}
-                      <Text style={styles.secondaryButtonText}>
-                        {authEntryMode === "sign_in" ? staticUiCopy(appLocale)["Continue with Google"] : staticUiCopy(appLocale)["Sign up with Google"]}
-                      </Text>
-                    </Pressable>
-                  ) : null}
+                <View style={styles.authProviders}>
+                  <View style={styles.authOrRow}>
+                    <View style={styles.authOrLine} />
+                    <Text style={styles.authOrText}>{signInCopy.or}</Text>
+                    <View style={styles.authOrLine} />
+                  </View>
                   {nativeAuthConfig?.providers.apple && appleSignInAvailable ? (
-                    nativeAuthBusy ? (
-                      nativeAuthBusy === "apple" ? <ActivityIndicator color={palette.teal} /> : null
+                    nativeAuthBusy === "apple" ? (
+                      <View style={[styles.authProviderButton, authProviderTone]}><ActivityIndicator color={resolvedColorScheme === "dark" ? "#000000" : "#ffffff"} /></View>
                     ) : (
                       <AppleAuthentication.AppleAuthenticationButton
-                        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                        buttonType={authEntryMode === "sign_in"
-                          ? AppleAuthentication.AppleAuthenticationButtonType.CONTINUE
-                          : AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
-                        cornerRadius={8}
-                        onPress={() => void signInWithApple()}
-                        style={styles.appleAuthButton}
+                        key={`apple-${resolvedColorScheme}`}
+                        buttonStyle={resolvedColorScheme === "dark"
+                          ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                          : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                        // HPD-1105: "Continue" in both modes. Apple's own "Sign up"
+                        // title reads "Mit Apple anmelden" in German, next to
+                        // "Mit Google registrieren"; Continue matches Google.
+                        buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                        cornerRadius={14}
+                        onPress={() => { if (!nativeAuthBusy) void signInWithApple(); }}
+                        style={[styles.appleAuthButton, styles.authProviderSize, Boolean(nativeAuthBusy) && styles.disabledButton]}
                       />
                     )
+                  ) : null}
+                  {nativeAuthConfig?.providers.google ? (
+                    <Pressable
+                      style={[styles.authProviderButton, authProviderTone, (!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "login" || !googleSignInReady || Boolean(nativeAuthBusy)) && styles.disabledButton]}
+                      onPress={() => void signInWithGoogle()}
+                      disabled={!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "login" || !googleSignInReady || Boolean(nativeAuthBusy)}
+                      accessibilityRole="button"
+                    >
+                      {nativeAuthBusy === "google" ? <ActivityIndicator color={authProviderTextColor} /> : <MobileGoogleMark size={19} />}
+                      <Text style={[styles.authProviderText, { color: authProviderTextColor }]}>{staticUiCopy(appLocale)["Continue with Google"]}</Text>
+                    </Pressable>
                   ) : null}
                 </View>
               ) : null}
               {error ? <Notice locale={appLocale} tone="error" text={error} onDismiss={dismissAppError} /> : null}
-              <Text style={styles.privacyNote}>{staticUiCopy(appLocale)["Connection details are encrypted. Chat content is private to this workspace and processed by Hey Hermes."]}</Text>
-              <Pressable
-                style={styles.authSupportButton}
-                onPress={() => setSignedOutSupportOpen(true)}
-                accessibilityRole="button"
-              >
-                <Text style={styles.authSupportText}>{t.nav.support}</Text>
-              </Pressable>
+
+              {authEntryMode === "sign_in" && !signInWithPassword ? (
+                <View style={[styles.paywallQuietRow, styles.authPasswordRow]}>
+                  <Pressable
+                    style={styles.paywallQuietAction}
+                    onPress={() => {
+                      if (!email.trim() && emailSignupEmail.trim()) setEmail(emailSignupEmail.trim());
+                      setSignInWithPassword(true);
+                    }}
+                    accessibilityRole="button"
+                    hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+                  >
+                    <Text style={styles.authPasswordToggleText}>{staticUiCopy(appLocale)["Sign in with password"]}</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+              <View style={styles.authSwitchRow} accessibilityLabel={staticUiCopy(appLocale)["Account access"]}>
+                <Text style={styles.authSwitchText}>{authEntryMode === "sign_in" ? signInCopy.newHere : signInCopy.haveAccount}</Text>
+                <Pressable
+                  onPress={() => {
+                    setSignInWithPassword(false);
+                    setAuthEntryMode(authEntryMode === "sign_in" ? "create_account" : "sign_in");
+                  }}
+                  accessibilityRole="button"
+                  hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                >
+                  <Text style={styles.authSwitchLink}>{authEntryMode === "sign_in" ? signInCopy.createLink : signInCopy.signInLink}</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.paywallTerms}>{staticUiCopy(appLocale)["Connection details are encrypted. Chat content is private to this workspace and processed by Hey Hermes."]}</Text>
+              <View style={styles.paywallFooter}>
+                <Pressable
+                  onPress={() => setSignedOutSupportOpen(true)}
+                  accessibilityRole="button"
+                  hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
+                >
+                  <Text style={styles.paywallFooterLink}>{t.nav.support}</Text>
+                </Pressable>
+              </View>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -13580,72 +13604,6 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     width: "100%",
   },
-  authHero: {
-    alignItems: "center",
-    gap: 7,
-    marginBottom: 6,
-  },
-  authTitle: {
-    color: palette.ink,
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: "600",
-    letterSpacing: -0.5,
-  },
-  authSubtitle: {
-    color: palette.muted,
-    fontSize: 15,
-    lineHeight: 21,
-    textAlign: "center",
-  },
-  authModeSwitch: {
-    backgroundColor: palette.tealSoft,
-    borderColor: palette.lineStrong,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    padding: 3,
-  },
-  authModeButton: {
-    alignItems: "center",
-    borderRadius: 8,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 42,
-    paddingHorizontal: 10,
-  },
-  authModeButtonSelected: {
-    backgroundColor: palette.surface,
-    borderColor: palette.line,
-    borderWidth: 1,
-  },
-  authModeText: {
-    color: palette.muted,
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  authModeTextSelected: {
-    color: palette.ink,
-  },
-  authForm: {
-    gap: 10,
-  },
-  authModeIntro: {
-    color: palette.muted,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
-  },
-  authSupportButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  authSupportText: {
-    color: palette.teal,
-    fontSize: 15,
-    fontWeight: "500",
-  },
   authPasswordToggleText: {
     color: palette.muted,
     fontSize: 14,
@@ -13666,10 +13624,111 @@ const styles = StyleSheet.create({
     height: 48,
     width: "100%",
   },
-  nativeAuthDivider: {
+  // HPD-1105: the signed-out screen in the paywall design.
+  authScreenCompact: {
+    paddingTop: 6,
+    paddingBottom: 16,
+  },
+  authArt: {
+    height: 120,
+  },
+  authBenefit: {
+    marginTop: 10,
+    color: palette.text,
+    fontSize: 17,
+    lineHeight: 24,
+  },
+  authFields: {
+    marginTop: 18,
+    gap: 10,
+  },
+  authInput: {
+    minHeight: 54,
+    borderWidth: 1,
+    borderColor: palette.lineStrong,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: palette.surface,
+    color: palette.text,
+    fontSize: 17,
+  },
+  authCta: {
+    marginTop: 0,
+  },
+  authHint: {
     color: palette.muted,
     fontSize: 13,
+    lineHeight: 18,
     textAlign: "center",
+  },
+  authQuietLink: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 36,
+  },
+  authProviders: {
+    marginTop: 14,
+    gap: 10,
+  },
+  authOrRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  authOrLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: palette.lineStrong,
+  },
+  authOrText: {
+    color: palette.muted,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  authProviderSize: {
+    height: 52,
+  },
+  authProviderButton: {
+    height: 52,
+    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  authProviderDark: {
+    backgroundColor: "#000000",
+  },
+  authProviderLight: {
+    backgroundColor: "#ffffff",
+  },
+  authProviderText: {
+    fontSize: 19,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+  },
+  authPasswordRow: {
+    marginTop: 8,
+  },
+  authSwitchRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    alignItems: "center",
+    columnGap: 6,
+    rowGap: 2,
+  },
+  authSwitchText: {
+    color: palette.muted,
+    fontSize: 15,
+  },
+  authSwitchLink: {
+    color: paywallBrandColor,
+    fontSize: 15,
+    fontWeight: "700",
   },
   loading: {
     flex: 1,
