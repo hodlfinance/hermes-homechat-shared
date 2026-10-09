@@ -48,7 +48,7 @@ const signInCopyByLocale: Record<AppLocale, HeySignInCopy> = {
     eyebrow: "Hey Hermes",
     title: "Willkommen bei Hey\u00a0Hermes",
     titleAccent: "Hey\u00a0Hermes",
-    body: "Dein privater Assistent, bereit, wenn du es bist.",
+    body: "Dein privater Assistent, immer bereit.",
     createTitle: "Konto erstellen",
     createTitleAccent: "Konto",
     createBody: "Eine KI, die für dich arbeitet – auf deinem eigenen Server.",
