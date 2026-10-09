@@ -14,6 +14,10 @@ export type PersonalAccessView = Readonly<{
 export type AccountPageCopy = Readonly<{
   linkedAccountsTitle: string;
   linkedAccountsDetail: string;
+  /** HPD-1116: the state word on a linked provider row, e.g. "Google · name@example.com · linked". */
+  linkedState: string;
+  /** HPD-1116: the short confirmation after a provider was linked. */
+  linkedConfirmation: (provider: string) => string;
   privacyTitle: string;
   privacyPromise: string;
   privacyDetailsTitle: string;
@@ -118,6 +122,8 @@ export function personalAccessView(
 const en: AccountPageCopy = {
   linkedAccountsTitle: "Linked accounts",
   linkedAccountsDetail: "Apple and Google are identities linked to this Hey account. Matching email addresses never link accounts.",
+  linkedState: "linked",
+  linkedConfirmation: (provider) => `${provider} is now linked to this account.`,
   privacyTitle: "Privacy",
   privacyPromise: "Your data sits on your own server and belongs to you.",
   privacyDetailsTitle: "What that means",
@@ -151,6 +157,8 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
   de: {
     linkedAccountsTitle: "Verknüpfte Konten",
     linkedAccountsDetail: "Apple und Google sind Identitäten, die mit diesem Hey-Account verknüpft sind. Übereinstimmende E-Mail-Adressen verknüpfen keine Accounts.",
+    linkedState: "verknüpft",
+    linkedConfirmation: (provider) => `${provider} ist jetzt mit diesem Konto verknüpft.`,
     privacyTitle: "Datenschutz",
     privacyPromise: "Deine Daten liegen auf deinem eigenen Server und gehören dir.",
     privacyDetailsTitle: "Was das bedeutet",
@@ -181,6 +189,8 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
   fr: {
     linkedAccountsTitle: "Comptes liés",
     linkedAccountsDetail: "Apple et Google sont des identités liées à ce compte Hey. Des adresses e-mail identiques ne lient jamais les comptes.",
+    linkedState: "lié",
+    linkedConfirmation: (provider) => `${provider} est maintenant lié à ce compte.`,
     privacyTitle: "Confidentialité",
     privacyPromise: "Vos données se trouvent sur votre propre serveur et vous appartiennent.",
     privacyDetailsTitle: "Ce que cela signifie",
@@ -211,6 +221,8 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
   es: {
     linkedAccountsTitle: "Cuentas vinculadas",
     linkedAccountsDetail: "Apple y Google son identidades vinculadas a esta cuenta de Hey. Las direcciones de correo iguales nunca vinculan cuentas.",
+    linkedState: "vinculada",
+    linkedConfirmation: (provider) => `${provider} ya está vinculada a esta cuenta.`,
     privacyTitle: "Privacidad",
     privacyPromise: "Tus datos están en tu propio servidor y te pertenecen.",
     privacyDetailsTitle: "Qué significa",
@@ -241,6 +253,8 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
   it: {
     linkedAccountsTitle: "Account collegati",
     linkedAccountsDetail: "Apple e Google sono identità collegate a questo account Hey. Indirizzi e-mail uguali non collegano mai gli account.",
+    linkedState: "collegato",
+    linkedConfirmation: (provider) => `${provider} è ora collegato a questo account.`,
     privacyTitle: "Privacy",
     privacyPromise: "I tuoi dati si trovano sul tuo server e appartengono a te.",
     privacyDetailsTitle: "Cosa significa",
@@ -271,6 +285,8 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
   "pt-BR": {
     linkedAccountsTitle: "Contas vinculadas",
     linkedAccountsDetail: "Apple e Google são identidades vinculadas a esta conta Hey. Endereços de e-mail iguais nunca vinculam contas.",
+    linkedState: "vinculada",
+    linkedConfirmation: (provider) => `${provider} agora está vinculada a esta conta.`,
     privacyTitle: "Privacidade",
     privacyPromise: "Seus dados ficam no seu próprio servidor e pertencem a você.",
     privacyDetailsTitle: "O que isso significa",
@@ -301,6 +317,8 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
   ja: {
     linkedAccountsTitle: "連携済みアカウント",
     linkedAccountsDetail: "Apple と Google は、この Hey アカウントに連携された本人確認情報です。同じメールアドレスだけでアカウントが連携されることはありません。",
+    linkedState: "連携済み",
+    linkedConfirmation: (provider) => `${provider} をこのアカウントに連携しました。`,
     privacyTitle: "プライバシー",
     privacyPromise: "データはあなた自身のサーバーに保存され、あなたに帰属します。",
     privacyDetailsTitle: "その意味",
@@ -331,6 +349,8 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
   ko: {
     linkedAccountsTitle: "연결된 계정",
     linkedAccountsDetail: "Apple과 Google은 이 Hey 계정에 연결된 신원 정보입니다. 이메일 주소가 같다는 이유만으로 계정이 연결되지는 않습니다.",
+    linkedState: "연결됨",
+    linkedConfirmation: (provider) => `${provider} 계정이 이 계정에 연결되었습니다.`,
     privacyTitle: "개인정보 보호",
     privacyPromise: "데이터는 본인의 서버에 저장되며 본인에게 속합니다.",
     privacyDetailsTitle: "이 의미",
@@ -362,6 +382,24 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
 
 export function accountPageCopy(locale: AppLocale): AccountPageCopy {
   return copyByLocale[locale] ?? en;
+}
+
+/** HPD-1116: one active Google or Apple identity of the signed-in account; never its subject id. */
+export type LinkedIdentityView = Readonly<{ provider: "apple" | "google"; email: string | null }>;
+
+export function linkedProviderName(provider: LinkedIdentityView["provider"]) {
+  return provider === "google" ? "Google" : "Apple";
+}
+
+/** HPD-1116: "Google · name@example.com · linked"; the address is left out when the provider sent none. */
+export function linkedIdentityLine(locale: AppLocale, identity: LinkedIdentityView) {
+  return [linkedProviderName(identity.provider), identity.email?.trim() || null, accountPageCopy(locale).linkedState]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+export function linkedIdentityConfirmation(locale: AppLocale, provider: LinkedIdentityView["provider"]) {
+  return accountPageCopy(locale).linkedConfirmation(linkedProviderName(provider));
 }
 
 function timingLabel(view: PersonalAccessView, copy: AccountPageCopy, formatDate: (value: string) => string) {

@@ -112,7 +112,7 @@ import {
   X,
   UserPlus,
 } from "lucide-react-native";
-import { accountPageCopy, chatRouteAutomationFollowState, heyChatRouteChoices, heyOfferedChatRoutes, personalAccessPresentation } from "../core/index";
+import { accountPageCopy, linkedIdentityConfirmation, linkedIdentityLine, type LinkedIdentityView, chatRouteAutomationFollowState, heyChatRouteChoices, heyOfferedChatRoutes, personalAccessPresentation } from "../core/index";
 import { createMobileLiveVoiceController, liveVoiceActive, liveVoiceCopy, liveVoiceNotice, liveVoiceStartVisible, type NativeLiveVoiceState } from "./mobile-live-voice";
 import { MobileLiveVoiceBar } from "./mobile-live-voice-bar";
 import type {
@@ -1673,6 +1673,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [accountDeletionEmailReauthenticationAccountId, setAccountDeletionEmailReauthenticationAccountId] = useState<string | null>(null);
   const [nativeAuthConfig, setNativeAuthConfig] = useState<HeyNativeAuthConfig | null>(null);
   const [nativeAuthBusy, setNativeAuthBusy] = useState<"apple" | "google" | null>(null);
+  // HPD-1116: the account's active Google/Apple identities and the short note after a link.
+  const [linkedIdentities, setLinkedIdentities] = useState<LinkedIdentityView[]>([]);
+  const [linkConfirmation, setLinkConfirmation] = useState<string | null>(null);
+  const linkedProviders = useMemo(() => new Set(linkedIdentities.map((identity) => identity.provider)), [linkedIdentities]);
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
   const [googleChallenge, setGoogleChallenge] = useState<{ id: string; mode: "link" | "login"; nonce: string } | null>(null);
   const [googleChallengeVersion, setGoogleChallengeVersion] = useState(0);
@@ -2267,6 +2271,23 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }
 
   const api = useMemo(() => createApiClient({ baseUrl: API_BASE, token: token || "missing" }), [token]);
+  // HPD-1116: read the linked identities whenever the Account screen opens or the
+  // session changes (a link swaps the session). An older server without the
+  // route leaves the list empty, which shows the link buttons as before.
+  const accountScreenOpen = tab === "account" ? (settingsSection ?? "account") === "account" : settingsSection === "account";
+  useEffect(() => {
+    if (!token || !accountScreenOpen || host.session.mode !== "standalone") return;
+    let cancelled = false;
+    api.heyLinkedIdentities()
+      .then((value) => { if (!cancelled) setLinkedIdentities(Array.isArray(value?.identities) ? value.identities : []); })
+      .catch(() => { if (!cancelled) setLinkedIdentities([]); });
+    return () => { cancelled = true; };
+  }, [api, token, accountScreenOpen, host.session.mode]);
+  useEffect(() => {
+    if (!linkConfirmation) return;
+    const timer = setTimeout(() => setLinkConfirmation(null), 8_000);
+    return () => clearTimeout(timer);
+  }, [linkConfirmation]);
   // HPD-1063: null = unknown (old server, network error); the paywall then
   // behaves exactly as before.
   const [salesStatus, setSalesStatus] = useState<HeyHermesSalesStatus | null>(null);
@@ -5120,6 +5141,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     commitWorkspaceStatusTruth(null);
     setAppError(null);
     if (mode === "reauthenticate") setAccountDeletionNativeReauthenticationRequired(false);
+    if (mode === "link") {
+      setLinkConfirmation(linkedIdentityConfirmation(appLocale, provider));
+    }
   }
 
   async function signInWithGoogle(mode: "link" | "login" = "login") {
@@ -9580,10 +9604,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                         />
                       </View>
                     ) : null}
-                    {host.session.mode === "standalone" && Platform.OS === "ios" && (nativeAuthConfig?.providers.google || (nativeAuthConfig?.providers.apple && appleSignInAvailable)) ? (
+                    {host.session.mode === "standalone" && Platform.OS === "ios" && (linkedIdentities.length || nativeAuthConfig?.providers.google || (nativeAuthConfig?.providers.apple && appleSignInAvailable)) ? (
                       <MobileSystemSection title={accountPage.linkedAccountsTitle} footer={accountPage.linkedAccountsDetail}>
                         <View style={[styles.systemSurfaceNotice, styles.nativeAuthGroup]}>
-                          {nativeAuthConfig?.providers.google ? (
+                          {/* HPD-1116: one row per linked provider. The API has no route that removes a link, so none is offered here. */}
+                          {linkedIdentities.map((identity) => (
+                            <Text key={identity.provider} style={styles.rowTitle}>{linkedIdentityLine(appLocale, identity)}</Text>
+                          ))}
+                          {linkConfirmation ? <Notice locale={appLocale} tone="info" text={linkConfirmation} onDismiss={() => setLinkConfirmation(null)} /> : null}
+                          {nativeAuthConfig?.providers.google && !linkedProviders.has("google") ? (
                             <Pressable
                               style={[styles.secondaryButtonWide, (!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "link" || !googleSignInReady || Boolean(nativeAuthBusy)) && styles.disabledButton]}
                               onPress={() => void signInWithGoogle("link")}
@@ -9592,7 +9621,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                               <Text style={styles.secondaryButtonText}>{t.systemPages.account.linkGoogle}</Text>
                             </Pressable>
                           ) : null}
-                          {nativeAuthConfig?.providers.apple && appleSignInAvailable ? (
+                          {nativeAuthConfig?.providers.apple && appleSignInAvailable && !linkedProviders.has("apple") ? (
                             nativeAuthBusy ? (
                               nativeAuthBusy === "apple" ? <ActivityIndicator color={palette.teal} /> : null
                             ) : (

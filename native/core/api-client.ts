@@ -381,6 +381,11 @@ export interface HeyNativeAuthChallengeRequest {
   surface: HeyNativeAuthSurface;
 }
 
+/** HPD-1116: the signed-in account's active Google/Apple identities; provider and verified address only, never the subject id. */
+export interface HeyLinkedIdentities {
+  identities: Array<{ provider: HeyNativeAuthProvider; email: string | null }>;
+}
+
 export interface HeyAccountDeletionReauthenticationMethods {
   hasEmailMagicLink: boolean;
   hasPassword: boolean;
@@ -642,6 +647,7 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
         `/account/deletion/requests/${encodeURIComponent(id)}`,
         { method: "DELETE", body: JSON.stringify(body) },
       ),
+    heyLinkedIdentities: () => request<HeyLinkedIdentities>("/account/linked-identities"),
     heyAccountDeletionReauthenticationMethods: () =>
       request<HeyAccountDeletionReauthenticationMethods>("/account/deletion/reauthentication-methods"),
     startHeyAccountDeletionEmailReauthentication: (body: { surface: "ios" | "web" }) =>
