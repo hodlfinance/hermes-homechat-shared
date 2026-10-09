@@ -743,6 +743,8 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     planChangePreview: (body: BillingPlanChangePreviewRequest) =>
       request<BillingPlanChangePreview>("/billing/plan-preview", { method: "POST", body: JSON.stringify(body) }),
     revenueCatEvents: () => request<RevenueCatWebhookEvent[]>("/billing/revenuecat/events"),
+    /** HPD-1106: where this account's subscription is managed (App Store or the web billing portal); validate before opening. */
+    revenueCatManagement: () => request<unknown>("/billing/revenuecat/management", { method: "POST", body: "{}" }),
     topUps: () => request<TopUpSummary>("/billing/top-ups"),
     usage: () => request<UsageSummary>("/usage"),
     usageLimits: () => request<UsageLimitStatus>("/usage/limits"),

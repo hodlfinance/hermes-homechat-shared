@@ -461,6 +461,7 @@ import {
   iosPaywallView,
   iosReceiptInUseMessage,
   openIosSubscriptionManagement,
+  mobileSubscriptionManagementHref,
   shouldShowIosPaywallOnboarding,
   type IosPaywallStoreState,
 } from "./ios-paywall";
@@ -1676,6 +1677,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // HPD-1102: the purchase and preparing screens open a small account panel
   // (Sign out, delete account) so deletion stays reachable without a plan.
   const [paywallAccountOpen, setPaywallAccountOpen] = useState(false);
+  // HPD-1106: the deleted-server screen's purchase opens the paywall while the subscription is ended.
+  const [deletedPaywallOpen, setDeletedPaywallOpen] = useState(false);
   const [googleDeletionChallenge, setGoogleDeletionChallenge] = useState<{ expiresAt: string; id: string; nonce: string } | null>(null);
   const [googleDeletionChallengeVersion, setGoogleDeletionChallengeVersion] = useState(0);
   const [input, setInput] = useState(initialDraft);
@@ -3339,8 +3342,18 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
 
   async function manageMobileSubscription() {
     setMobilePurchaseNotice(null);
+    // HPD-1106: a web subscriber manages the subscription on the web, not in the App Store. The
+    // Plane names the place; an unreadable or failed answer keeps the App Store as before.
+    let webHref: string | null = null;
+    if (snapshot) {
+      try {
+        webHref = mobileSubscriptionManagementHref(await api.revenueCatManagement(), { accountId: snapshot.me.id, workspaceId: snapshot.workspace.id });
+      } catch {
+        webHref = null;
+      }
+    }
     try {
-      await openIosSubscriptionManagement((url) => Linking.openURL(url));
+      await openIosSubscriptionManagement((url) => Linking.openURL(url), webHref);
     } catch {
       setMobilePurchaseNotice(
         iosPaywallView({
@@ -8364,7 +8377,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // HPD-1106: the Owner deleted the server. The account no longer waits for a
   // server that the deletion fence never lets come: it reads that the server is
   // gone, and while the subscription runs it may ask for a fresh one.
-  if (productAccessScreen === "deleted" && snapshot.serverDeletion) {
+  if (productAccessScreen === "deleted" && snapshot.serverDeletion && !(deletedPaywallOpen && !hasValidMobileProductAccess(snapshot.entitlement))) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
@@ -8379,6 +8392,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
               await refresh();
             }}
             onManage={Platform.OS === "ios" ? () => void manageMobileSubscription() : null}
+            onPurchase={Platform.OS === "ios" ? () => setDeletedPaywallOpen(true) : null}
             manageNotice={mobilePurchaseNotice}
             accountLabel={heyPaywallAccountCopy(appLocale).entry}
             onOpenAccount={() => setPaywallAccountOpen(true)}
@@ -8415,7 +8429,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     );
   }
 
-  if (productAccessScreen === "purchase") {
+  if (productAccessScreen === "purchase" || (productAccessScreen === "deleted" && deletedPaywallOpen && !hasValidMobileProductAccess(snapshot.entitlement))) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
@@ -9864,6 +9878,7 @@ function HeyServerDeletedPanel({
   formatDate,
   onNewServer,
   onManage,
+  onPurchase,
   manageNotice,
   accountLabel,
   onOpenAccount,
@@ -9877,6 +9892,8 @@ function HeyServerDeletedPanel({
   onNewServer: () => Promise<void>;
   /** iOS: the App Store subscription settings; absent elsewhere. */
   onManage: (() => void) | null;
+  /** iOS: once the subscription has ended, opens the paywall (a new purchase brings a fresh server). */
+  onPurchase: (() => void) | null;
   manageNotice: string | null;
   accountLabel: string;
   onOpenAccount: () => void;
@@ -9942,6 +9959,11 @@ function HeyServerDeletedPanel({
             </Pressable>
           </View>
         </View>
+      ) : null}
+      {model.purchaseOffered && onPurchase ? (
+        <Pressable onPress={onPurchase} accessibilityRole="button" accessibilityLabel={copy.purchase} style={styles.paywallCta}>
+          <Text style={styles.paywallCtaText}>{copy.purchase}</Text>
+        </Pressable>
       ) : null}
       {model.manageOffered && onManage ? (
         <View style={styles.paywallQuietRow}>

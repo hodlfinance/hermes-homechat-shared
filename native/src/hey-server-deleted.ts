@@ -6,7 +6,7 @@ import type { AppLocale, ServerDeletedSnapshotView, ServerOwnerDeletionReceiptSu
  * instead, in the HPD-1085 paywall design: the deletion date, a count-only summary of the host
  * receipt, and, while the subscription runs, "Set up a new server" (Owner only, after an explicit
  * "fresh server, old data is gone" confirmation) and "Manage subscription". Once the subscription
- * has ended, the screen keeps the deleted state with the paywall's account entry only.
+ * has ended, the screen keeps the deleted state with the paywall's purchase and account entry.
  * `titleAccent` is a substring of `title`, painted in the brand blue like the paywall headline.
  */
 export type HeyServerDeletedCopy = {
@@ -19,6 +19,8 @@ export type HeyServerDeletedCopy = {
   receipt: string;
   bodyActive: string;
   bodyEnded: string;
+  /** Once the subscription has ended: opens the paywall; the new purchase brings a fresh server. */
+  purchase: string;
   newServer: string;
   confirmTitle: string;
   confirmBody: string;
@@ -38,7 +40,8 @@ const copyByLocale: Record<AppLocale, HeyServerDeletedCopy> = {
     deletedOn: "Deleted on {date}.",
     receipt: "Receipt: {volumes} disks and {files} files removed, nothing of the server is left.",
     bodyActive: "Your subscription is still running. You can set up a new server or manage your subscription.",
-    bodyEnded: "Your subscription has ended. Your account stays until you delete it.",
+    bodyEnded: "Your subscription has ended. Subscribe again to get a fresh server. Your account stays until you delete it.",
+    purchase: "Subscribe again",
     newServer: "Set up a new server",
     confirmTitle: "Set up a new server?",
     confirmBody: "You get a fresh server. Your old data is gone and does not come back.",
@@ -56,7 +59,8 @@ const copyByLocale: Record<AppLocale, HeyServerDeletedCopy> = {
     deletedOn: "Gelöscht am {date}.",
     receipt: "Beleg: {volumes} Datenträger und {files} Dateien entfernt, vom Server ist nichts übrig.",
     bodyActive: "Dein Abo läuft noch. Du kannst einen neuen Server einrichten oder dein Abo verwalten.",
-    bodyEnded: "Dein Abo ist beendet. Dein Konto bleibt, bis du es löschst.",
+    bodyEnded: "Dein Abo ist beendet. Mit einem neuen Abo bekommst du einen neuen Server. Dein Konto bleibt, bis du es löschst.",
+    purchase: "Wieder abonnieren",
     newServer: "Neuen Server einrichten",
     confirmTitle: "Neuen Server einrichten?",
     confirmBody: "Du bekommst einen frischen Server. Deine alten Daten sind weg und kommen nicht zurück.",
@@ -74,7 +78,8 @@ const copyByLocale: Record<AppLocale, HeyServerDeletedCopy> = {
     deletedOn: "Supprimé le {date}.",
     receipt: "Justificatif : {volumes} disques et {files} fichiers supprimés, il ne reste rien du serveur.",
     bodyActive: "Votre abonnement est toujours actif. Vous pouvez configurer un nouveau serveur ou gérer votre abonnement.",
-    bodyEnded: "Votre abonnement est terminé. Votre compte reste jusqu’à ce que vous le supprimiez.",
+    bodyEnded: "Votre abonnement est terminé. En vous réabonnant, vous obtenez un nouveau serveur. Votre compte reste jusqu’à ce que vous le supprimiez.",
+    purchase: "Se réabonner",
     newServer: "Configurer un nouveau serveur",
     confirmTitle: "Configurer un nouveau serveur ?",
     confirmBody: "Vous obtenez un serveur vierge. Vos anciennes données ont disparu et ne reviendront pas.",
@@ -92,7 +97,8 @@ const copyByLocale: Record<AppLocale, HeyServerDeletedCopy> = {
     deletedOn: "Eliminado el {date}.",
     receipt: "Comprobante: {volumes} discos y {files} archivos eliminados; no queda nada del servidor.",
     bodyActive: "Tu suscripción sigue activa. Puedes configurar un servidor nuevo o gestionar tu suscripción.",
-    bodyEnded: "Tu suscripción ha terminado. Tu cuenta se mantiene hasta que la elimines.",
+    bodyEnded: "Tu suscripción ha terminado. Si te suscribes de nuevo, obtienes un servidor nuevo. Tu cuenta se mantiene hasta que la elimines.",
+    purchase: "Suscribirse de nuevo",
     newServer: "Configurar un servidor nuevo",
     confirmTitle: "¿Configurar un servidor nuevo?",
     confirmBody: "Recibes un servidor limpio. Tus datos anteriores ya no existen y no volverán.",
@@ -110,7 +116,8 @@ const copyByLocale: Record<AppLocale, HeyServerDeletedCopy> = {
     deletedOn: "Eliminato il {date}.",
     receipt: "Ricevuta: {volumes} dischi e {files} file rimossi, del server non resta nulla.",
     bodyActive: "Il tuo abbonamento è ancora attivo. Puoi configurare un nuovo server o gestire l’abbonamento.",
-    bodyEnded: "Il tuo abbonamento è terminato. Il tuo account resta finché non lo elimini.",
+    bodyEnded: "Il tuo abbonamento è terminato. Abbonandoti di nuovo ottieni un nuovo server. Il tuo account resta finché non lo elimini.",
+    purchase: "Abbonati di nuovo",
     newServer: "Configura un nuovo server",
     confirmTitle: "Configurare un nuovo server?",
     confirmBody: "Ricevi un server nuovo. I tuoi vecchi dati non ci sono più e non torneranno.",
@@ -128,7 +135,8 @@ const copyByLocale: Record<AppLocale, HeyServerDeletedCopy> = {
     deletedOn: "Excluído em {date}.",
     receipt: "Comprovante: {volumes} discos e {files} arquivos removidos; nada do servidor restou.",
     bodyActive: "Sua assinatura continua ativa. Você pode configurar um novo servidor ou gerenciar sua assinatura.",
-    bodyEnded: "Sua assinatura terminou. Sua conta continua até você excluí-la.",
+    bodyEnded: "Sua assinatura terminou. Ao assinar novamente, você recebe um novo servidor. Sua conta continua até você excluí-la.",
+    purchase: "Assinar novamente",
     newServer: "Configurar um novo servidor",
     confirmTitle: "Configurar um novo servidor?",
     confirmBody: "Você recebe um servidor novo. Seus dados antigos foram apagados e não voltam.",
@@ -146,7 +154,8 @@ const copyByLocale: Record<AppLocale, HeyServerDeletedCopy> = {
     deletedOn: "削除日: {date}",
     receipt: "証明: ディスク {volumes} 個とファイル {files} 個を削除しました。サーバーのデータは何も残っていません。",
     bodyActive: "サブスクリプションはまだ有効です。新しいサーバーを設定するか、サブスクリプションを管理できます。",
-    bodyEnded: "サブスクリプションは終了しました。アカウントは削除するまで残ります。",
+    bodyEnded: "サブスクリプションは終了しました。再度登録すると新しいサーバーが用意されます。アカウントは削除するまで残ります。",
+    purchase: "再度登録する",
     newServer: "新しいサーバーを設定",
     confirmTitle: "新しいサーバーを設定しますか？",
     confirmBody: "まっさらな新しいサーバーになります。以前のデータは削除済みで、元に戻りません。",
@@ -164,7 +173,8 @@ const copyByLocale: Record<AppLocale, HeyServerDeletedCopy> = {
     deletedOn: "삭제일: {date}",
     receipt: "확인: 디스크 {volumes}개와 파일 {files}개를 삭제했으며 서버에 남은 것은 없습니다.",
     bodyActive: "구독이 아직 활성 상태입니다. 새 서버를 설정하거나 구독을 관리할 수 있습니다.",
-    bodyEnded: "구독이 종료되었습니다. 계정은 직접 삭제할 때까지 유지됩니다.",
+    bodyEnded: "구독이 종료되었습니다. 다시 구독하면 새 서버를 받습니다. 계정은 직접 삭제할 때까지 유지됩니다.",
+    purchase: "다시 구독하기",
     newServer: "새 서버 설정",
     confirmTitle: "새 서버를 설정할까요?",
     confirmBody: "깨끗한 새 서버를 받게 됩니다. 이전 데이터는 삭제되었으며 복구되지 않습니다.",
@@ -196,13 +206,16 @@ export function heyServerDeletedReceiptLine(locale: AppLocale, receipt: ServerOw
 /**
  * What the screen offers. "Set up a new server" only while the Plane says the Owner may
  * (`newServer: "available"`, which already includes the running subscription); "Manage
- * subscription" while the entitlement is valid. Ended: neither, only the account entry.
+ * subscription" while the entitlement is valid. Ended: the paywall's purchase (a new purchase
+ * supersedes the deletion on the Plane) and the account entry.
  */
 export function heyServerDeletedModel(input: { deletion: ServerDeletedSnapshotView; subscriptionActive: boolean }) {
   return {
     subscriptionActive: input.subscriptionActive,
     newServerOffered: input.subscriptionActive && input.deletion.newServer === "available",
     manageOffered: input.subscriptionActive,
+    // HPD-1106: ended. A new purchase lifts the deletion's fence on the Plane and asks for a fresh server.
+    purchaseOffered: !input.subscriptionActive,
   };
 }
 

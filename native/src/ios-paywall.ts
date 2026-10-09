@@ -663,9 +663,38 @@ export function iosPaywallView(input: {
   } as const;
 }
 
-export async function openIosSubscriptionManagement(openUrl: (url: string) => Promise<unknown>) {
-  await openUrl(IOS_APP_STORE_SUBSCRIPTIONS_URL);
-  return IOS_APP_STORE_SUBSCRIPTIONS_URL;
+/**
+ * HPD-1106: "Manage subscription" on iOS opened the App Store subscriptions for everyone, so a
+ * subscriber who bought on the web found nothing there. The Plane's management route
+ * (POST /billing/revenuecat/management) names where this account's subscription is managed; this
+ * accepts its answer only for the signed-in account and only the two destinations the web accepts:
+ * the App Store page, or a RevenueCat Web Billing portal link with its token. Anything else: null,
+ * and the caller keeps the App Store.
+ */
+export function mobileSubscriptionManagementHref(
+  value: unknown,
+  identity: { accountId: string; workspaceId: string },
+): string | null {
+  if (!value || typeof value !== "object") return null;
+  const answer = value as { accountId?: unknown; workspaceId?: unknown; platform?: unknown; href?: unknown };
+  if (answer.accountId !== identity.accountId || answer.workspaceId !== identity.workspaceId || typeof answer.href !== "string") return null;
+  let url: URL;
+  try { url = new URL(answer.href); } catch { return null; }
+  if (url.protocol !== "https:" || url.username || url.password || url.port || url.hash) return null;
+  if (answer.platform === "app_store") return url.toString() === IOS_APP_STORE_SUBSCRIPTIONS_URL ? IOS_APP_STORE_SUBSCRIPTIONS_URL : null;
+  if (answer.platform === "web_billing") {
+    return url.hostname === "billing.revenuecat.com" && url.pathname.split("/").filter(Boolean).length === 2 && url.searchParams.get("token")
+      ? url.toString()
+      : null;
+  }
+  return null;
+}
+
+/** Opens the web management link when the Plane named one (web subscriber), the App Store otherwise. */
+export async function openIosSubscriptionManagement(openUrl: (url: string) => Promise<unknown>, webHref: string | null = null) {
+  const target = webHref ?? IOS_APP_STORE_SUBSCRIPTIONS_URL;
+  await openUrl(target);
+  return target;
 }
 
 // HPD-1063: the plane refuses to sell while the host has no free place. These
