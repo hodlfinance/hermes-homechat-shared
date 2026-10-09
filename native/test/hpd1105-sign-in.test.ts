@@ -43,8 +43,11 @@ test("HPD-1105: Apple and Google share one look; the switch is one quiet line", 
   const start = source.indexOf("HPD-1105: the signed-out screen in the HPD-1085 paywall design.");
   assert.ok(start > 0);
   const screen = source.slice(start, source.indexOf("</KeyboardAvoidingView>", start));
-  assert.match(screen, /AppleAuthenticationButtonStyle\.WHITE/);
   assert.match(screen, /AppleAuthenticationButtonStyle\.BLACK/);
+  // Dark mode: Google's own dark variant and a transparent dragon, no white boxes.
+  assert.doesNotMatch(screen, /AppleAuthenticationButtonStyle\.WHITE/);
+  assert.match(source, /authProviderGoogleDark: \{\s*backgroundColor: "#131314"/);
+  assert.match(screen, /paywallIllustrationDark/);
   assert.match(screen, /<MobileGoogleMark/);
   assert.match(screen, /styles\.paywallCta/);
   assert.match(screen, /signInCopy\.newHere : signInCopy\.haveAccount/);
