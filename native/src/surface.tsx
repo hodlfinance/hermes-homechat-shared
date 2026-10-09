@@ -2557,6 +2557,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     const subscription = AppState.addEventListener("change", (state) => setAppInFront(state === "active"));
     return () => subscription.remove();
   }, []);
+  // HPD-1121: the Home chat is in view with the app in front -- after a return
+  // from the background, on opening Home, or at start. The host decides what
+  // to do with it (Hey Hermes warms the provider cache of the Home chat).
+  const homeChatInFrontSignal = tab === "chat" && hostVisible && appInFront
+    && chatSessions.find((session) => session.id === activeConversationSessionId)?.role === "home";
+  useEffect(() => {
+    if (!token || !homeChatInFrontSignal) return;
+    host.onHomeChatInFront?.({ token });
+  }, [token, homeChatInFrontSignal]);
   const acknowledgedReadRef = useRef(new Map<string, string>());
   const threadReadTarget = automationThreadReadTarget({
     session: chatSessions.find((session) => session.id === activeConversationSessionId),

@@ -158,6 +158,13 @@ export type NativeR8Transport = {
 export type NativeR8Host = {
   /** HPD-1015: opt-in live voice supplied by the owning product host. */
   liveVoice?: NativeLiveVoicePort;
+  /**
+   * HPD-1121: called when the Home chat comes into view with the app in front
+   * (app foreground, Home opened). Hey Hermes uses it to warm the provider cache
+   * of the Home conversation; a host without it does nothing. Fire and forget:
+   * the surface never waits for it and nothing it does is shown.
+   */
+  onHomeChatInFront?: (input: { token: string }) => void;
   apiBaseUrl: string;
   storageNamespace: string;
   identity: {
