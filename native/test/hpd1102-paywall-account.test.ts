@@ -29,12 +29,13 @@ test("the account entry has its words in all eight languages", () => {
 });
 
 test("the purchase and the preparing screen both open the account panel from their quiet footer", () => {
-  for (const name of ["HeyPreparingPanel", "IosPaywallOfferPanel"]) {
+  // HPD-1106: the deleted-server screen carries the same entry.
+  for (const name of ["HeyPreparingPanel", "IosPaywallOfferPanel", "HeyServerDeletedPanel"]) {
     const body = functionBody(name);
     assert.match(body, /onPress=\{onOpenAccount\}[\s\S]*?paywallFooterLink[\s\S]*?\{accountLabel\}/, name);
   }
   const gate = surface.slice(surface.indexOf("HPD-1102: the account panel"), surface.indexOf('if (productAccessScreen === "purchase")'));
-  assert.match(gate, /if \(paywallAccountOpen && \(pendingProductAccess \|\| productAccessScreen === "no_access" \|\| productAccessScreen === "purchase"\)\)/);
+  assert.match(gate, /if \(paywallAccountOpen && \(pendingProductAccess \|\| productAccessScreen === "no_access" \|\| productAccessScreen === "purchase" \|\| productAccessScreen === "deleted"\)\)/);
   assert.match(gate, /<HeyPaywallAccountPanel/);
   assert.match(gate, /deletion=\{accountDeletionPanel\}/);
   assert.match(gate, /onSignOut=\{\(\) => void logout\(\)\}/);
