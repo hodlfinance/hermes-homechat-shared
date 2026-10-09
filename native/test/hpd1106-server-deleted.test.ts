@@ -10,7 +10,8 @@ import {
   heyServerDeletedReceiptLine,
 } from "../src/hey-server-deleted";
 import { mobileProductAccessScreen } from "../src/mobile-product-access";
-import { IOS_APP_STORE_SUBSCRIPTIONS_URL, mobileSubscriptionManagementHref } from "../src/ios-paywall";
+import { IOS_APP_STORE_SUBSCRIPTIONS_URL } from "../src/ios-paywall";
+import { mobileSubscriptionManagementHref, mobileWebSubscriptionManagementHref } from "../src/subscription-management";
 
 // HPD-1106: after "Server löschen" the account read "Dein Hermes wird eingerichtet" forever,
 // because the deletion fences new provisioning. The app now shows the deleted screen instead.
@@ -108,6 +109,8 @@ test("Manage subscription opens the web management for a web subscriber and the 
   const web = "https://billing.revenuecat.com/synthetic-app/portal?token=synthetic";
   assert.equal(mobileSubscriptionManagementHref({ ...identity, platform: "web_billing", href: web }, identity), web);
   assert.equal(mobileSubscriptionManagementHref({ ...identity, platform: "app_store", href: IOS_APP_STORE_SUBSCRIPTIONS_URL }, identity), IOS_APP_STORE_SUBSCRIPTIONS_URL);
+  assert.equal(mobileWebSubscriptionManagementHref({ ...identity, platform: "web_billing", href: web }, identity), web);
+  assert.equal(mobileWebSubscriptionManagementHref({ ...identity, platform: "app_store", href: IOS_APP_STORE_SUBSCRIPTIONS_URL }, identity), null);
   // Anything else falls back to the App Store: another account, another host, no token, http, a mismatched platform.
   for (const value of [
     { accountId: "acct_2", workspaceId: "ws_1", platform: "web_billing", href: web },
@@ -119,6 +122,6 @@ test("Manage subscription opens the web management for a web subscriber and the 
   ]) assert.equal(mobileSubscriptionManagementHref(value, identity), null, JSON.stringify(value));
   const manage = surface.slice(surface.indexOf("async function manageMobileSubscription()"), surface.indexOf("const loadNativeCapabilities"));
   assert.match(manage, /api\.revenueCatManagement\(\)/);
-  assert.match(manage, /mobileSubscriptionManagementHref\(/);
-  assert.match(manage, /openIosSubscriptionManagement\(\(url\) => Linking\.openURL\(url\), webHref\)/);
+  assert.match(manage, /mobileWebSubscriptionManagementHref\(/);
+  assert.match(manage, /if \(webHref\) await Linking\.openURL\(webHref\);\s*else await openIosSubscriptionManagement\(\(url\) => Linking\.openURL\(url\)\)/);
 });

@@ -453,6 +453,7 @@ import {
 } from "./revenuecat-purchases";
 import type { HeyHermesSalesStatus } from "../core/hermes-api";
 import { heyNoAccessCopy, heyPaywallAccountCopy, heyPreparingBody, heyPreparingCopy, heyReadyEmailPromised } from "./hey-preparing";
+import { mobileWebSubscriptionManagementHref } from "./subscription-management";
 import { heyServerDeletedCopy, heyServerDeletedDateLine, heyServerDeletedErrorMessage, heyServerDeletedModel, heyServerDeletedReceiptLine } from "./hey-server-deleted";
 import { deviceAppLocale, heySignInCopy, heySignInHeadline } from "./hey-sign-in";
 import { MobileGoogleMark } from "./mobile-google-mark";
@@ -463,7 +464,6 @@ import {
   iosPaywallView,
   iosReceiptInUseMessage,
   openIosSubscriptionManagement,
-  mobileSubscriptionManagementHref,
   shouldShowIosPaywallOnboarding,
   type IosPaywallStoreState,
 } from "./ios-paywall";
@@ -3350,13 +3350,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     let webHref: string | null = null;
     if (snapshot) {
       try {
-        webHref = mobileSubscriptionManagementHref(await api.revenueCatManagement(), { accountId: snapshot.me.id, workspaceId: snapshot.workspace.id });
+        webHref = mobileWebSubscriptionManagementHref(await api.revenueCatManagement(), { accountId: snapshot.me.id, workspaceId: snapshot.workspace.id });
       } catch {
         webHref = null;
       }
     }
     try {
-      await openIosSubscriptionManagement((url) => Linking.openURL(url), webHref);
+      if (webHref) await Linking.openURL(webHref);
+      else await openIosSubscriptionManagement((url) => Linking.openURL(url));
     } catch {
       setMobilePurchaseNotice(
         iosPaywallView({
