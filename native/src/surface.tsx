@@ -7999,7 +7999,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   </View>
                   {nativeAuthConfig?.providers.apple && appleSignInAvailable ? (
                     nativeAuthBusy === "apple" ? (
-                      <View style={[styles.authProviderButton, authProviderTone]}><ActivityIndicator color={resolvedColorScheme === "dark" ? "#000000" : "#ffffff"} /></View>
+                      <View style={[styles.authProviderButton, styles.authProviderDark]}><ActivityIndicator color="#ffffff" /></View>
                     ) : (
                       <AppleAuthentication.AppleAuthenticationButton
                         key={`apple-${resolvedColorScheme}`}
