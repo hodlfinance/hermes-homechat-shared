@@ -8356,7 +8356,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // No hook here (an early return precedes this point): the ref keeps the same Map while nothing changed.
   const newestBrowserCardsNext = !host.openBrowserTakeover ? new Map<string, string>() :
     browserTakeoverNewestCards(visibleMobileMessages.filter((message) => message.role === "assistant")
-      .map((message) => ({ id: message.id, text: typeof message.content === "string" ? message.content : "" })), API_BASE);
+      // The same text MessageBubble draws cards from (hidden technical activity excluded).
+      .map((message) => {
+        const view = mobileAssistantContentView(message.content);
+        return { id: message.id, text: view.visibleText || (view.technicalActivities.length ? "" : message.content) };
+      }), API_BASE);
   const newestBrowserCardsKey = JSON.stringify([...newestBrowserCardsNext]);
   if (newestBrowserCardsRef.current.key !== newestBrowserCardsKey) {
     newestBrowserCardsRef.current = { key: newestBrowserCardsKey, map: newestBrowserCardsNext };

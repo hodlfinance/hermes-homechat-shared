@@ -72,3 +72,18 @@ test("HPD-1146: only the newest card of a browser session stays live; an older o
   assert.match(card, /if \(!host \|\| superseded\) return;/, "a settled card never reads");
   assert.match(card, /disabled=\{ended \|\| superseded\}/, "and never opens");
 });
+
+test("HPD-1146: the newest-card map reads the text the bubble draws, and the surface wires it through", () => {
+  const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  assert.match(surface, /const view = mobileAssistantContentView\(message\.content\);\n\s+return \{ id: message\.id, text: view\.visibleText \|\| \(view\.technicalActivities\.length \? "" : message\.content\) \};/);
+  assert.match(surface, /<BrowserTakeoverNewestContext\.Provider value=\{newestBrowserCards\}>/);
+  assert.match(surface, /text=\{assistantText\} messageId=\{message\.id\} \/>/);
+  // The ref is a hook: it must come before the surface's early return.
+  assert.ok(surface.indexOf("const newestBrowserCardsRef = useRef") < surface.indexOf('if (!token && host.session.mode === "external") return'));
+  // Fenced code never makes a message the newest one.
+  const fenced = browserTakeoverNewestCards([
+    { id: "m1", text: `[Anmelden](${relative})` },
+    { id: "m2", text: "So sieht der Link aus:\n```\n[x](" + relative + ")\n```" },
+  ], apiBase);
+  assert.equal(fenced.get(session), "m1");
+});
