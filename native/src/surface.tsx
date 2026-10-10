@@ -7418,7 +7418,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       openPrivateUrl: (target) => takeover ? takeover(target) : WebBrowser.openBrowserAsync(target),
     }).catch(() => setAppError("Could not open that page."));
   }, [api]);
-  const browserTakeoverCardHost = useMemo<BrowserTakeoverCardHost>(() => ({
+  const browserTakeoverCardHost = useMemo<BrowserTakeoverCardHost | null>(() => !host.openBrowserTakeover ? null : ({
     status: (sessionId) => api.browserSessionStatus(sessionId),
     open: (href) => {
       const url = mobileMessageUrl(href);
@@ -11717,7 +11717,9 @@ function LinkedMessageText({
   onCitationPress?: (citation: MobileFinanceCitation) => void;
 }) {
   // HPD-1097: Hermes' takeover link is a "Computer" card; the link text is its task.
-  const parts = browserTakeoverCardParts(text, API_BASE);
+  // Only where the host opens the takeover itself (Hey Hermes); HODL/Fin keep the text link.
+  const cardHost = useContext(BrowserTakeoverCardContext);
+  const parts = cardHost ? browserTakeoverCardParts(text, API_BASE) : [];
   if (parts.some((part) => part.kind === "card")) {
     return (
       <View style={styles.markdownBlocks}>

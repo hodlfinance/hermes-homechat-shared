@@ -41,3 +41,13 @@ test("the card follows the session: open, done after a hand-back, ended when gon
   assert.equal(browserTakeoverCardCopy("de").open, "Computer öffnen");
   assert.equal(browserTakeoverCardCopy("en").done, "✓ Done");
 });
+
+test("HODL/Fin keep the text link: cards appear only where the host opens the takeover itself", async () => {
+  const { readFileSync } = await import("node:fs");
+  const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  assert.match(surface, /useMemo<BrowserTakeoverCardHost \| null>\(\(\) => !host\.openBrowserTakeover \? null :/);
+  assert.match(surface, /const parts = cardHost \? browserTakeoverCardParts\(text, API_BASE\) : \[\];/);
+  const card = readFileSync(new URL("../src/BrowserTakeoverCard.tsx", import.meta.url), "utf8");
+  assert.match(card, /AppState\.currentState === "active"/, "no reads in the background");
+  assert.match(card, /settled = next !== "open";/, "no reads after done or ended");
+});

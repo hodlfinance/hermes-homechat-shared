@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { ApiError } from "../core/api-client";
 import { browserTakeoverCardCopy, browserTakeoverCardState, type BrowserTakeoverCardState } from "../core/browser-takeover-card";
 import type { AppLocale } from "../core/types";
@@ -21,21 +21,30 @@ export function BrowserTakeoverCard({ task, href, sessionId, locale }:
   const [state, setState] = useState<BrowserTakeoverCardState>("open");
   useEffect(() => {
     if (!host) return;
-    let active = true, timer: ReturnType<typeof setTimeout> | undefined;
-    const read = async () => {
-      try {
-        const next = browserTakeoverCardState(200, await host.status(sessionId));
-        if (active) setState(next);
-      } catch (error) {
-        const next = error instanceof ApiError ? browserTakeoverCardState(error.status, null) : "open";
-        if (!active) return;
-        setState(next);
-        if (next === "ended") return; // a finished session never comes back
-      }
-      if (active) timer = setTimeout(read, 5000);
+    // Reads only while the app is in front, and stops once the card is done or ended.
+    let active = true, settled = false, timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+      if (active && !settled && AppState.currentState === "active") timer = setTimeout(read, 5000);
     };
+    const read = async () => {
+      timer = undefined;
+      if (!active || settled || AppState.currentState !== "active") return;
+      let next: BrowserTakeoverCardState;
+      try { next = browserTakeoverCardState(200, await host.status(sessionId)); }
+      catch (error) { next = error instanceof ApiError ? browserTakeoverCardState(error.status, null) : "open"; }
+      if (!active) return;
+      setState(next);
+      settled = next !== "open";
+      schedule();
+    };
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active" && !timer && !settled) void read();
+      else if (state !== "active" && timer) { clearTimeout(timer); timer = undefined; }
+    });
     void read();
-    return () => { active = false; if (timer) clearTimeout(timer); };
+    return () => { active = false; subscription.remove(); if (timer) clearTimeout(timer); };
   }, [host, sessionId]);
   const ended = state === "ended";
   return (
