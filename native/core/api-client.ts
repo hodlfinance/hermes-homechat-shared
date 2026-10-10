@@ -928,6 +928,9 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     workspaceFiles: () => request<WorkspaceTextFile[]>("/workspace/files"),
     managementAgentStatus: () => request<WorkspaceManagementAgentStatus>("/workspace/management-agent/status"),
     hermesDashboardRoute: () => request<HermesDashboardRoute>("/workspace/hermes-dashboard-route"),
+    /** HPD-1097: the "Computer" card's status read; 404/410 throw ApiError once the session is gone. */
+    browserSessionStatus: (sessionId: string) =>
+      request<{ controlOwner?: string; handedBack?: boolean }>(`/browser/sessions/${encodeURIComponent(sessionId)}`),
     browserSessionHandoff: (body: BrowserSessionHandoffRequest) =>
       request<BrowserSessionHandoffResponse>("/auth/browser-session-handoff", {
         method: "POST",

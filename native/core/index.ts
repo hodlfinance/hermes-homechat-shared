@@ -4,6 +4,7 @@ export * from "./budget";
 export * from "./api-client";
 export * from "./assistant-message-images";
 export * from "./assistant-message-links";
+export * from "./browser-takeover-card";
 export * from "./chat-send-reliability";
 export * from "./chat-streaming";
 export * from "./chatgpt-connection";

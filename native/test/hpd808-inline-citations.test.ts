@@ -519,5 +519,6 @@ test("the chat message keeps inline references and routes confirmed documents th
   assert.match(inline, /mobileFinanceCitationForUrl\(href, citations\)/);
   assert.match(inline, /onPress=\{\(\) => onCitationPress\(piece\.citation\)\}/);
   const linked = surface.slice(surface.indexOf("function LinkedMessageText("), surface.indexOf("function PendingAssistantMessage("));
-  assert.equal(linked.match(/citations=\{citations\}/g)?.length, 4); // table cell, list item, heading, paragraph
+  // table cell, list item, heading, paragraph; plus the two HPD-1097 pass-throughs around a "Computer" card
+  assert.equal(linked.match(/citations=\{citations\}/g)?.length, 6);
 });

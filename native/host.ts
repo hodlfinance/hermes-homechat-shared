@@ -156,6 +156,12 @@ export type NativeR8Transport = {
   }): Promise<unknown | null>;
 };
 export type NativeR8Host = {
+  /**
+   * HPD-1097: opens the protected browser takeover (an authenticated
+   * /browser/<id> URL) in the host's own full-screen view. Hey Hermes passes
+   * its WebView screen; a host without it keeps the in-app Safari view.
+   */
+  openBrowserTakeover?: (url: string) => Promise<unknown>;
   /** HPD-1015: opt-in live voice supplied by the owning product host. */
   liveVoice?: NativeLiveVoicePort;
   /**
