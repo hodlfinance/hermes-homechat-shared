@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { browserTakeoverCardCopy, browserTakeoverCardParts, browserTakeoverCardState } from "../core/browser-takeover-card";
+import { browserTakeoverCardCopy, browserTakeoverCardIsNewest, browserTakeoverCardParts, browserTakeoverCardState, browserTakeoverNewestCards } from "../core/browser-takeover-card";
 
 // HPD-1097: Hermes' takeover link becomes a "Computer" card; its link text is the task.
 const session = "6f262a17-c500-4761-9356-5056b44eec7d";
@@ -50,4 +51,24 @@ test("HODL/Fin keep the text link: cards appear only where the host opens the ta
   const card = readFileSync(new URL("../src/BrowserTakeoverCard.tsx", import.meta.url), "utf8");
   assert.match(card, /AppState\.currentState === "active"/, "no reads in the background");
   assert.match(card, /settled = next !== "open";/, "no reads after done or ended");
+});
+
+test("HPD-1146: only the newest card of a browser session stays live; an older one is settled", () => {
+  const other = "11111111-2222-4333-8444-555555555555";
+  const newest = browserTakeoverNewestCards([
+    { id: "m1", text: `[Bei KAYAK anmelden](${relative})` },
+    { id: "m2", text: "Kein Link hier." },
+    { id: "m3", text: `Die Prüfung ist noch da. [Prüfung abschließen](https://heyhermes.app${relative})` },
+    { id: "m4", text: `[Anderer Browser](/api/workspace/preview/4321/browser/${other})` },
+  ], apiBase);
+  assert.equal(newest.get(session), "m3");
+  assert.equal(newest.get(other), "m4");
+  assert.equal(browserTakeoverCardIsNewest(newest, session, "m1"), false, "the old card shows done");
+  assert.equal(browserTakeoverCardIsNewest(newest, session, "m3"), true);
+  assert.equal(browserTakeoverCardIsNewest(newest, other, "m4"), true);
+  assert.equal(browserTakeoverCardIsNewest(newest, session, undefined), true, "a card outside the transcript stays live");
+  const card = readFileSync(new URL("../src/BrowserTakeoverCard.tsx", import.meta.url), "utf8");
+  assert.match(card, /const state: BrowserTakeoverCardState = superseded \? "done" : polled;/);
+  assert.match(card, /if \(!host \|\| superseded\) return;/, "a settled card never reads");
+  assert.match(card, /disabled=\{ended \|\| superseded\}/, "and never opens");
 });
