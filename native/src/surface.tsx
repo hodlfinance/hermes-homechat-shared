@@ -422,6 +422,8 @@ import {
   openMobileBrowserHref,
   privateMobileBrowserHrefFromUrl,
 } from "./mobile-browser-session";
+import { BrowserTakeoverCard, BrowserTakeoverCardContext, type BrowserTakeoverCardHost } from "./BrowserTakeoverCard";
+import { browserTakeoverCardParts } from "../core/browser-takeover-card";
 import {
   backupJobDownloadHref,
   prepareWorkspaceExportDownload,
@@ -7404,14 +7406,25 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       void Linking.openURL(url);
       return;
     }
+    // HPD-1097: the browser takeover opens in the host's own full-screen view
+    // when it has one (Hey Hermes); every other private page keeps Safari's.
+    const takeover = host.openBrowserTakeover && /^\/api\/workspace\/preview\/4321\/browser(?:\/|$)/.test(privateHref)
+      ? host.openBrowserTakeover : null;
     void openMobileBrowserHref({
       api,
       apiBase: API_BASE,
       href: privateHref,
       openUrl: (target) => Linking.openURL(target),
-      openPrivateUrl: (target) => WebBrowser.openBrowserAsync(target),
+      openPrivateUrl: (target) => takeover ? takeover(target) : WebBrowser.openBrowserAsync(target),
     }).catch(() => setAppError("Could not open that page."));
   }, [api]);
+  const browserTakeoverCardHost = useMemo<BrowserTakeoverCardHost | null>(() => !host.openBrowserTakeover ? null : ({
+    status: (sessionId) => api.browserSessionStatus(sessionId),
+    open: (href) => {
+      const url = mobileMessageUrl(href);
+      if (url) openMessageLink(url);
+    },
+  }), [api, openMessageLink]);
 
   async function openBookmark(href: string) {
     if (href === HEY_TASKS_PAGE_HREF) {
@@ -8861,6 +8874,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
               ) : null}
             </View>
             <MessageLinkOpenerContext.Provider value={openMessageLink}>
+            <BrowserTakeoverCardContext.Provider value={browserTakeoverCardHost}>
             <ScrollView
               ref={messagesScrollRef}
               style={styles.chatMessages}
@@ -9040,6 +9054,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 />
               ))}
             </ScrollView>
+            </BrowserTakeoverCardContext.Provider>
             </MessageLinkOpenerContext.Provider>
             {showScrollDown ? (
               <Pressable
@@ -11691,6 +11706,35 @@ function MobileMarkdownInlineText({
 }
 
 function LinkedMessageText({
+  locale,
+  text,
+  citations,
+  onCitationPress,
+}: {
+  locale: AppLocale;
+  text: string;
+  citations?: readonly MobileFinanceCitation[];
+  onCitationPress?: (citation: MobileFinanceCitation) => void;
+}) {
+  // HPD-1097: Hermes' takeover link is a "Computer" card; the link text is its task.
+  // Only where the host opens the takeover itself (Hey Hermes); HODL/Fin keep the text link.
+  const cardHost = useContext(BrowserTakeoverCardContext);
+  const parts = cardHost ? browserTakeoverCardParts(text, API_BASE) : [];
+  if (parts.some((part) => part.kind === "card")) {
+    return (
+      <View style={styles.markdownBlocks}>
+        {parts.map((part, index) => part.kind === "card" ? (
+          <BrowserTakeoverCard key={`card-${index}`} task={part.task} href={part.href} sessionId={part.sessionId} locale={locale} />
+        ) : (
+          <MarkdownTextBlocks key={`text-${index}`} locale={locale} text={part.text} citations={citations} onCitationPress={onCitationPress} />
+        ))}
+      </View>
+    );
+  }
+  return <MarkdownTextBlocks locale={locale} text={text} citations={citations} onCitationPress={onCitationPress} />;
+}
+
+function MarkdownTextBlocks({
   locale,
   text,
   citations,
