@@ -509,7 +509,7 @@ test("the chat message keeps inline references and routes confirmed documents th
   assert.match(bubble, /mobileFinanceCitationDocumentResult\(/);
   assert.match(bubble, /if \(result\.kind !== "document"\)/);
   assert.match(bubble, /setOpenCitation\(\{ citation, document: null, phase: "error" \}\)/);
-  assert.match(bubble, /<LinkedMessageText locale=\{locale\} citations=\{citations\} onCitationPress=\{pressCitation\} text=\{assistantText\} \/>/);
+  assert.match(bubble, /<LinkedMessageText locale=\{locale\} citations=\{citations\} onCitationPress=\{pressCitation\} text=\{assistantText\} messageId=\{message\.id\} \/>/);
   assert.match(bubble, /messageText=\{assistantText\}/);
   assert.match(bubble, /messageArtifactReferences=\{financeReferences\}/);
   assert.match(bubble, /<FinanceCitationSheet[\s\S]+onClose=\{closeCitation\}/);

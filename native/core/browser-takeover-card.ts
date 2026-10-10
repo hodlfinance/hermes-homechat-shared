@@ -52,6 +52,28 @@ export function browserTakeoverCardParts(markdown: string, apiBase: string): Bro
     .filter((part) => part.kind === "card" || part.text.trim());
 }
 
+/**
+ * HPD-1146: per browser session, the newest message that carries a card for
+ * it. Only that message's card stays live; an older card of the same session
+ * is settled ("✓ Erledigt"): the hand-back's follow-up turn resets the
+ * session's hand-back flag, so an older card would otherwise turn back into
+ * "Computer öffnen". `messages` are in transcript order, oldest first.
+ */
+export function browserTakeoverNewestCards(messages: readonly { id: string; text: string }[], apiBase: string): Map<string, string> {
+  const newest = new Map<string, string>();
+  for (const message of messages) {
+    for (const part of browserTakeoverCardParts(message.text, apiBase)) {
+      if (part.kind === "card") newest.set(part.sessionId, message.id);
+    }
+  }
+  return newest;
+}
+
+/** A card is live unless its session has a newer card in another message further down the chat. */
+export function browserTakeoverCardIsNewest(newest: ReadonlyMap<string, string>, sessionId: string, messageId: string | undefined) {
+  return !messageId || !newest.has(sessionId) || newest.get(sessionId) === messageId;
+}
+
 /** Card state from one status read: gone or expired ends it; a hand-back makes it done. */
 export function browserTakeoverCardState(status: number, body: unknown): BrowserTakeoverCardState {
   if (status === 404 || status === 410) return "ended";
