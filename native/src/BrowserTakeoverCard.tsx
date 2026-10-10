@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { ApiError } from "../core/api-client";
-import { browserTakeoverCardCopy, browserTakeoverCardState, type BrowserTakeoverCardState } from "../core/browser-takeover-card";
+import { browserTakeoverCardCopy, browserTakeoverCardIsNewest, browserTakeoverCardState, type BrowserTakeoverCardState } from "../core/browser-takeover-card";
 import type { AppLocale } from "../core/types";
 import { palette } from "./mobile-palette";
 
@@ -12,15 +12,22 @@ export type BrowserTakeoverCardHost = {
 };
 
 export const BrowserTakeoverCardContext = createContext<BrowserTakeoverCardHost | null>(null);
+/** HPD-1146: browser session id -> id of the newest transcript message with a card for it. */
+export const BrowserTakeoverNewestContext = createContext<ReadonlyMap<string, string>>(new Map());
+
 
 /** The "Computer" card for Hermes' browser takeover link (spec 3.1). */
-export function BrowserTakeoverCard({ task, href, sessionId, locale }:
-  { task: string; href: string; sessionId: string; locale: AppLocale }) {
+export function BrowserTakeoverCard({ task, href, sessionId, locale, messageId }:
+  { task: string; href: string; sessionId: string; locale: AppLocale; messageId?: string }) {
   const host = useContext(BrowserTakeoverCardContext);
   const copy = browserTakeoverCardCopy(locale);
-  const [state, setState] = useState<BrowserTakeoverCardState>("open");
+  // HPD-1146: an older card of the same session is settled for good; it neither reads nor opens.
+  const newest = useContext(BrowserTakeoverNewestContext);
+  const superseded = !browserTakeoverCardIsNewest(newest, sessionId, messageId);
+  const [polled, setState] = useState<BrowserTakeoverCardState>("open");
+  const state: BrowserTakeoverCardState = superseded ? "done" : polled;
   useEffect(() => {
-    if (!host) return;
+    if (!host || superseded) return;
     // Reads only while the app is in front, and stops once the card is done or ended.
     let active = true, settled = false, timer: ReturnType<typeof setTimeout> | undefined;
     const schedule = () => {
@@ -45,7 +52,7 @@ export function BrowserTakeoverCard({ task, href, sessionId, locale }:
     });
     void read();
     return () => { active = false; subscription.remove(); if (timer) clearTimeout(timer); };
-  }, [host, sessionId]);
+  }, [host, sessionId, superseded]);
   const ended = state === "ended";
   return (
     <View style={styles.card} accessibilityLabel={`${copy.title}: ${task}`}>
@@ -54,12 +61,12 @@ export function BrowserTakeoverCard({ task, href, sessionId, locale }:
       <Text style={styles.notice}>{copy.notice}</Text>
       <Pressable
         accessibilityRole="button"
-        accessibilityState={{ disabled: ended }}
-        disabled={ended}
+        accessibilityState={{ disabled: ended || superseded }}
+        disabled={ended || superseded}
         onPress={() => host?.open(href)}
-        style={({ pressed }) => [styles.button, ended && styles.buttonEnded, pressed && !ended && styles.buttonPressed]}
+        style={({ pressed }) => [styles.button, (ended || superseded) && styles.buttonEnded, pressed && !ended && !superseded && styles.buttonPressed]}
       >
-        <Text style={[styles.buttonText, ended && styles.buttonTextEnded]}>
+        <Text style={[styles.buttonText, (ended || superseded) && styles.buttonTextEnded]}>
           {ended ? copy.ended : state === "done" ? copy.done : copy.open}
         </Text>
       </Pressable>

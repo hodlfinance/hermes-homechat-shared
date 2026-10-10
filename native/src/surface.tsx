@@ -422,8 +422,8 @@ import {
   openMobileBrowserHref,
   privateMobileBrowserHrefFromUrl,
 } from "./mobile-browser-session";
-import { BrowserTakeoverCard, BrowserTakeoverCardContext, type BrowserTakeoverCardHost } from "./BrowserTakeoverCard";
-import { browserTakeoverCardParts } from "../core/browser-takeover-card";
+import { BrowserTakeoverCard, BrowserTakeoverCardContext, BrowserTakeoverNewestContext, type BrowserTakeoverCardHost } from "./BrowserTakeoverCard";
+import { browserTakeoverCardParts, browserTakeoverNewestCards } from "../core/browser-takeover-card";
 import {
   backupJobDownloadHref,
   prepareWorkspaceExportDownload,
@@ -7425,6 +7425,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       if (url) openMessageLink(url);
     },
   }), [api, openMessageLink]);
+  const newestBrowserCardsRef = useRef<{ key: string; map: Map<string, string> }>({ key: "[]", map: new Map() });
 
   async function openBookmark(href: string) {
     if (href === HEY_TASKS_PAGE_HREF) {
@@ -8351,6 +8352,16 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     ), pageStarter,
       { workspaceId: snapshot.workspace.id, conversationId: activeConversationSessionId ?? "" }, pageStarterCopy(appLocale).question),
   });
+  // HPD-1146: per browser session the newest card in the transcript; older ones are settled.
+  // No hook here (an early return precedes this point): the ref keeps the same Map while nothing changed.
+  const newestBrowserCardsNext = !host.openBrowserTakeover ? new Map<string, string>() :
+    browserTakeoverNewestCards(visibleMobileMessages.filter((message) => message.role === "assistant")
+      .map((message) => ({ id: message.id, text: typeof message.content === "string" ? message.content : "" })), API_BASE);
+  const newestBrowserCardsKey = JSON.stringify([...newestBrowserCardsNext]);
+  if (newestBrowserCardsRef.current.key !== newestBrowserCardsKey) {
+    newestBrowserCardsRef.current = { key: newestBrowserCardsKey, map: newestBrowserCardsNext };
+  }
+  const newestBrowserCards = newestBrowserCardsRef.current.map;
   const visibleChatApprovalCards = mobileVisibleChatApprovalCards({
     cards: chatApprovalCards,
     conversationSessionId: activeConversationSessionId,
@@ -8875,6 +8886,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             </View>
             <MessageLinkOpenerContext.Provider value={openMessageLink}>
             <BrowserTakeoverCardContext.Provider value={browserTakeoverCardHost}>
+            <BrowserTakeoverNewestContext.Provider value={newestBrowserCards}>
             <ScrollView
               ref={messagesScrollRef}
               style={styles.chatMessages}
@@ -9054,6 +9066,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 />
               ))}
             </ScrollView>
+            </BrowserTakeoverNewestContext.Provider>
             </BrowserTakeoverCardContext.Provider>
             </MessageLinkOpenerContext.Provider>
             {showScrollDown ? (
@@ -11271,7 +11284,7 @@ function MessageBubble({
         ? <Text style={textStyle} selectable>{message.content}</Text>
         : (
           <View onLayout={onVisibleTextLayout} style={interimMark ? styles.interimReplyText : undefined}>
-            <LinkedMessageText locale={locale} citations={citations} onCitationPress={pressCitation} text={assistantText} />
+            <LinkedMessageText locale={locale} citations={citations} onCitationPress={pressCitation} text={assistantText} messageId={message.id} />
           </View>
         )}
       <AssistantMessageImages images={agentImages} locale={locale} readImage={readImage} />
@@ -11710,9 +11723,12 @@ function LinkedMessageText({
   text,
   citations,
   onCitationPress,
+  messageId,
 }: {
   locale: AppLocale;
   text: string;
+  /** HPD-1146: the transcript message this text belongs to, so only the newest card of a session stays live. */
+  messageId?: string;
   citations?: readonly MobileFinanceCitation[];
   onCitationPress?: (citation: MobileFinanceCitation) => void;
 }) {
@@ -11724,7 +11740,7 @@ function LinkedMessageText({
     return (
       <View style={styles.markdownBlocks}>
         {parts.map((part, index) => part.kind === "card" ? (
-          <BrowserTakeoverCard key={`card-${index}`} task={part.task} href={part.href} sessionId={part.sessionId} locale={locale} />
+          <BrowserTakeoverCard key={`card-${index}`} task={part.task} href={part.href} sessionId={part.sessionId} locale={locale} messageId={messageId} />
         ) : (
           <MarkdownTextBlocks key={`text-${index}`} locale={locale} text={part.text} citations={citations} onCitationPress={onCitationPress} />
         ))}
