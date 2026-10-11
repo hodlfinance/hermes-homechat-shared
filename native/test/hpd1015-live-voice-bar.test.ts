@@ -40,7 +40,7 @@ test("the active bar has three elements and keeps an accessible close control du
     const children = element.props.children as Element[];
     assert.equal(children.length, 3);
     assert.equal(children[0]!.props.children, "Hermes");
-    assert.equal(children[1]!.props.testID, phase === "connecting" ? "live-voice-connecting" : "live-voice-wave");
+    assert.equal(children[1]!.props.testID, phase === "connecting" || phase === "ending" ? "live-voice-pending" : "live-voice-wave");
     assert.equal(children[1]!.props.accessibilityLabel, phase);
     const close = children[2]!;
     assert.equal(close.props.testID, "live-voice-end");
@@ -50,18 +50,22 @@ test("the active bar has three elements and keeps an accessible close control du
   }
 });
 
-test("HPD-1161: while connecting the middle shows a centred spinner, never the flat dotted wave", () => {
-  const { element } = render("connecting", false);
-  const middle = (element.props.children as Element[])[1]!;
-  assert.equal(middle.props.testID, "live-voice-connecting");
-  assert.equal(middle.props.accessibilityLiveRegion, "polite");
-  assert.equal(middle.props.accessibilityState?.busy, true);
-  const spinner = middle.props.children as Element;
-  assert.equal(spinner.type, "ActivityIndicator");
-  assert.equal(spinner.props.testID, "live-voice-connecting-spinner");
-  assert.equal(spinner.props.animating, true);
-  // The dots only appear once the call is live (listening, waiting, speaking) or ending.
-  for (const phase of ["listening", "waiting", "speaking", "ending"]) {
+test("HPD-1161: while connecting or ending the middle shows a centred spinner, never the flat dotted wave", () => {
+  for (const phase of ["connecting", "ending"]) {
+    const { element } = render(phase, false);
+    const middle = (element.props.children as Element[])[1]!;
+    assert.equal(middle.props.testID, "live-voice-pending");
+    assert.equal(middle.props.accessible, true);
+    assert.equal(middle.props.accessibilityLabel, phase);
+    assert.equal(middle.props.accessibilityLiveRegion, "polite");
+    assert.equal(middle.props.accessibilityState?.busy, true);
+    const spinner = middle.props.children as Element;
+    assert.equal(spinner.type, "ActivityIndicator");
+    assert.equal(spinner.props.testID, "live-voice-pending-spinner");
+    assert.equal(spinner.props.animating, true);
+  }
+  // The dots appear only while the call is live: listening, waiting, speaking.
+  for (const phase of ["listening", "waiting", "speaking"]) {
     const live = (render(phase, false).element.props.children as Element[])[1]!;
     assert.equal(live.props.testID, "live-voice-wave");
     assert.equal((live.props.children as Element[]).length, 18);

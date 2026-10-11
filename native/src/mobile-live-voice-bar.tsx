@@ -26,10 +26,11 @@ export function MobileLiveVoiceBar({ brand, phase, statusLabel, endLabel, reduce
   const animate = voiceActive && reduceMotion === false;
   const ending = phase === "ending";
   // HPD-1161: until the audio path is up (peer connected, event channel open,
-  // microphone attached; see @hermes/core live-voice) nothing reaches Hermes.
-  // A flat dotted wave reads as "listening, just quiet", so connecting shows
-  // a spinner and the dots appear only once the call is live.
-  const connecting = phase === "connecting";
+  // microphone attached; see @hermes/core live-voice) nothing reaches Hermes,
+  // and while ending the microphone has already stopped. A flat dotted wave
+  // reads as "listening, just quiet", so both show a spinner; the dots appear
+  // only while the call is live.
+  const pending = phase === "connecting" || ending;
 
   useEffect(() => {
     progress.setValue(0);
@@ -44,10 +45,10 @@ export function MobileLiveVoiceBar({ brand, phase, statusLabel, endLabel, reduce
   return (
     <View testID="live-voice-bar" style={[styles.bar, { backgroundColor: palette.pageBg, borderColor: palette.lineStrong }]}>
       <View style={styles.brand} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{brand}</View>
-      {connecting ? (
-        <View style={styles.wave} accessibilityRole="text" accessibilityLabel={statusLabel}
-          accessibilityLiveRegion="polite" accessibilityState={{ busy: true }} testID="live-voice-connecting">
-          <ActivityIndicator size="small" color={palette.accent} animating testID="live-voice-connecting-spinner" />
+      {pending ? (
+        <View style={styles.wave} accessible accessibilityRole="text" accessibilityLabel={statusLabel}
+          accessibilityLiveRegion="polite" accessibilityState={{ busy: true }} testID="live-voice-pending">
+          <ActivityIndicator size="small" color={palette.accent} animating testID="live-voice-pending-spinner" />
         </View>
       ) : (
         <View style={styles.wave} accessibilityRole="text" accessibilityLabel={statusLabel}
