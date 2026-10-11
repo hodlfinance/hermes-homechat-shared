@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, View } from "react-native";
 import { X } from "lucide-react-native";
 import { useMobilePalette } from "./mobile-palette-context";
 import type { NativeLiveVoicePhase } from "./mobile-live-voice";
@@ -25,6 +25,12 @@ export function MobileLiveVoiceBar({ brand, phase, statusLabel, endLabel, reduce
   const voiceActive = phase === "listening" || phase === "speaking";
   const animate = voiceActive && reduceMotion === false;
   const ending = phase === "ending";
+  // HPD-1161: until the audio path is up (peer connected, event channel open,
+  // microphone attached; see @hermes/core live-voice) nothing reaches Hermes,
+  // and while ending the microphone has already stopped. A flat dotted wave
+  // reads as "listening, just quiet", so both show a spinner; the dots appear
+  // only while the call is live.
+  const pending = phase === "connecting" || ending;
 
   useEffect(() => {
     progress.setValue(0);
@@ -39,19 +45,26 @@ export function MobileLiveVoiceBar({ brand, phase, statusLabel, endLabel, reduce
   return (
     <View testID="live-voice-bar" style={[styles.bar, { backgroundColor: palette.pageBg, borderColor: palette.lineStrong }]}>
       <View style={styles.brand} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{brand}</View>
-      <View style={styles.wave} accessibilityRole="text" accessibilityLabel={statusLabel}
-        accessibilityLiveRegion="polite" testID="live-voice-wave">
-        {waveHeights.map((height, index) => (
-          <Animated.View key={index} style={[styles.waveBar, {
-            // This is an activity animation, not an invented audio-level meter.
-            height: voiceActive ? height : 4,
-            backgroundColor: voiceActive ? palette.accent : palette.secondary,
-            transform: [{ scaleY: animate ? progress.interpolate({
-              inputRange: [0, 0.25, 0.5, 0.75, 1], outputRange: waveScales[index % waveScales.length]!,
-            }) : 1 }],
-          }]} />
-        ))}
-      </View>
+      {pending ? (
+        <View style={styles.wave} accessible accessibilityRole="text" accessibilityLabel={statusLabel}
+          accessibilityLiveRegion="polite" accessibilityState={{ busy: true }} testID="live-voice-pending">
+          <ActivityIndicator size="small" color={palette.accent} animating testID="live-voice-pending-spinner" />
+        </View>
+      ) : (
+        <View style={styles.wave} accessibilityRole="text" accessibilityLabel={statusLabel}
+          accessibilityLiveRegion="polite" testID="live-voice-wave">
+          {waveHeights.map((height, index) => (
+            <Animated.View key={index} style={[styles.waveBar, {
+              // This is an activity animation, not an invented audio-level meter.
+              height: voiceActive ? height : 4,
+              backgroundColor: voiceActive ? palette.accent : palette.secondary,
+              transform: [{ scaleY: animate ? progress.interpolate({
+                inputRange: [0, 0.25, 0.5, 0.75, 1], outputRange: waveScales[index % waveScales.length]!,
+              }) : 1 }],
+            }]} />
+          ))}
+        </View>
+      )}
       <Pressable onPress={onEnd} disabled={ending} accessibilityRole="button" accessibilityLabel={endLabel}
         accessibilityState={{ disabled: ending, busy: ending }} testID="live-voice-end"
         style={({ pressed }) => [styles.close, { backgroundColor: palette.coral, opacity: ending ? 0.5 : pressed ? 0.75 : 1 }]}>
