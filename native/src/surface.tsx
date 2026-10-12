@@ -4,6 +4,8 @@ import { adminUiCopy, notificationDeliveryNotice } from "../core/admin-ui-copy";
 import { connectionUiMessage, connectionPermissionLines as localizedConnectionPermissionLines } from "../core/connection-ui-copy";
 import { mobileChatCardCopy } from "./chat-card-copy";
 import { staticUiCopy, staticUiMessage } from "./static-ui-copy";
+import { formatChatMessageTime } from "./chat-message-time";
+import { useChatClockDay } from "./use-chat-clock-day";
 import { supportAccessCopy, supportAccessOpenCount } from "../core/support-request";
 import { capabilityCopy, capabilityStatusCopy } from "../core/capability-copy";
 import { MobilePrivacySheet } from "./MobilePrivacySheet";
@@ -1464,10 +1466,11 @@ function formatVoiceDuration(ms: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-function formatMessageTime(createdAt: string, locale: AppLocale) {
-  const date = new Date(createdAt);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(date);
+// HPD-1215: a message from an earlier day says which day (Yesterday, weekday,
+// date), in the interface language and the device time zone. `now` comes from
+// useChatClockDay, so the stamps change at midnight without a reload.
+function formatMessageTime(createdAt: string, locale: AppLocale, now: Date) {
+  return formatChatMessageTime(createdAt, locale, { now });
 }
 
 function latestAssistantMessage(messages: ChatMessage[]) {
@@ -1660,6 +1663,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [menuOpen, setMenuOpen] = useState(false);
   // HPD-1105: before sign-in there is no account preference; follow the device language.
   const [appLocale, setAppLocale] = useState<AppLocale>(() => hostAppLocale ?? deviceAppLocale());
+  // HPD-1215: changes once a day, at midnight, so message stamps move from "today" to "Yesterday".
+  const chatClockNow = useChatClockDay();
   const t = mobileText(appLocale);
   const accountPage = accountPageCopy(appLocale);
   const systemPageCopy = t.systemPages;
@@ -9072,6 +9077,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   key={message.id}
                   message={message}
                   locale={appLocale}
+                  now={chatClockNow}
                   copy={t.chat}
                   interimMark={mobileInterimReplyMark({
                     message,
@@ -11277,6 +11283,7 @@ function ChatEmptyState({
 function MessageBubble({
   message,
   locale,
+  now,
   copy,
   interimMark = null,
   showAssistantIdentity,
@@ -11285,6 +11292,8 @@ function MessageBubble({
 }: {
   message: ChatMessage;
   locale: AppLocale;
+  /** HPD-1215: the reference day for the time stamp; from useChatClockDay. */
+  now: Date;
   /** HPD-1062: reads one agent image of this message. */
   readImage?: AssistantImageReader;
   copy: ReturnType<typeof mobileText>["chat"];
@@ -11295,7 +11304,7 @@ function MessageBubble({
 }) {
   const isUser = message.role === "user";
   const textStyle = isUser ? styles.userMessageText : styles.messageText;
-  const messageTime = formatMessageTime(message.createdAt, locale);
+  const messageTime = formatMessageTime(message.createdAt, locale, now);
   const assistantView = isUser ? null : mobileAssistantContentView(message.content);
   const assistantText = assistantView?.visibleText || (assistantView?.technicalActivities.length
     ? "Hermes finished without a visible reply."
