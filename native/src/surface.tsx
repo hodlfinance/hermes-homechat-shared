@@ -1475,10 +1475,10 @@ function formatMessageTime(createdAt: string, locale: AppLocale, now: Date) {
 
 // HPD-1215: timers do not run while the phone sleeps; re-check the day when the app is active again.
 function appStateResume(onResume: () => void) {
-  const subscription = AppState.addEventListener("change", (state) => {
+  const resumeListener = AppState.addEventListener("change", (state) => {
     if (state === "active") onResume();
   });
-  return () => subscription.remove();
+  return () => resumeListener.remove();
 }
 
 function latestAssistantMessage(messages: ChatMessage[]) {
