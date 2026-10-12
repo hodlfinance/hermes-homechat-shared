@@ -17,8 +17,9 @@
  * device clock behind the server's) reads as a date too rather than claiming
  * "today".
  *
- * Pure functions only; `use-chat-clock-day.ts` holds the React hook that turns
- * "today" into "yesterday" at midnight without a reload.
+ * No React here; `use-chat-clock-day.ts` holds the hook that turns "today"
+ * into "yesterday" at midnight without a reload, on top of
+ * startChatClockDayWatch below.
  */
 
 export type ChatMessageTimeOptions = {
@@ -49,15 +50,34 @@ function toDate(value: string | number | Date | null | undefined): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function calendarParts(date: Date, timeZone?: string): { year: number; month: number; day: number } {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  }).formatToParts(date);
-  const read = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
-  return { year: read("year"), month: read("month"), day: read("day") };
+type CalendarParts = { year: number; month: number; day: number };
+
+function localCalendarParts(date: Date): CalendarParts {
+  return { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate() };
+}
+
+/**
+ * The calendar day of `date`. Without a time zone the device's own local
+ * getters answer, which every JavaScript engine has. With a zone, Intl answers;
+ * if that engine's Intl cannot (a throw, or parts that are not numbers), the
+ * local getters answer instead of a NaN day.
+ */
+function calendarParts(date: Date, timeZone?: string): CalendarParts {
+  if (!timeZone) return localCalendarParts(date);
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+    }).formatToParts(date);
+    const read = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
+    const result = { year: read("year"), month: read("month"), day: read("day") };
+    if (Number.isFinite(result.year) && Number.isFinite(result.month) && Number.isFinite(result.day)) return result;
+  } catch {
+    // fall through to the device's local day
+  }
+  return localCalendarParts(date);
 }
 
 /** A string naming the calendar day of `date` in `timeZone`, such as "2026-10-12". */
@@ -130,20 +150,99 @@ export function formatChatMessageTime(
   }
 }
 
+function msUntilNextLocalMidnight(now: Date): number {
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return next.getTime() - now.getTime();
+}
+
 /**
  * Milliseconds until the next calendar day starts in `timeZone`, measured by
- * walking forward to the first minute whose day differs. Always at least one
- * second, so a caller's timer can never spin.
+ * walking forward to the first minute whose day differs. The walk is capped;
+ * if it cannot find the change (an engine whose Intl answers the same day for
+ * every instant), it falls back to the next local midnight. Always at least
+ * one second, so a caller's timer can never spin.
  */
 export function msUntilNextChatDay(now: Date, timeZone?: string): number {
+  const fallback = () => Math.max(1_000, msUntilNextLocalMidnight(now));
+  if (!Number.isFinite(now.getTime())) return 60_000;
+  if (!timeZone) return fallback();
   const today = chatCalendarDayKey(now, timeZone);
-  // Start from the next full minute and step an hour at a time, then narrow
-  // to the minute. At most 26 + 60 + 60 cheap format calls once per day.
   let probe = Math.ceil((now.getTime() + 1) / 60_000) * 60_000;
-  let step = 3_600_000;
-  while (chatCalendarDayKey(new Date(probe), timeZone) === today) probe += step;
-  for (step of [60_000 * 10, 60_000]) {
+  // A calendar day is at most 26 hours long, so 27 hourly steps always reach the next one.
+  let steps = 0;
+  while (chatCalendarDayKey(new Date(probe), timeZone) === today) {
+    if (++steps > 27) return fallback();
+    probe += 3_600_000;
+  }
+  // Narrow back to the exact minute: at most 6 ten-minute and 10 one-minute steps.
+  for (const step of [600_000, 60_000]) {
     while (probe - step > now.getTime() && chatCalendarDayKey(new Date(probe - step), timeZone) !== today) probe -= step;
   }
   return Math.max(1_000, probe - now.getTime());
+}
+
+export type ChatClockDayWatch = {
+  /** Called with the new reference "now" when the calendar day has changed. */
+  onDayChange: (now: Date) => void;
+  timeZone?: string;
+  /** The day the caller currently shows; defaults to the current time. */
+  shownNow?: Date;
+  /**
+   * Calls back when the app or tab comes to the front again, and returns its
+   * unsubscribe. A timer does not run while a phone or a background tab
+   * sleeps; this re-checks the day the moment the chat is visible again.
+   */
+  subscribeResume?: (onResume: () => void) => () => void;
+  /** For tests; defaults to the current time. */
+  clock?: () => Date;
+};
+
+/**
+ * HPD-1215: watches for the calendar day to change. A timer aims at the next
+ * midnight, a once-a-minute check and the resume callback cover what a timer
+ * misses (sleep over midnight, a changed time zone). `onDayChange` fires only
+ * when the day key differs. Returns the cleanup.
+ */
+export function startChatClockDayWatch({ onDayChange, timeZone, shownNow, subscribeResume, clock = () => new Date() }: ChatClockDayWatch): () => void {
+  let stopped = false;
+  let dayKey = chatCalendarDayKey(shownNow ?? clock(), timeZone);
+  let midnightTimer: ReturnType<typeof setTimeout> | undefined;
+  const check = () => {
+    if (stopped) return;
+    const current = clock();
+    const currentKey = chatCalendarDayKey(current, timeZone);
+    if (currentKey !== dayKey) {
+      dayKey = currentKey;
+      onDayChange(current);
+    }
+  };
+  const aim = () => {
+    if (stopped) return;
+    midnightTimer = setTimeout(() => {
+      check();
+      aim();
+    }, msUntilNextChatDay(clock(), timeZone) + 250);
+  };
+  aim();
+  const minuteCheck = setInterval(check, 60_000);
+  const unsubscribeResume = subscribeResume?.(check);
+  // The day may already have changed between the caller's render and now.
+  check();
+  return () => {
+    stopped = true;
+    if (midnightTimer) clearTimeout(midnightTimer);
+    clearInterval(minuteCheck);
+    unsubscribeResume?.();
+  };
+}
+
+/** Resume on the web: the tab became visible again. No-op where there is no document. */
+export function documentVisibilityResume(onResume: () => void): () => void {
+  const doc = (globalThis as { document?: { visibilityState?: string; addEventListener: (type: string, listener: () => void) => void; removeEventListener: (type: string, listener: () => void) => void } }).document;
+  if (!doc) return () => {};
+  const listener = () => {
+    if (doc.visibilityState === "visible") onResume();
+  };
+  doc.addEventListener("visibilitychange", listener);
+  return () => doc.removeEventListener("visibilitychange", listener);
 }

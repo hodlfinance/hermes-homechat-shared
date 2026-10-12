@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import test from "node:test";
+import test, { mock } from "node:test";
 import {
   chatCalendarDayKey,
   chatCalendarDaysBefore,
@@ -8,6 +8,7 @@ import {
   chatYesterdayLabel,
   formatChatMessageTime,
   msUntilNextChatDay,
+  startChatClockDayWatch,
 } from "../src/chat-message-time";
 
 // HPD-1215 (Justus, 2026-10-12): an older chat message showed only "3:23 PM".
@@ -109,9 +110,97 @@ test("the next day starts exactly at local midnight", () => {
 
 test("the app's message bubble uses the shared formatter and the midnight clock", () => {
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
-  assert.match(surface, /const chatClockNow = useChatClockDay\(\);/);
+  assert.match(surface, /const chatClockNow = useChatClockDay\(\{ subscribeResume: appStateResume \}\);/);
+  assert.match(surface, /AppState\.addEventListener\("change"/);
   assert.match(surface, /now=\{chatClockNow\}/);
   assert.match(surface, /formatMessageTime\(message\.createdAt, locale, now\)/);
   assert.match(surface, /formatChatMessageTime\(createdAt, locale, \{ now \}\)/);
   assert.doesNotMatch(surface, /function formatMessageTime[^}]*hour: "2-digit"/);
+});
+
+test("a broken Intl.formatToParts cannot hang the midnight timer or give a NaN day", () => {
+  const original = Intl.DateTimeFormat.prototype.formatToParts;
+  try {
+    // An engine whose parts are not numbers: the local getters answer instead.
+    Intl.DateTimeFormat.prototype.formatToParts = function () { return []; };
+    const key = chatCalendarDayKey(new Date(NOW), BERLIN);
+    assert.match(key, /^\d{4}-\d{2}-\d{2}$/);
+    const started = Date.now();
+    const ms = msUntilNextChatDay(new Date(NOW), BERLIN);
+    assert.ok(ms >= 1_000 && ms <= 26 * 3_600_000, `got ${ms}`);
+    // An engine that answers the same day for every instant: the walk is capped.
+    Intl.DateTimeFormat.prototype.formatToParts = function () {
+      return [
+        { type: "month", value: "1" },
+        { type: "literal", value: "/" },
+        { type: "day", value: "1" },
+        { type: "literal", value: "/" },
+        { type: "year", value: "2026" },
+      ];
+    };
+    const capped = msUntilNextChatDay(new Date(NOW), BERLIN);
+    assert.ok(capped >= 1_000 && capped <= 26 * 3_600_000, `got ${capped}`);
+    // And a throwing one.
+    Intl.DateTimeFormat.prototype.formatToParts = function () { throw new RangeError("no"); };
+    assert.ok(msUntilNextChatDay(new Date(NOW), BERLIN) >= 1_000);
+    assert.ok(Date.now() - started < 1_000, "bounded time");
+  } finally {
+    Intl.DateTimeFormat.prototype.formatToParts = original;
+  }
+});
+
+test("the clock watch fires once at midnight, re-checks on resume, and cleans up", () => {
+  mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: new Date("2026-10-12T21:30:00Z") });
+  try {
+    const changes: string[] = [];
+    let resume: (() => void) | null = null;
+    let unsubscribed = false;
+    const stop = startChatClockDayWatch({
+      timeZone: BERLIN,
+      onDayChange: (now) => changes.push(now.toISOString()),
+      subscribeResume: (onResume) => {
+        resume = onResume;
+        return () => { unsubscribed = true; };
+      },
+    });
+    // 23:30 Berlin: nothing for 29 minutes.
+    mock.timers.tick(29 * 60_000);
+    assert.deepEqual(changes, []);
+    // Midnight Berlin (22:00Z) plus the 250 ms margin.
+    mock.timers.tick(60_000 + 250);
+    assert.equal(changes.length, 1);
+    assert.equal(chatCalendarDayKey(new Date(changes[0]!), BERLIN), "2026-10-13");
+    // Minute checks and a resume on the same day change nothing.
+    mock.timers.tick(10 * 60_000);
+    resume!();
+    assert.equal(changes.length, 1);
+    stop();
+    assert.equal(unsubscribed, true);
+    // After cleanup no timer fires, even across the next midnight.
+    mock.timers.tick(26 * 3_600_000);
+    resume!();
+    assert.equal(changes.length, 1);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("the clock watch catches a day missed while asleep on resume", () => {
+  mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-12T20:00:00Z") });
+  try {
+    const changes: Date[] = [];
+    let resume: (() => void) | null = null;
+    const stop = startChatClockDayWatch({
+      timeZone: BERLIN,
+      onDayChange: (now) => changes.push(now),
+      subscribeResume: (onResume) => { resume = onResume; return () => {}; },
+    });
+    // The clock jumps (the device slept); no timer ran.
+    mock.timers.setTime(new Date("2026-10-13T06:00:00Z").getTime());
+    resume!();
+    assert.equal(changes.length, 1);
+    stop();
+  } finally {
+    mock.timers.reset();
+  }
 });

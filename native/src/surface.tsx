@@ -1473,6 +1473,14 @@ function formatMessageTime(createdAt: string, locale: AppLocale, now: Date) {
   return formatChatMessageTime(createdAt, locale, { now });
 }
 
+// HPD-1215: timers do not run while the phone sleeps; re-check the day when the app is active again.
+function appStateResume(onResume: () => void) {
+  const subscription = AppState.addEventListener("change", (state) => {
+    if (state === "active") onResume();
+  });
+  return () => subscription.remove();
+}
+
 function latestAssistantMessage(messages: ChatMessage[]) {
   return messages.reduce<ChatMessage | null>((latest, message) => {
     if (message.role !== "assistant") return latest;
@@ -1664,7 +1672,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // HPD-1105: before sign-in there is no account preference; follow the device language.
   const [appLocale, setAppLocale] = useState<AppLocale>(() => hostAppLocale ?? deviceAppLocale());
   // HPD-1215: changes once a day, at midnight, so message stamps move from "today" to "Yesterday".
-  const chatClockNow = useChatClockDay();
+  const chatClockNow = useChatClockDay({ subscribeResume: appStateResume });
   const t = mobileText(appLocale);
   const accountPage = accountPageCopy(appLocale);
   const systemPageCopy = t.systemPages;
