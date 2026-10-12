@@ -29,6 +29,10 @@ const routes: ReadonlyArray<readonly [string, RegExp]> = [
   ["POST", /^\/voice\/realtime\/calls$/],
   ["GET", /^\/voice\/realtime\/calls\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i],
   ["DELETE", /^\/voice\/realtime\/calls\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i],
+  // HPD-1191: the Home cache prewarm (HPD-1121) when the Fin chat comes into
+  // view. The Plane accepts it only for the finance principal of this account
+  // and workspace, and decides itself whether anything is sent.
+  ["POST", /^\/hermes\/home\/prewarm$/],
   ["GET", /^\/ai-connection\/claude$/],
   ["POST", /^\/ai-connection\/(?:chatgpt|claude)\/(?:start|complete)$/],
   ["POST", /^\/plugins\/[^/]+\/operations\/[^/]+$/],

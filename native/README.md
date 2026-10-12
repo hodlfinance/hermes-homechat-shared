@@ -70,3 +70,12 @@ through its BFF; `native/policy` permits only `POST /voice/realtime/calls` and
 `GET`/`DELETE /voice/realtime/calls/<uuidv4>`. The Plane owns the provider
 call, the delegated Hermes runs and the voice time limit; the client shows
 `endedReason` (`call_limit`, `daily_limit`) as a notice under the composer.
+
+## Home prewarm (HPD-1121, HPD-1191)
+
+`native/policy` permits `POST /hermes/home/prewarm`. The HODL host sends it,
+through its BFF, when the Fin chat comes into view (body `{ trigger:
+"app_foreground", surface: "finhermes", channel: "hodl_mobile" }`). The Plane
+answers 202 at once, accepts it only for the finance principal of this account
+and workspace, and owns every limit; a failure changes nothing for the next
+message.
