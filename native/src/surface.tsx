@@ -7100,10 +7100,19 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }
 
   // HPD-1197: "Not now" puts the message back into the composer; nothing is lost.
+  // A message with attachments stays as an ordinary unsent message instead, so
+  // its files can still be sent with "Try again".
   function holdForDailyCheckIn() {
     const held = failedMessage;
+    if (!held) return;
+    if (held.attachments?.length) {
+      setFailedMessage({ ...held, dailyCheckIn: false });
+      return;
+    }
     setFailedMessage(null);
-    if (held?.content) setInput((current) => current.trim() ? current : held.content);
+    if (held.content) {
+      setInput((current) => (current.trim() ? `${current}\n\n${held.content}` : held.content));
+    }
   }
 
   async function dismissFailedSend() {
