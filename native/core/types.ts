@@ -3145,3 +3145,20 @@ export interface ServerAccessView {
   };
   hermes: { state: "enabled" | "disabled-by-owner" | "unknown" };
 }
+
+/** HPD-1196: why "Manage model and memory myself" cannot be switched on here. */
+export type SelfManagedUnavailableReason =
+  | "server_owner_required"
+  | "server_access_required"
+  | "managed_fin_workspace"
+  | "protected_workspace";
+
+/** HPD-1196 / HPD-1197: GET /workspace/self-managed (hey-hermes apps/api/src/app.ts). */
+export interface SelfManagedView {
+  available: boolean;
+  unavailableReason: SelfManagedUnavailableReason | null;
+  selfManaged: boolean;
+  changedAt: string | null;
+  dailyCheckIn: { afterMessages: number; audience: "all_customers" | "included_ai_only" };
+  runtimeApplied?: boolean;
+}

@@ -1,4 +1,5 @@
 import type {
+  SelfManagedView,
   AgentMailbox,
   AgentMailboxInboxSyncResponse,
   AgentMailboxMessage,
@@ -775,6 +776,21 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     revokeServerOwnerSshKey: (keyId: string) =>
       request<ServerOwnerSshKeyListing>(`/workspace/server/ssh-keys/${encodeURIComponent(keyId)}`, { method: "DELETE" }),
     serverAccess: () => request<ServerAccessView>("/workspace/server/access"),
+    /** HPD-1196: "Manage model and memory myself" (src/self-managed.ts has the view). */
+    selfManaged: () => request<SelfManagedView>("/workspace/self-managed"),
+    enableSelfManaged: () =>
+      request<SelfManagedView>("/workspace/self-managed", {
+        method: "POST",
+        body: JSON.stringify({ acknowledged: true }),
+      }),
+    restoreHeyDefaults: () =>
+      request<SelfManagedView>("/workspace/self-managed/restore", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    /** HPD-1197: "Continue anyway" at the daily check-in; holds until the end of the UTC day. */
+    acknowledgeDailyCheckIn: () =>
+      request<{ ok: true; acknowledgedOn: string }>("/usage/daily-check-in", { method: "POST", body: JSON.stringify({}) }),
     /** HPD-1027 S4: ask for one blocking path (from serverAccess) to be removed before the first root grant. */
     removeServerBlockingPath: (path: string) =>
       request<ServerBlockingPathRemoval>("/workspace/server/access/blocking-paths/remove", {
