@@ -79,3 +79,11 @@ through its BFF, when the Fin chat comes into view (body `{ trigger:
 answers 202 at once, accepts it only for the finance principal of this account
 and workspace, and owns every limit; a failure changes nothing for the next
 message.
+
+Host parity (HPD-1220). Every `NativeR8Host` option and every API call the
+surface makes carries a recorded Fin verdict in
+`native/test/hpd1220-host-parity.test.ts`: wired in the HODL host, exempt
+with a reason, or pending with an issue. A new option or call without one
+fails CI. A route Fin needs is permitted here and in the Finance BFF
+(`hodl-hermes-web` `native-r8.ts`); the Plane reads this policy through its
+own pin of this package, so it needs the same pin bump.

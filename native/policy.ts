@@ -33,6 +33,10 @@ const routes: ReadonlyArray<readonly [string, RegExp]> = [
   // view. The Plane accepts it only for the finance principal of this account
   // and workspace, and decides itself whether anything is sent.
   ["POST", /^\/hermes\/home\/prewarm$/],
+  // HPD-1197 / HPD-1220: "Continue anyway" at the daily check-in. The Plane
+  // asks Fin's included-AI customers too (Lead decision 2026-10-12); without
+  // this the card's button failed in HODL.
+  ["POST", /^\/usage\/daily-check-in$/],
   ["GET", /^\/ai-connection\/claude$/],
   ["POST", /^\/ai-connection\/(?:chatgpt|claude)\/(?:start|complete)$/],
   ["POST", /^\/plugins\/[^/]+\/operations\/[^/]+$/],
@@ -41,6 +45,9 @@ const routes: ReadonlyArray<readonly [string, RegExp]> = [
   ["DELETE", /^\/integrations\/[^/]+\/settings$/],
   ["POST", /^\/integrations\/telegram\/pairing\/approve$/],
   ["POST", /^\/connections\/(?:google\/authorize|setup-requests|gmail\/(?:mobile\/start|mobile\/complete|complete))$/],
+  // HPD-1220: the webhook connection's setup request. The client and the Plane
+  // use /connections/request-setup; the permit above named a path nobody calls.
+  ["POST", /^\/connections\/request-setup$/],
   ["GET", /^\/connections\/(?:setup-requests|gmail\/(?:config|status))$/],
   ["DELETE", /^\/connections\/gmail$/],
   ["GET", /^\/secure-secrets\/(?:requests|requests\/[^/]+)$/],
