@@ -45,6 +45,8 @@ export type HermesApiClientErrorOptions = {
   cause?: unknown;
   retryable?: boolean;
   status?: number;
+  /** The Plane's machine-readable reason, e.g. HPD-1197 "daily_check_in". */
+  code?: string;
 };
 
 function isRetryableHermesHttpStatus(status: number): boolean {
@@ -54,10 +56,12 @@ function isRetryableHermesHttpStatus(status: number): boolean {
 export class HermesApiClientError extends Error {
   readonly retryable: boolean;
   readonly status?: number;
+  readonly code?: string;
 
   constructor(message: string, options: HermesApiClientErrorOptions = {}) {
     super(message);
     this.name = "HermesApiClientError";
+    if (options.code) this.code = options.code;
     this.retryable = options.retryable ?? (
       options.status === undefined ? false : isRetryableHermesHttpStatus(options.status)
     );
@@ -100,17 +104,19 @@ export function createHermesApiClient({ baseUrl, token = "", fetchImpl = fetch }
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       let message = text || `Hermes API returned ${response.status}.`;
+      let code: string | undefined;
       try {
-        const parsed = JSON.parse(text) as { error?: unknown; message?: unknown };
+        const parsed = JSON.parse(text) as { error?: unknown; message?: unknown; code?: unknown };
         message = typeof parsed.error === "string"
           ? parsed.error
           : typeof parsed.message === "string"
             ? parsed.message
             : message;
+        if (typeof parsed.code === "string" && parsed.code.trim()) code = parsed.code.trim();
       } catch (error) {
         if (!(error instanceof SyntaxError)) throw error;
       }
-      throw new HermesApiClientError(message, { status: response.status });
+      throw new HermesApiClientError(message, { status: response.status, ...(code ? { code } : {}) });
     }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;

@@ -88,6 +88,7 @@
     "./native/hermes-canonical": "./native/src/hermes-canonical.ts",
     "./native/appI18n": "./native/src/appI18n.ts",
     "./native/server-access": "./native/src/server-access.ts",
+    "./native/self-managed": "./native/src/self-managed.ts",
     "./native/server-full-export": "./native/src/server-full-export.ts",
     "./native/server-owner-deletion": "./native/src/server-owner-deletion.ts",
     "./native/lapse-export": "./native/src/lapse-export.ts",

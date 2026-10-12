@@ -510,6 +510,16 @@ import {
 } from "./mobile-account-action";
 import { MobileSystemRow, MobileSystemSection } from "./mobile-system-surface";
 import { ServerAccessSection } from "./ServerAccessSection";
+import { SelfManagedSection } from "./SelfManagedSection";
+import { DailyCheckInCard } from "./DailyCheckInCard";
+import {
+  dailyCheckInCopy,
+  dailyCheckInLineVisible,
+  isDailyCheckInError,
+  selfManagedBadgeVisible,
+  selfManagedCopy,
+} from "./self-managed";
+import type { SelfManagedView } from "../core/types";
 import { serverAccessCopy, serverAccessVisible, serverAccessWithheldVisible } from "./server-access";
 import { workspaceServerDetailRows } from "./workspace-server-details";
 import { ServerFullExportSection } from "./ServerFullExportSection";
@@ -1942,6 +1952,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [heySuggestionBusyId, setHeySuggestionBusyId] = useState<string | null>(null);
   const [heySuggestionNotice, setHeySuggestionNotice] = useState<string | null>(null);
   const [failedMessage, setFailedMessage] = useState<MobileFailedMessage | null>(null);
+  // HPD-1196 / HPD-1197: the configuration mode and the daily check-in, from GET /workspace/self-managed.
+  const [selfManagedView, setSelfManagedView] = useState<SelfManagedView | null>(null);
+  const [dailyCheckInBusy, setDailyCheckInBusy] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<MobileAttachment[]>([]);
   const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
@@ -2273,6 +2286,25 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }
 
   const api = useMemo(() => createApiClient({ baseUrl: API_BASE, token: token || "missing" }), [token]);
+  // HPD-1196 / HPD-1197: read once per sign-in and again whenever Account or AI Access opens.
+  const selfManagedWorkspaceId = snapshot?.workspace.id ?? null;
+  useEffect(() => {
+    if (!token || !selfManagedWorkspaceId) {
+      setSelfManagedView(null);
+      return;
+    }
+    if (selfManagedView && tab !== "account" && tab !== "ai_access") return;
+    let cancelled = false;
+    api.selfManaged()
+      .then((view) => {
+        if (!cancelled) setSelfManagedView(view);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, token, selfManagedWorkspaceId, tab]);
   // HPD-1116: read the linked identities whenever the Account screen opens or the
   // session changes (a link swaps the session). An older server without the
   // route leaves the list empty, which shows the link buttons as before.
@@ -6363,6 +6395,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             recordMobileChatLatency({ completionMs: durationMs, outcome: "cancelled" }, latencyState);
             return;
           }
+          // HPD-1197: message 81 of the day waits for the customer's answer.
+          if (isDailyCheckInError(err)) {
+            setFailedMessage({ ...failedAttempt, dailyCheckIn: true });
+            releaseMessageSendGate();
+            attemptFailed = true;
+            return;
+          }
           // Same rule as the queued follow-up above. HPD-533.
           if (!(currentRunId && explainedRunFailuresRef.current.has(currentRunId))) {
             setFailedMessage(failedAttempt);
@@ -7035,6 +7074,45 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       retry.conversationSessionId,
       retry.connectionSetupIntent,
     );
+  }
+
+  // HPD-1197: "Continue anyway" holds for the rest of the UTC day, then the held message goes out.
+  async function continueAfterDailyCheckIn() {
+    if (!failedMessage?.dailyCheckIn || dailyCheckInBusy) return;
+    setDailyCheckInBusy(true);
+    try {
+      await api.acknowledgeDailyCheckIn();
+      const held = { ...failedMessage, dailyCheckIn: false };
+      setFailedMessage(held);
+      await runSend(
+        held.content,
+        held.source,
+        mobileFailedMessageRetryKey(held, () => createMobileMessageIdempotencyKey(Crypto.randomUUID)),
+        held.attachments,
+        held.conversationSessionId,
+        held.connectionSetupIntent,
+      );
+    } catch (err) {
+      showCopyNotice(userFacingError(displayError(err, "Could not send the message.")));
+    } finally {
+      setDailyCheckInBusy(false);
+    }
+  }
+
+  // HPD-1197: "Not now" puts the message back into the composer; nothing is lost.
+  // A message with attachments stays as an ordinary unsent message instead, so
+  // its files can still be sent with "Try again".
+  function holdForDailyCheckIn() {
+    const held = failedMessage;
+    if (!held) return;
+    if (held.attachments?.length) {
+      setFailedMessage({ ...held, dailyCheckIn: false });
+      return;
+    }
+    setFailedMessage(null);
+    if (held.content) {
+      setInput((current) => (current.trim() ? `${current}\n\n${held.content}` : held.content));
+    }
   }
 
   async function dismissFailedSend() {
@@ -7843,6 +7921,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           onConnectGmail={() => undefined}
           onOpenAutomations={() => selectMobileScreen("automations")}
           onOpenAiAccess={() => selectMobileScreen("ai_access")}
+          aiAccessBadge={selfManagedBadgeVisible(selfManagedView) ? selfManagedCopy(appLocale).badge : null}
           onOpenConnections={() => selectMobileScreen("connections_customer")}
           onOpenAccount={() => selectMobileScreen("account")}
           onOpenSupport={() => selectMobileScreen("support")}
@@ -8762,6 +8841,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           onConnectGmail={openGmailRecommendation}
           onOpenAutomations={() => selectMobileScreen("automations")}
           onOpenAiAccess={() => selectMobileScreen("ai_access")}
+          aiAccessBadge={selfManagedBadgeVisible(selfManagedView) ? selfManagedCopy(appLocale).badge : null}
           onOpenConnections={() => selectMobileScreen("connections_customer")}
           onOpenAccount={() => selectMobileScreen("account")}
           onOpenSupport={() => selectMobileScreen("support")}
@@ -9049,7 +9129,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   onAnswer={(response) => void submitMobileClarify(runId, clarify, response)}
                 />
               ))}
-              {visibleFailedMessage && !pendingAssistantText ? (
+              {visibleFailedMessage?.dailyCheckIn && !pendingAssistantText ? (
+                <DailyCheckInCard
+                  locale={appLocale}
+                  afterMessages={selfManagedView?.dailyCheckIn.afterMessages ?? 80}
+                  busy={dailyCheckInBusy || (busy && !activeChatRunId)}
+                  onContinue={() => void continueAfterDailyCheckIn()}
+                  onNotNow={holdForDailyCheckIn}
+                />
+              ) : visibleFailedMessage && !pendingAssistantText ? (
                 <FailedMessageNotice
                   text={visibleFailedMessage.content}
                   stage={mobileFailedMessageStage(visibleFailedMessage)}
@@ -9498,6 +9586,20 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           </View>
         )}
 
+        {tab === "ai_access" && selfManagedBadgeVisible(selfManagedView) ? (
+          <View style={styles.systemSurfaceNotice} testID="ai-access-self-managed-banner">
+            <Text style={[styles.muted, { color: palette.amber, fontWeight: "700" }]}>{selfManagedCopy(appLocale).badge}</Text>
+            <Text style={styles.muted}>{selfManagedCopy(appLocale).bannerText}</Text>
+            <Text style={styles.muted}>{selfManagedCopy(appLocale).modelNote}</Text>
+            <Text style={styles.muted}>{`${selfManagedCopy(appLocale).restore} → ${t.nav.account}`}</Text>
+          </View>
+        ) : null}
+        {tab === "ai_access" && dailyCheckInLineVisible(selfManagedView, (selectedChatRoutePreference ?? snapshot?.chatRoutePreference) === "included_ai") ? (
+          <View style={styles.systemSurfaceNotice} testID="ai-access-daily-check-in-line">
+            <Text style={styles.muted}>{dailyCheckInCopy(appLocale).settingsLine(selfManagedView?.dailyCheckIn.afterMessages ?? 80)}</Text>
+            <Text style={styles.muted}>{dailyCheckInCopy(appLocale).settingsDetail}</Text>
+          </View>
+        ) : null}
         {tab === "ai_access" && (
           <MobileAiAccessPanel
             locale={appLocale}
@@ -9859,6 +9961,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                         </View>
                       </MobileSystemSection>
                     ) : null}
+                    {/* HPD-1196: right after server access (SSH), Justus 2026-10-12 (1b). */}
+                    <SelfManagedSection client={api} locale={appLocale} view={selfManagedView} onChanged={setSelfManagedView} />
                     {/* HPD-1098: Invite person and People are admin tools and never appear in the app
                         (Justus, 2026-10-08); the web Admin tab keeps them. Every account sees its own row. */}
                     {host.session.mode === "standalone" && currentAccount ? (
@@ -10668,6 +10772,7 @@ function MobileNavigationDrawer({
   onConnectGmail,
   onOpenAutomations,
   onOpenAiAccess,
+  aiAccessBadge = null,
   onOpenConnections,
   onOpenAccount,
   onOpenSupport,
@@ -10705,6 +10810,8 @@ function MobileNavigationDrawer({
   onConnectGmail: () => void;
   onOpenAutomations: () => void;
   onOpenAiAccess: () => void;
+  /** HPD-1196: "Self-managed" next to AI Access. */
+  aiAccessBadge?: string | null;
   onOpenConnections: () => void;
   onOpenAccount: () => void;
   onOpenSupport: () => void;
@@ -10916,6 +11023,9 @@ function MobileNavigationDrawer({
                   >
                     <Icon size={18} color={active ? palette.teal : palette.ink} />
                     <Text style={styles.mobileDrawerAccountMenuText}>{label}</Text>
+                    {item.id === "ai_access" && aiAccessBadge ? (
+                      <Text style={[styles.statusHint, { color: palette.amber }]} numberOfLines={1}>{aiAccessBadge}</Text>
+                    ) : null}
                   </Pressable>
                 );
               })}

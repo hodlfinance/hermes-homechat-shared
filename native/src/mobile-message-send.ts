@@ -20,6 +20,8 @@ export type MobileFailedMessage = {
   idempotencyKey: string;
   runId?: string | null;
   source: MobileMessageSource;
+  /** HPD-1197: held for the daily check-in, shown as its card instead of a failure. */
+  dailyCheckIn?: boolean;
 };
 
 /** A confirmed completion supersedes a transport failure for that exact run. */
