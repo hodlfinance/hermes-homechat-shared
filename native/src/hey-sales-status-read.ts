@@ -110,6 +110,35 @@ function readOnceWithDeadline<T>(
 }
 
 /**
+ * Is the Android paywall in view? It is where a plan can be bought: the
+ * purchase screen, the purchase screen behind the deleted-server screen, and
+ * the Account page of a running account, which carries the plan. It is out of
+ * view while the app is in the background and while the small account panel
+ * (Sign out, delete account) covers it. Always false on iOS and without a
+ * store: nothing is read again there.
+ */
+export function heySalesPaywallInView(input: {
+  store: HeyStorePlatform | null;
+  appInFront: boolean;
+  /** The small account panel that replaces the purchase screen while open. */
+  accountPanelOpen: boolean;
+  /** What mobileProductAccessScreen answers; null before the first snapshot. */
+  screen: "purchase" | "no_access" | "deleted" | "preparing" | "home" | null;
+  /** The deleted-server screen's purchase was opened. */
+  deletedPaywallOpen: boolean;
+  /** The account holds valid access; the deleted-server screen then shows no paywall. */
+  hasAccess: boolean;
+  /** The Account page of Settings is open. */
+  accountScreenOpen: boolean;
+}): boolean {
+  if (input.store !== "android" || !input.appInFront || input.accountPanelOpen) return false;
+  if (input.screen === "purchase") return true;
+  if (input.screen === "deleted") return input.deletedPaywallOpen && !input.hasAccess;
+  if (input.screen === "home") return input.accountScreenOpen;
+  return false;
+}
+
+/**
  * Does the paywall coming into view start a new round? Only on Android, only
  * at the moment it comes into view, and only when the last round ended without
  * an answer. An answer that names no product or another product is an answer:

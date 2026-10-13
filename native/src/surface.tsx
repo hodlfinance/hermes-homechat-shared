@@ -472,7 +472,7 @@ import {
   type IosPaywallStoreState,
 } from "./ios-paywall";
 import { heyPlayProductGuard, heySignInSurface, heyStorePlatform, heyStoreWordedView, heyStoreWording, type HeyStorePlatform } from "./hey-store-platform";
-import { heySalesStatusRereadOnOpen, readHeySalesStatus } from "./hey-sales-status-read";
+import { heySalesPaywallInView, heySalesStatusRereadOnOpen, readHeySalesStatus } from "./hey-sales-status-read";
 import {
   isProductSessionAuthError,
   mobileChatGptConnectionCardView,
@@ -4819,23 +4819,26 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     return () => clearInterval(timer);
   }, [preparingProductAccess, refresh, refreshProductAccess, token]);
 
-  // HPD-1243: the Android paywall is in view: the purchase screen, or the
-  // Account page that carries the plan, with the app in front. When it comes
-  // back into view after a sales status read that failed, the status is read
-  // once more; until then the paywall keeps the existing "not configured"
-  // state. Coming back means: the app returns to the front, the small account
-  // panel closes, the Account page opens. A purchase cannot be in flight then,
+  // HPD-1243: when the Android paywall comes back into view after a sales
+  // status read that failed, the status is read once more; until then the
+  // paywall keeps the existing "not configured" state. Coming back means: the
+  // app returns to the front, the small account panel closes, the Account page
+  // opens (heySalesPaywallInView). A purchase cannot be in flight then,
   // because a failed read sells nothing. Always false on iOS, where the effect
   // below therefore runs once and does nothing.
-  const salesPaywallInView = storePlatform === "android"
-    && appInFront
-    && !paywallAccountOpen
-    && (
-      productAccessScreenNow === "purchase"
-      || (productAccessScreenNow === "deleted" && deletedPaywallOpen)
-      || (productAccessScreenNow === "home" && accountScreenOpen)
-    );
+  const salesPaywallInView = heySalesPaywallInView({
+    store: storePlatform,
+    appInFront,
+    accountPanelOpen: paywallAccountOpen,
+    screen: productAccessScreenNow,
+    deletedPaywallOpen,
+    hasAccess: snapshot ? hasValidMobileProductAccess(snapshot.entitlement) : false,
+    accountScreenOpen,
+  });
   const salesPaywallWasInViewRef = useRef(false);
+  // This effect runs on the edge only. It reads the status of the render in
+  // which the paywall came into view; listing salesStatusSettled or salesStatus
+  // as dependencies would turn every failed read into the next read, without end.
   useEffect(() => {
     const opened = salesPaywallInView && !salesPaywallWasInViewRef.current;
     salesPaywallWasInViewRef.current = salesPaywallInView;

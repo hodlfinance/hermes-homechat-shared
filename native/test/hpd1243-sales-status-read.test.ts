@@ -5,6 +5,7 @@ import { createApiClient } from "../core/api-client";
 import type { HeyHermesSalesStatus } from "../core/hermes-api";
 import { heyPlayProductGuard } from "../src/hey-store-platform";
 import {
+  heySalesPaywallInView,
   heySalesStatusAndroidRead,
   heySalesStatusRereadOnOpen,
   readHeySalesStatus,
@@ -251,6 +252,68 @@ test("the paywall coming back into view reads again on Android only, and only af
   assert.equal(heySalesStatusRereadOnOpen({ ...failed, store: null }), false);
 });
 
+test("the Android paywall is in view on the purchase screen, behind the deleted-server purchase and on the Account page", () => {
+  const base = {
+    store: "android", appInFront: true, accountPanelOpen: false, screen: "purchase",
+    deletedPaywallOpen: false, hasAccess: false, accountScreenOpen: false,
+  } as const;
+  // The three places that render the paywall.
+  assert.equal(heySalesPaywallInView(base), true);
+  assert.equal(heySalesPaywallInView({ ...base, screen: "deleted", deletedPaywallOpen: true }), true);
+  assert.equal(heySalesPaywallInView({ ...base, screen: "home", hasAccess: true, accountScreenOpen: true }), true);
+  // The purchase screen does not depend on the other two openers.
+  assert.equal(heySalesPaywallInView({ ...base, hasAccess: true, accountScreenOpen: true, deletedPaywallOpen: true }), true);
+
+  // Out of view: the app in the background, the small account panel on top.
+  for (const screen of ["purchase", "deleted", "home"] as const) {
+    const shown = { ...base, screen, deletedPaywallOpen: true, accountScreenOpen: true };
+    assert.equal(heySalesPaywallInView(shown), true, screen);
+    assert.equal(heySalesPaywallInView({ ...shown, appInFront: false }), false, `${screen} in the background`);
+    assert.equal(heySalesPaywallInView({ ...shown, accountPanelOpen: true }), false, `${screen} under the account panel`);
+  }
+  // The deleted-server screen without its purchase opened, or with a running plan: no paywall.
+  assert.equal(heySalesPaywallInView({ ...base, screen: "deleted" }), false);
+  assert.equal(heySalesPaywallInView({ ...base, screen: "deleted", deletedPaywallOpen: true, hasAccess: true }), false);
+  // Home without the Account page: no paywall.
+  assert.equal(heySalesPaywallInView({ ...base, screen: "home", hasAccess: true }), false);
+  assert.equal(heySalesPaywallInView({ ...base, screen: "home", deletedPaywallOpen: true }), false);
+  // Screens that never carry the paywall, whatever else is open.
+  for (const screen of ["preparing", "no_access", null] as const) {
+    assert.equal(heySalesPaywallInView({ ...base, screen, deletedPaywallOpen: true, accountScreenOpen: true }), false, String(screen));
+  }
+  // iOS and a build without a store: never, on every screen.
+  for (const store of ["ios", null] as const) {
+    for (const screen of ["purchase", "deleted", "home"] as const) {
+      assert.equal(heySalesPaywallInView({ ...base, store, screen, deletedPaywallOpen: true, accountScreenOpen: true }), false, `${store} ${screen}`);
+    }
+  }
+});
+
+test("coming into view and a failed read together start exactly one more round", () => {
+  // The surface's edge detection, run as the surface runs it: the reference
+  // holds the last answer, and only a change from out of view to in view opens.
+  let wasInView = false;
+  let round = 0;
+  const render = (inView: boolean, settled: boolean, read: HeyHermesSalesStatus | null) => {
+    const opened = inView && !wasInView;
+    wasInView = inView;
+    if (heySalesStatusRereadOnOpen({ store: "android", opened, settled, status: read })) round += 1;
+  };
+  render(true, false, null); // the paywall opens while the first read runs
+  assert.equal(round, 0);
+  render(true, true, null); // the read failed with the paywall still in view: nothing by itself
+  assert.equal(round, 0);
+  render(false, true, null); // the app goes to the background
+  assert.equal(round, 0);
+  render(true, true, null); // and returns: one more round
+  assert.equal(round, 1);
+  render(true, true, null); // rendered again while still in view: no second one
+  assert.equal(round, 1);
+  render(false, true, null);
+  render(true, true, status); // opened again after an answer: nothing to repair
+  assert.equal(round, 1);
+});
+
 test("the client hands the signal to the request only when one is given", async () => {
   const inits: Array<RequestInit | undefined> = [];
   const api = createApiClient({
@@ -292,9 +355,15 @@ test("the surface reads through the one function, and only Android can start a s
   // The round moves in one place, behind the predicate.
   assert.equal(surface.split("setSalesStatusReadRound(").length - 1, 1);
   assert.match(surface, /if \(heySalesStatusRereadOnOpen\(\{ store: storePlatform, opened, settled: salesStatusSettled, status: salesStatus \}\)\) \{\s*setSalesStatusReadRound\(\(round\) => round \+ 1\);\s*\}/);
-  // "In view" is false on iOS for good, so its effect runs once and does nothing.
-  assert.match(surface, /const salesPaywallInView = storePlatform === "android"\s*&& appInFront/);
-  assert.match(surface, /\}, \[salesPaywallInView\]\);/);
+  // "In view" is decided by the one function, from the same values the render uses.
+  assert.match(surface, /const salesPaywallInView = heySalesPaywallInView\(\{\s*store: storePlatform,\s*appInFront,\s*accountPanelOpen: paywallAccountOpen,\s*screen: productAccessScreenNow,\s*deletedPaywallOpen,\s*hasAccess: snapshot \? hasValidMobileProductAccess\(snapshot\.entitlement\) : false,\s*accountScreenOpen,\s*\}\);/);
+  assert.match(surface, /const productAccessScreenNow = snapshot \? mobileProductAccessScreen\(\{/);
+  // The edge: opened only on the change from out of view to in view, and the
+  // reference is moved on every run.
+  assert.match(surface, /useEffect\(\(\) => \{\s*const opened = salesPaywallInView && !salesPaywallWasInViewRef\.current;\s*salesPaywallWasInViewRef\.current = salesPaywallInView;\s*if \(heySalesStatusRereadOnOpen\(/);
+  assert.match(surface, /const salesPaywallWasInViewRef = useRef\(false\);/);
+  // The effect runs on the edge alone; the status is not a dependency.
+  assert.match(surface, /setSalesStatusReadRound\(\(round\) => round \+ 1\);\s*\}\s*\}, \[salesPaywallInView\]\);/);
 });
 
 test("no sentence was added for a failed or slow read", () => {
