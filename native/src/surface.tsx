@@ -472,6 +472,7 @@ import {
   type IosPaywallStoreState,
 } from "./ios-paywall";
 import { heyPlayProductGuard, heySignInSurface, heyStorePlatform, heyStoreWordedView, heyStoreWording, type HeyStorePlatform } from "./hey-store-platform";
+import { heySalesPaywallInView, heySalesStatusRereadOnOpen, readHeySalesStatus } from "./hey-sales-status-read";
 import {
   isProductSessionAuthError,
   mobileChatGptConnectionCardView,
@@ -2346,13 +2347,19 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // HPD-1243: true once the Plane answered or failed to. Android waits for it
   // before it offers a purchase (heyPlayProductGuard); iOS does not read it.
   const [salesStatusSettled, setSalesStatusSettled] = useState(false);
+  // HPD-1243: counts the reads the Android paywall asked for after a failed
+  // one (see the effect on salesPaywallInView). It stays 0 on iOS, so the
+  // effect below runs there exactly when it always did.
+  const [salesStatusReadRound, setSalesStatusReadRound] = useState(0);
   const [waitlistPhase, setWaitlistPhase] = useState<"idle" | "joining" | "error">("idle");
+  // iOS: the one call, as before. Android: a deadline and a bounded retry, so
+  // the read always ends (hey-sales-status-read.ts).
   useEffect(() => {
     setSalesStatus(null);
     setSalesStatusSettled(false);
     if (!token || host.session.mode !== "standalone" || !storePlatform) return;
     let cancelled = false;
-    void api.salesStatus().then((status) => {
+    void readHeySalesStatus(storePlatform, (options) => api.salesStatus(options), { cancelled: () => cancelled }).then((status) => {
       if (cancelled) return;
       setSalesStatus(status);
       setSalesStatusSettled(true);
@@ -2360,7 +2367,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     return () => {
       cancelled = true;
     };
-  }, [api, token, host.session.mode]);
+  }, [api, token, host.session.mode, salesStatusReadRound]);
   async function joinMobileWaitlist() {
     if (waitlistPhase === "joining") return;
     setWaitlistPhase("joining");
@@ -4785,17 +4792,18 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // switch to chat by itself. When it switches, load the whole snapshot: the
   // server persists the first greeting only once the runtime is ready, so the
   // chat must not open on the snapshot read while it was still being set up.
-  const preparingProductAccess = Boolean(snapshot) && mobileProductAccessScreen({
+  const productAccessScreenNow = snapshot ? mobileProductAccessScreen({
     standalone: host.session.mode === "standalone",
     ios: storePlatform !== null,
-    showPaywallOnboarding: snapshot ? shouldShowIosPaywallOnboarding({
+    showPaywallOnboarding: shouldShowIosPaywallOnboarding({
       comped: snapshot.entitlement.comped === true,
       entitlementStatus: snapshot.entitlement.status,
       runtimeAccess: snapshot.subscription.lifecycle.runtimeAccess,
-    }) : false,
-    snapshot: snapshot!,
+    }),
+    snapshot,
     status: workspaceStatusTruth,
-  }) === "preparing";
+  }) : null;
+  const preparingProductAccess = productAccessScreenNow === "preparing";
   const wasPreparingRef = useRef(false);
   useEffect(() => {
     if (!token) return;
@@ -4810,6 +4818,34 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     const timer = setInterval(() => void refreshProductAccess(), 5_000);
     return () => clearInterval(timer);
   }, [preparingProductAccess, refresh, refreshProductAccess, token]);
+
+  // HPD-1243: when the Android paywall comes back into view after a sales
+  // status read that failed, the status is read once more; until then the
+  // paywall keeps the existing "not configured" state. Coming back means: the
+  // app returns to the front, the small account panel closes, the Account page
+  // opens (heySalesPaywallInView). A purchase cannot be in flight then,
+  // because a failed read sells nothing. Always false on iOS, where the effect
+  // below therefore runs once and does nothing.
+  const salesPaywallInView = heySalesPaywallInView({
+    store: storePlatform,
+    appInFront,
+    accountPanelOpen: paywallAccountOpen,
+    screen: productAccessScreenNow,
+    deletedPaywallOpen,
+    hasAccess: snapshot ? hasValidMobileProductAccess(snapshot.entitlement) : false,
+    accountScreenOpen,
+  });
+  const salesPaywallWasInViewRef = useRef(false);
+  // This effect runs on the edge only. It reads the status of the render in
+  // which the paywall came into view; listing salesStatusSettled or salesStatus
+  // as dependencies would turn every failed read into the next read, without end.
+  useEffect(() => {
+    const opened = salesPaywallInView && !salesPaywallWasInViewRef.current;
+    salesPaywallWasInViewRef.current = salesPaywallInView;
+    if (heySalesStatusRereadOnOpen({ store: storePlatform, opened, settled: salesStatusSettled, status: salesStatus })) {
+      setSalesStatusReadRound((round) => round + 1);
+    }
+  }, [salesPaywallInView]);
 
   useEffect(() => {
     if (!token || !snapshot) {
