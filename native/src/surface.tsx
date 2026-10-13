@@ -114,7 +114,7 @@ import {
   X,
   UserPlus,
 } from "lucide-react-native";
-import { accountPageCopy, linkedIdentityConfirmation, linkedIdentityLine, type LinkedIdentityView, chatRouteAutomationFollowState, heyChatRouteChoices, heyOfferedChatRoutes, personalAccessPresentation } from "../core/index";
+import { accountPageCopy, linkedIdentityConfirmation, linkedIdentityLine, type LinkedIdentityView, chatRouteAutomationFollowState, heyChatRouteChoices, heyOfferedChatRoutes, personalAccessPresentation, personalAccessStore } from "../core/index";
 import { createMobileLiveVoiceController, liveVoiceActive, liveVoiceCopy, liveVoiceNotice, liveVoiceStartVisible, type NativeLiveVoiceState } from "./mobile-live-voice";
 import { MobileLiveVoiceBar } from "./mobile-live-voice-bar";
 import type {
@@ -5119,7 +5119,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }, [token]);
 
   useEffect(() => {
-    if (!storePlatform || !nativeAuthConfig?.providers.google) return;
+    // No challenge is minted for a build that cannot offer Google (Android without the native port).
+    if (!googleOffered) return;
     let cancelled = false;
     const mode = token ? "link" : "login";
     createApiClient({ baseUrl: API_BASE, token: token || "login" })
@@ -5183,7 +5184,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // screen hand Google a stale nonce. Never refresh mid-flow: the in-flight
   // request already carries the current nonce.
   useEffect(() => {
-    if (!storePlatform || !nativeAuthConfig?.providers.google || nativeAuthBusy) return;
+    if (!googleOffered || nativeAuthBusy) return;
     const timer = setInterval(
       () => setGoogleChallengeVersion((current) => current + 1),
       nativeAuthChallengeRefreshMs,
@@ -8333,11 +8334,25 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     runtimeAccess: snapshot.subscription.lifecycle.runtimeAccess,
     storeState: iosPaywallStoreState(mobilePurchasePhase),
   }), appLocale, storePlatform ?? "ios");
+  // HPD-1243: the deletion screen says which store keeps billing. A plan
+  // managed in Google Play, or an Android build whose plan is not known to be
+  // an App Store one, names Google Play; only these two sentences name a store.
+  const subscriptionStore = personalAccessStore(snapshot.subscription);
+  const deletionNamesGooglePlay = subscriptionStore === "play_store" || (storePlatform === "android" && subscriptionStore !== "app_store");
+  const accountDeletionCopy = deletionNamesGooglePlay
+    ? {
+        ...t.systemPages.account.deletion,
+        confirmBody: heyStoreWording(t.systemPages.account.deletion.confirmBody, appLocale, "android"),
+        subscriptionKept: heyStoreWording(t.systemPages.account.deletion.subscriptionKept, appLocale, "android"),
+      }
+    : t.systemPages.account.deletion;
   const personalAccess = personalAccessPresentation(
     snapshot.entitlement,
     appLocale,
     (value) => formatSecurityDate(value, appLocale),
     snapshot.subscription.promotionalGrant,
+    // HPD-1243: a Google Play or web trial is not called an App Store trial.
+    subscriptionStore,
   );
   const productAccessScreen = mobileProductAccessScreen({
     standalone: host.session.mode === "standalone",
@@ -8553,14 +8568,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       api={api}
       busy={busy}
       onDeleted={logout}
-      copy={t.systemPages.account.deletion}
+      copy={accountDeletionCopy}
       locale={appLocale}
       emailReauthenticationCompleted={accountDeletionEmailReauthenticationAccountId === snapshot.me.id}
       signInSurface={signInSurface}
       onNativeReauthenticationChange={setAccountDeletionNativeReauthenticationRequired}
       reauthenticationActions={(linkedProviders) => (
         <View style={styles.nativeAuthGroup}>
-          {linkedProviders.includes("google") && nativeAuthConfig?.providers.google ? (
+          {/* HPD-1243: Google re-authentication before deletion is iOS only; Android confirms by email link. */}
+          {storePlatform === "ios" && linkedProviders.includes("google") && nativeAuthConfig?.providers.google ? (
             <Pressable
               style={[styles.secondaryButtonWide, (!googleDeletionAuthRequest || !googleDeletionChallenge || Boolean(nativeAuthBusy)) && styles.disabledButton]}
               onPress={() => void reauthenticateAccountDeletionWithGoogle()}

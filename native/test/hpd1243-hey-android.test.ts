@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { appLocales } from "../core/index";
+import { accountPageCopy, appLocales, personalAccessPresentation, personalAccessStore, type Entitlement } from "../core/index";
 import {
   ANDROID_PLAY_SUBSCRIPTIONS_URL,
   heySignInSurface,
@@ -27,6 +27,7 @@ import {
   type MobileStorePackage,
 } from "../src/revenuecat-purchases";
 import { staticUiMessage } from "../src/static-ui-copy";
+import { mobileText } from "../src/appI18n";
 
 /**
  * HPD-1243: Hey Hermes on Android. One switch (the host's
@@ -380,4 +381,48 @@ test("Android: Manage opens Google Play, a web subscriber still goes to the web,
 test("ios-paywall.ts is not touched: the App Store texts and rules stay where the legal review pinned them", () => {
   const source = readFileSync(new URL("../src/ios-paywall.ts", import.meta.url), "utf8");
   assert.doesNotMatch(source, /Google Play|play_store|android/i);
+});
+
+test("the Account page names the store a trial started in; an App Store trial reads as before", () => {
+  const trialing = {
+    accountId: "a", workspaceId: "w", status: "trialing", plan: "personal", comped: false, provider: "revenuecat",
+    revenueCatCustomerId: "a", revenueCatEntitlementId: "hey_hermes_access", trialEndsAt: future, renewsAt: null,
+    gracePeriodEndsAt: null, cancelledAt: null, expiresAt: future, storeProductId: null, updatedAt: future,
+  } as Entitlement;
+  for (const locale of appLocales) {
+    const appStore = accountPageCopy(locale).access.trial.explanation;
+    assert.match(appStore, /App.Store/);
+    assert.equal(personalAccessPresentation(trialing, locale).explanation, appStore);
+    assert.equal(personalAccessPresentation(trialing, locale, undefined, null, "app_store").explanation, appStore);
+    assert.match(personalAccessPresentation(trialing, locale, undefined, null, "play_store").explanation, /Google.Play/);
+    assert.doesNotMatch(personalAccessPresentation(trialing, locale, undefined, null, "web_billing").explanation, appleWords);
+  }
+  assert.equal(personalAccessStore({ webBilling: { management: "play_store" } }), "play_store");
+  assert.equal(personalAccessStore({}), null);
+  assert.match(surface, /const subscriptionStore = personalAccessStore\(snapshot\.subscription\);/);
+  assert.match(surface, /snapshot\.subscription\.promotionalGrant,\s*\/\/ HPD-1243[^\n]*\n\s*subscriptionStore,/);
+});
+
+test("account deletion says which store keeps billing: Google Play for a Play plan, the App Store sentence otherwise", () => {
+  for (const locale of appLocales) {
+    const deletion = mobileText(locale).systemPages.account.deletion;
+    for (const text of [deletion.confirmBody, deletion.subscriptionKept]) {
+      assert.match(text, /App.Store/, `${locale}: the sentence names the App Store today`);
+      const android = heyStoreWording(text, locale, "android");
+      assert.doesNotMatch(android, appleWords, `${locale}: ${android}`);
+      assert.match(android, /Google.Play/, locale);
+      assert.equal(heyStoreWording(text, locale, "ios"), text);
+    }
+  }
+  assert.equal(heyStoreWording(mobileText("en").systemPages.account.deletion.subscriptionKept, "en", "android"), "Your Google Play subscription was not cancelled.");
+  // Only the two sentences that name a store are re-worded; "Apple or Google" sign-in hints are not.
+  assert.match(surface, /const deletionNamesGooglePlay = subscriptionStore === "play_store" \|\| \(storePlatform === "android" && subscriptionStore !== "app_store"\);/);
+  assert.match(surface, /\? \{\s*\.\.\.t\.systemPages\.account\.deletion,\s*confirmBody: heyStoreWording\(t\.systemPages\.account\.deletion\.confirmBody, appLocale, "android"\),\s*subscriptionKept: heyStoreWording\(t\.systemPages\.account\.deletion\.subscriptionKept, appLocale, "android"\),\s*\}\s*: t\.systemPages\.account\.deletion;/);
+  assert.match(surface, /copy=\{accountDeletionCopy\}/);
+});
+
+test("Android: no Google button before deletion (email link instead), and no challenge for a build that cannot offer Google", () => {
+  assert.match(surface, /\{storePlatform === "ios" && linkedProviders\.includes\("google"\) && nativeAuthConfig\?\.providers\.google \? \(/);
+  assert.match(surface, /if \(!googleOffered\) return;\s*let cancelled = false;\s*const mode = token \? "link" : "login";/);
+  assert.match(surface, /if \(!googleOffered \|\| nativeAuthBusy\) return;\s*const timer = setInterval\(/);
 });

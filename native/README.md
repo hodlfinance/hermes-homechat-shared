@@ -120,5 +120,10 @@ Not on Android: Sign in with Apple (the native module is iOS only; a web
 sign-in needs a redirect address the Plane does not publish), and Google
 re-authentication before account deletion (the email link covers it).
 
+The Account page and the account deletion screen name the store the plan is
+managed in (`personalAccessStore`, read from `webBilling.management` of the
+subscription state): the App Store sentences as before, Google Play for a Play
+plan, and no store name for a web trial.
+
 The paywall colours and its drawing follow the scheme the Android palette was
 built for at load, with the switch on or off.

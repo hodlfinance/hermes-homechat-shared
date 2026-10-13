@@ -27,6 +27,11 @@ export type AccountPageCopy = Readonly<{
     label: string;
     explanation: string;
   }>>>;
+  /**
+   * HPD-1243: the trial sentence for a trial that did not start in the App
+   * Store. `access.trial.explanation` stays the App Store sentence.
+   */
+  trialExplanationByStore: Readonly<{ play_store: string; web_billing: string }>;
   paymentIssueLabel: string;
   subscriptionEndingLabel: string;
   paidGraceExplanation: string;
@@ -135,6 +140,7 @@ const en: AccountPageCopy = {
     trial: { label: "Free trial", explanation: "Your App Store free trial is active." },
     paid: { label: "Active subscription", explanation: "Your Hey Hermes Personal subscription is active." },
   },
+  trialExplanationByStore: { play_store: "Your Google Play free trial is active.", web_billing: "Your free trial is active." },
   paymentIssueLabel: "Payment issue",
   subscriptionEndingLabel: "Subscription ending",
   paidGraceExplanation: "Your Hey Hermes Personal subscription has a payment issue.",
@@ -170,6 +176,7 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
       trial: { label: "Kostenlose Testphase", explanation: "Deine kostenlose App-Store-Testphase ist aktiv." },
       paid: { label: "Aktives Abonnement", explanation: "Dein Hey-Hermes-Personal-Abonnement ist aktiv." },
     },
+    trialExplanationByStore: { play_store: "Deine kostenlose Google-Play-Testphase ist aktiv.", web_billing: "Deine kostenlose Testphase ist aktiv." },
     paymentIssueLabel: "Zahlungsproblem",
     subscriptionEndingLabel: "Abonnement endet",
     paidGraceExplanation: "Bei deinem Hey-Hermes-Personal-Abonnement besteht ein Zahlungsproblem.",
@@ -202,6 +209,7 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
       trial: { label: "Essai gratuit", explanation: "Votre essai gratuit sur l’App Store est actif." },
       paid: { label: "Abonnement actif", explanation: "Votre abonnement Hey Hermes Personal est actif." },
     },
+    trialExplanationByStore: { play_store: "Votre essai gratuit sur Google Play est actif.", web_billing: "Votre essai gratuit est actif." },
     paymentIssueLabel: "Problème de paiement",
     subscriptionEndingLabel: "Fin de l’abonnement",
     paidGraceExplanation: "Votre abonnement Hey Hermes Personal présente un problème de paiement.",
@@ -234,6 +242,7 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
       trial: { label: "Prueba gratuita", explanation: "Tu prueba gratuita del App Store está activa." },
       paid: { label: "Suscripción activa", explanation: "Tu suscripción a Hey Hermes Personal está activa." },
     },
+    trialExplanationByStore: { play_store: "Tu prueba gratuita de Google Play está activa.", web_billing: "Tu prueba gratuita está activa." },
     paymentIssueLabel: "Problema de pago",
     subscriptionEndingLabel: "La suscripción finaliza",
     paidGraceExplanation: "Tu suscripción a Hey Hermes Personal tiene un problema de pago.",
@@ -266,6 +275,7 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
       trial: { label: "Prova gratuita", explanation: "La tua prova gratuita su App Store è attiva." },
       paid: { label: "Abbonamento attivo", explanation: "Il tuo abbonamento a Hey Hermes Personal è attivo." },
     },
+    trialExplanationByStore: { play_store: "La tua prova gratuita su Google Play è attiva.", web_billing: "La tua prova gratuita è attiva." },
     paymentIssueLabel: "Problema di pagamento",
     subscriptionEndingLabel: "Abbonamento in scadenza",
     paidGraceExplanation: "Il tuo abbonamento a Hey Hermes Personal presenta un problema di pagamento.",
@@ -298,6 +308,7 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
       trial: { label: "Teste grátis", explanation: "Seu teste grátis da App Store está ativo." },
       paid: { label: "Assinatura ativa", explanation: "Sua assinatura do Hey Hermes Personal está ativa." },
     },
+    trialExplanationByStore: { play_store: "Seu teste grátis do Google Play está ativo.", web_billing: "Seu teste grátis está ativo." },
     paymentIssueLabel: "Problema de pagamento",
     subscriptionEndingLabel: "Assinatura terminando",
     paidGraceExplanation: "Sua assinatura do Hey Hermes Personal está com um problema de pagamento.",
@@ -330,6 +341,7 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
       trial: { label: "無料体験", explanation: "App Store の無料体験が有効です。" },
       paid: { label: "有効なサブスクリプション", explanation: "Hey Hermes Personal のサブスクリプションが有効です。" },
     },
+    trialExplanationByStore: { play_store: "Google Play の無料体験が有効です。", web_billing: "無料体験が有効です。" },
     paymentIssueLabel: "支払いの問題",
     subscriptionEndingLabel: "サブスクリプション終了予定",
     paidGraceExplanation: "Hey Hermes Personal のサブスクリプションに支払いの問題があります。",
@@ -362,6 +374,7 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
       trial: { label: "무료 체험", explanation: "App Store 무료 체험이 활성화되어 있습니다." },
       paid: { label: "활성 구독", explanation: "Hey Hermes Personal 구독이 활성화되어 있습니다." },
     },
+    trialExplanationByStore: { play_store: "Google Play 무료 체험이 활성화되어 있습니다.", web_billing: "무료 체험이 활성화되어 있습니다." },
     paymentIssueLabel: "결제 문제",
     subscriptionEndingLabel: "구독 종료 예정",
     paidGraceExplanation: "Hey Hermes Personal 구독에 결제 문제가 있습니다.",
@@ -413,11 +426,25 @@ function timingLabel(view: PersonalAccessView, copy: AccountPageCopy, formatDate
   return view.at ? copy.ends(formatDate(view.at)) : copy.noEndDate;
 }
 
+/**
+ * HPD-1243: where a subscription state says the plan is managed, read
+ * defensively from the state every surface receives (`webBilling.management`).
+ * Anything else, an older server included: null.
+ */
+export type PersonalAccessStore = "app_store" | "play_store" | "web_billing";
+export function personalAccessStore(subscriptionState: unknown): PersonalAccessStore | null {
+  const management = (subscriptionState as { webBilling?: { management?: unknown } } | null | undefined)?.webBilling?.management;
+  return management === "app_store" || management === "play_store" || management === "web_billing" ? management : null;
+}
+
 export function personalAccessPresentation(
   entitlement: Entitlement | null,
   locale: AppLocale,
   formatDate: (value: string) => string = (value) => new Date(value).toLocaleDateString(locale),
   promotionalGrant: PromotionalGrantAccess | null = null,
+  // HPD-1243: the store the plan is managed in. Unknown or the App Store keeps
+  // the sentence every caller got before.
+  store: PersonalAccessStore | null = null,
 ): PersonalAccessPresentation {
   const view = personalAccessView(entitlement, promotionalGrant);
   const copy = accountPageCopy(locale);
@@ -431,7 +458,9 @@ export function personalAccessPresentation(
     ? copy.paidGraceExplanation
     : view.state === "paid" && view.timing === "ends"
       ? copy.paidEndingExplanation
-      : stateCopy.explanation;
+      : view.state === "trial" && (store === "play_store" || store === "web_billing")
+        ? copy.trialExplanationByStore[store]
+        : stateCopy.explanation;
   return {
     ...view,
     label,
