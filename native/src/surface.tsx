@@ -471,6 +471,7 @@ import {
   shouldShowIosPaywallOnboarding,
   type IosPaywallStoreState,
 } from "./ios-paywall";
+import { ANDROID_PLAY_SUBSCRIPTIONS_URL, heySignInSurface, heyStorePlatform, heyStoreWordedView, heyStoreWording, type HeyStorePlatform } from "./hey-store-platform";
 import {
   isProductSessionAuthError,
   mobileChatGptConnectionCardView,
@@ -571,10 +572,14 @@ import type { NativeR8Host, NativeAudioPlayer as AudioPlayer, NativeNotification
  */
 export function createNativeR8Surface(host: NativeR8Host) {
   const { StatusBar, SecureStore, Constants, Crypto, Notifications, DocumentPicker,
-    ImagePicker, AppleAuthentication, Google, WebBrowser, createAudioPlayer,
+    ImagePicker, AppleAuthentication, Google, GoogleNative, WebBrowser, createAudioPlayer,
     RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync,
     useAudioRecorder, useAudioRecorderState, FileSystem } = host.platform;
   const brandIcon = host.identity.icon ?? require("../assets/baby-dragon-neutral.png");
+  // HPD-1243: the store this build sells and signs in through. iOS as before;
+  // Android only with the host's switch on; null keeps Android on the email link.
+  const storePlatform = heyStorePlatform(Platform.OS, host.policy.heyAndroidLaunchEnabled);
+  const signInSurface = heySignInSurface(Platform.OS, host.policy.heyAndroidLaunchEnabled);
   const appCopy = host.identity.copy;
   const palette = { ...defaultPalette, ...host.theme } as MobilePalette;
   const createApiClient = host.transport.createApiClient;
@@ -2341,7 +2346,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [waitlistPhase, setWaitlistPhase] = useState<"idle" | "joining" | "error">("idle");
   useEffect(() => {
     setSalesStatus(null);
-    if (!token || host.session.mode !== "standalone" || Platform.OS !== "ios") return;
+    if (!token || host.session.mode !== "standalone" || !storePlatform) return;
     let cancelled = false;
     void api.salesStatus().then((status) => {
       if (!cancelled) setSalesStatus(status);
@@ -2451,7 +2456,16 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     selectAccount: true,
     shouldAutoExchangeCode: false,
   });
-  const googleSignInReady = googleAuthRequestMatchesChallenge(googleAuthRequest, googleChallenge);
+  // HPD-1243: Android signs in through Google's native sheet (the host's
+  // GoogleNative port), not through the browser request built above. Without
+  // the port an Android build offers no Google button at all.
+  const googleNativeSignIn = storePlatform === "android" ? GoogleNative ?? null : null;
+  const googleOffered = Boolean(nativeAuthConfig?.providers.google) && (storePlatform === "ios" || Boolean(googleNativeSignIn));
+  const googleSignInReady = googleNativeSignIn
+    ? Boolean(googleChallenge && googleClientId)
+    : googleAuthRequestMatchesChallenge(googleAuthRequest, googleChallenge);
+  const googleButtonBlocked = (mode: "link" | "login") =>
+    (!googleNativeSignIn && !googleAuthRequest) || !googleChallenge || googleChallenge.mode !== mode || !googleSignInReady || Boolean(nativeAuthBusy);
   const [googleDeletionAuthRequest, googleDeletionAuthResponse, promptGoogleDeletionAuth] = Google.useIdTokenAuthRequest({
     clientId: googleAuthHookClientId,
     extraParams: googleDeletionChallenge ? { nonce: googleDeletionChallenge.nonce } : undefined,
@@ -3314,7 +3328,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   useEffect(() => {
     const accountId = snapshot?.me.id ?? null;
     setMobilePurchaseCompletion(null);
-    if (host.session.mode === "external" || Platform.OS !== "ios" || !accountId) {
+    if (host.session.mode === "external" || !storePlatform || !accountId) {
       mobilePurchasesController.suspend();
       setMobilePurchasePlans([]);
       setMobilePurchaseAccountReady(false);
@@ -3378,7 +3392,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     const accountId = snapshot?.me.id;
     if (
       !accountId ||
-      !mobilePersonalPurchaseCanStart(accountId, snapshot.subscription, mobilePurchaseCompletion) ||
+      !mobilePersonalPurchaseCanStart(accountId, snapshot.subscription, mobilePurchaseCompletion, Date.now(), mobilePurchasesController.personalProduct) ||
       mobilePurchasePhase === "purchasing" ||
       mobilePurchasePhase === "restoring"
     ) return;
@@ -3456,7 +3470,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       }
     }
     try {
-      if (webHref) await Linking.openURL(webHref);
+      // HPD-1243: an Android build manages a store plan in Google Play.
+      if (storePlatform === "android" && !webHref) await Linking.openURL(ANDROID_PLAY_SUBSCRIPTIONS_URL);
+      else if (webHref) await Linking.openURL(webHref);
       else await openIosSubscriptionManagement((url) => Linking.openURL(url));
     } catch {
       setMobilePurchaseNotice(
@@ -4743,7 +4759,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // chat must not open on the snapshot read while it was still being set up.
   const preparingProductAccess = Boolean(snapshot) && mobileProductAccessScreen({
     standalone: host.session.mode === "standalone",
-    ios: Platform.OS === "ios",
+    ios: storePlatform !== null,
     showPaywallOnboarding: snapshot ? shouldShowIosPaywallOnboarding({
       comped: snapshot.entitlement.comped === true,
       entitlementStatus: snapshot.entitlement.status,
@@ -5081,15 +5097,17 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   ]);
 
   useEffect(() => {
-    if (host.session.mode === "external" || Platform.OS !== "ios") return;
+    if (host.session.mode === "external" || !storePlatform) return;
     let cancelled = false;
-    createApiClient({ baseUrl: API_BASE, token: "login" }).nativeAuthConfig("ios")
+    createApiClient({ baseUrl: API_BASE, token: "login" }).nativeAuthConfig(signInSurface)
       .then((value) => {
         if (!cancelled) setNativeAuthConfig(value);
       })
       .catch(() => {
-        if (!cancelled) setNativeAuthConfig({ productRealm: "heyhermes.v1", providers: {}, surface: "ios" });
+        if (!cancelled) setNativeAuthConfig({ productRealm: "heyhermes.v1", providers: {}, surface: signInSurface });
       });
+    // HPD-1243: Apple sign-in is not offered on Android, whatever the Plane publishes.
+    if (storePlatform !== "ios") return () => { cancelled = true; };
     void AppleAuthentication.isAvailableAsync().then((available) => {
       if (!cancelled) setAppleSignInAvailable(available);
     }).catch(() => {
@@ -5101,11 +5119,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }, [token]);
 
   useEffect(() => {
-    if (Platform.OS !== "ios" || !nativeAuthConfig?.providers.google) return;
+    if (!storePlatform || !nativeAuthConfig?.providers.google) return;
     let cancelled = false;
     const mode = token ? "link" : "login";
     createApiClient({ baseUrl: API_BASE, token: token || "login" })
-      .nativeAuthChallenge({ mode, provider: "google", surface: "ios" })
+      .nativeAuthChallenge({ mode, provider: "google", surface: signInSurface })
       .then((challenge) => {
         if (!cancelled) setGoogleChallenge({ ...challenge, mode });
       })
@@ -5129,7 +5147,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     }
     let cancelled = false;
     createApiClient({ baseUrl: API_BASE, token })
-      .nativeAuthChallenge({ mode: "reauthenticate", provider: "google", surface: "ios" })
+      .nativeAuthChallenge({ mode: "reauthenticate", provider: "google", surface: signInSurface })
       .then((challenge) => {
         if (!cancelled) setGoogleDeletionChallenge(challenge);
       })
@@ -5165,7 +5183,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // screen hand Google a stale nonce. Never refresh mid-flow: the in-flight
   // request already carries the current nonce.
   useEffect(() => {
-    if (Platform.OS !== "ios" || !nativeAuthConfig?.providers.google || nativeAuthBusy) return;
+    if (!storePlatform || !nativeAuthConfig?.providers.google || nativeAuthBusy) return;
     const timer = setInterval(
       () => setGoogleChallengeVersion((current) => current + 1),
       nativeAuthChallengeRefreshMs,
@@ -5206,7 +5224,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       mode,
       nonce: challenge.nonce,
       provider,
-      surface: "ios",
+      surface: signInSurface,
     });
     await persistToken(session.token);
     refreshGenerationRef.current += 1;
@@ -5226,7 +5244,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }
 
   async function signInWithGoogle(mode: "link" | "login" = "login") {
-    if (!googleAuthRequest || !googleChallenge || googleChallenge.mode !== mode || !googleSignInReady || nativeAuthBusy) return;
+    if (googleButtonBlocked(mode) || !googleChallenge) return;
     // Freeze the request and challenge of this attempt: a challenge refresh that
     // lands mid-flow rebuilds the hook request with a new nonce and verifier.
     const attemptChallenge = googleChallenge;
@@ -5234,6 +5252,17 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     setNativeAuthBusy("google");
     setAppError(null);
     try {
+      if (googleNativeSignIn) {
+        // The id token's audience is the server client id the Plane published
+        // for "android"; the Plane checks it together with this challenge's nonce.
+        const native = await googleNativeSignIn.signIn({ serverClientId: googleClientId!, nonce: attemptChallenge.nonce });
+        if (!native?.idToken) {
+          setAppError(googleSignInOutcomeMessage({ kind: "cancelled" }));
+          return;
+        }
+        await completeNativeSignIn("google", native.idToken, attemptChallenge, mode);
+        return;
+      }
       const outcome = await runGoogleIdTokenSignIn({
         dismissBrowser: () => WebBrowser.dismissAuthSession?.(),
         fetchImpl: (input, init) => fetch(input, init),
@@ -5259,7 +5288,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     setAppError(null);
     try {
       const challenge = await createApiClient({ baseUrl: API_BASE, token: token || "login" })
-        .nativeAuthChallenge({ mode, provider: "apple", surface: "ios" });
+        .nativeAuthChallenge({ mode, provider: "apple", surface: signInSurface });
       const credential = await AppleAuthentication.signInAsync({
         nonce: challenge.nonce,
         requestedScopes: [
@@ -5341,11 +5370,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       const publicAuth = createApiClient({ baseUrl: API_BASE, token: "email-signup" });
       // Bounded: one fresh challenge after an expiry, 30 s overall, abortable.
       await requestEmailMagicLinkWithAbuseProof({
-        fetchChallenge: () => publicAuth.emailMagicLinkAbuseChallenge({ surface: "ios" }),
+        fetchChallenge: () => publicAuth.emailMagicLinkAbuseChallenge({ surface: signInSurface }),
         start: (abuseProof) => publicAuth.startEmailMagicLink({
           abuseProof,
           email: signupEmail,
-          surface: "ios",
+          surface: signInSurface,
           website: "",
         }),
         signal: controller.signal,
@@ -5401,7 +5430,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     setAppError(null);
     try {
       const session = await createApiClient({ baseUrl: API_BASE, token: "email-signup" })
-        .completeEmailMagicLink({ surface: "ios", token: magicToken });
+        .completeEmailMagicLink({ surface: signInSurface, token: magicToken });
       await persistToken(session.token);
       refreshGenerationRef.current += 1;
       homeChatRefreshSingleFlight.clear();
@@ -8081,8 +8110,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 Google follow as equal buttons; the password form stays behind
                 a small link (HPD-1087); the mode switch is one quiet line. */}
             <View style={[styles.authCard, styles.paywallOffer]}>
-              <View style={[styles.paywallArt, styles.authArt, Platform.OS === "ios" && resolvedColorScheme === "dark" && styles.paywallArtDark]}>
-                <Image source={Platform.OS === "ios" && resolvedColorScheme === "dark" ? paywallIllustrationDark : paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors accessibilityLabel="Hey Hermes" />
+              <View style={[styles.paywallArt, styles.authArt, (Platform.OS === "ios" ? resolvedColorScheme === "dark" : androidStartsDark) && styles.paywallArtDark]}>
+                <Image source={(Platform.OS === "ios" ? resolvedColorScheme === "dark" : androidStartsDark) ? paywallIllustrationDark : paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors accessibilityLabel="Hey Hermes" />
               </View>
               <Text style={[styles.paywallEyebrow, styles.authCentered]}>{signInCopy.eyebrow}</Text>
               <Text style={[styles.paywallOfferTitle, styles.authCentered]} accessibilityRole="header">
@@ -8169,7 +8198,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 </View>
               )}
 
-              {Platform.OS === "ios" && (nativeAuthConfig?.providers.google || (nativeAuthConfig?.providers.apple && appleSignInAvailable)) ? (
+              {storePlatform && (googleOffered || (nativeAuthConfig?.providers.apple && appleSignInAvailable)) ? (
                 <View style={styles.authProviders}>
                   <View style={styles.authOrRow}>
                     <View style={styles.authOrLine} />
@@ -8193,11 +8222,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                       />
                     )
                   ) : null}
-                  {nativeAuthConfig?.providers.google ? (
+                  {googleOffered ? (
                     <Pressable
-                      style={[styles.authProviderButton, authProviderTone, (!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "login" || !googleSignInReady || Boolean(nativeAuthBusy)) && styles.disabledButton]}
+                      style={[styles.authProviderButton, authProviderTone, googleButtonBlocked("login") && styles.disabledButton]}
                       onPress={() => void signInWithGoogle()}
-                      disabled={!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "login" || !googleSignInReady || Boolean(nativeAuthBusy)}
+                      disabled={googleButtonBlocked("login")}
                       accessibilityRole="button"
                     >
                       {nativeAuthBusy === "google" ? <ActivityIndicator color={authProviderTextColor} /> : <MobileGoogleMark size={19} />}
@@ -8295,14 +8324,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const canManageWorkspaceConnections = snapshot.workspace.accountId === snapshot.me.id;
   const createSupportPassAction = mobileAccountActionRow(accountActionState, { kind: "create_support_pass" });
   const mobilePurchaseBusy = mobilePurchasePhase === "purchasing" || mobilePurchasePhase === "restoring";
-  const paywall = iosPaywallView({
+  // HPD-1243: on Android the same view names Google Play; on iOS it is the same object.
+  const paywall = heyStoreWordedView(iosPaywallView({
     locale: appLocale,
     plan: mobilePurchasePlans[0] ?? null,
     comped: snapshot.entitlement.comped === true,
     entitlementStatus: snapshot.entitlement.status,
     runtimeAccess: snapshot.subscription.lifecycle.runtimeAccess,
     storeState: iosPaywallStoreState(mobilePurchasePhase),
-  });
+  }), appLocale, storePlatform ?? "ios");
   const personalAccess = personalAccessPresentation(
     snapshot.entitlement,
     appLocale,
@@ -8311,7 +8341,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   );
   const productAccessScreen = mobileProductAccessScreen({
     standalone: host.session.mode === "standalone",
-    ios: Platform.OS === "ios",
+    ios: storePlatform !== null,
     showPaywallOnboarding: paywall.showOnboarding,
     snapshot,
     status: workspaceStatusTruth,
@@ -8333,6 +8363,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     snapshot.me.id,
     snapshot.subscription,
     mobilePurchaseCompletion,
+    Date.now(),
+    mobilePurchasesController.personalProduct,
   );
   const chatAccess = mobileChatAccessView(snapshot, selectedChatRoutePreference ?? snapshot.chatRoutePreference, workspaceStatusTruth);
   const activeSubthreadHeader = subthreadHeader(subthreadOrigin, tab, appLocale);
@@ -8524,6 +8556,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       copy={t.systemPages.account.deletion}
       locale={appLocale}
       emailReauthenticationCompleted={accountDeletionEmailReauthenticationAccountId === snapshot.me.id}
+      signInSurface={signInSurface}
       onNativeReauthenticationChange={setAccountDeletionNativeReauthenticationRequired}
       reauthenticationActions={(linkedProviders) => (
         <View style={styles.nativeAuthGroup}>
@@ -8591,9 +8624,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
               await api.requestNewServerAfterDeletion();
               await refresh();
             }}
-            onManage={Platform.OS === "ios" ? () => void manageMobileSubscription() : null}
-            onPurchase={Platform.OS === "ios" ? () => setDeletedPaywallOpen(true) : null}
-            manageNotice={mobilePurchaseNotice}
+            onManage={storePlatform ? () => void manageMobileSubscription() : null}
+            onPurchase={storePlatform ? () => setDeletedPaywallOpen(true) : null}
+            manageNotice={mobilePurchaseNotice && storePlatform ? heyStoreWording(staticUiMessage(appLocale, mobilePurchaseNotice), appLocale, storePlatform) : mobilePurchaseNotice}
             accountLabel={heyPaywallAccountCopy(appLocale).entry}
             onOpenAccount={() => setPaywallAccountOpen(true)}
             signOutLabel={staticUiCopy(appLocale)["Sign out"]}
@@ -8635,6 +8668,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
         <ScrollView contentContainerStyle={styles.paywallScreen}>
           <IosPaywallPanel locale={appLocale}
+            store={storePlatform ?? "ios"}
             view={paywall}
             plan={mobilePurchasePlans[0] ?? null}
             phase={mobilePurchasePhase}
@@ -9762,9 +9796,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 ) : null}
                 {visibleSettingsSection === "account" ? (
                   <View style={styles.systemSurfaceEdgeToEdge}>
-                    {host.session.mode === "standalone" && Platform.OS === "ios" ? (
+                    {host.session.mode === "standalone" && storePlatform ? (
                       <View style={styles.systemSurfaceNotice}>
                         <IosPaywallPanel locale={appLocale}
+                          store={storePlatform}
                           compact
                           view={paywall}
                           personalAccess={personalAccess}
@@ -9784,7 +9819,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                         />
                       </View>
                     ) : null}
-                    {host.session.mode === "standalone" && Platform.OS === "ios" && (linkedIdentities.length || nativeAuthConfig?.providers.google || (nativeAuthConfig?.providers.apple && appleSignInAvailable)) ? (
+                    {host.session.mode === "standalone" && storePlatform && (linkedIdentities.length || googleOffered || (nativeAuthConfig?.providers.apple && appleSignInAvailable)) ? (
                       <MobileSystemSection title={accountPage.linkedAccountsTitle} footer={accountPage.linkedAccountsDetail}>
                         <View style={[styles.systemSurfaceNotice, styles.nativeAuthGroup]}>
                           {/* HPD-1116: one row per linked provider. The API has no route that removes a link, so none is offered here. */}
@@ -9792,11 +9827,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                             <Text key={identity.provider} style={styles.rowTitle}>{linkedIdentityLine(appLocale, identity)}</Text>
                           ))}
                           {linkConfirmation ? <Notice locale={appLocale} tone="info" text={linkConfirmation} onDismiss={() => setLinkConfirmation(null)} /> : null}
-                          {nativeAuthConfig?.providers.google && !linkedProviders.has("google") ? (
+                          {googleOffered && !linkedProviders.has("google") ? (
                             <Pressable
-                              style={[styles.secondaryButtonWide, (!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "link" || !googleSignInReady || Boolean(nativeAuthBusy)) && styles.disabledButton]}
+                              style={[styles.secondaryButtonWide, googleButtonBlocked("link") && styles.disabledButton]}
                               onPress={() => void signInWithGoogle("link")}
-                              disabled={!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "link" || !googleSignInReady || Boolean(nativeAuthBusy)}
+                              disabled={googleButtonBlocked("link")}
                             >
                               <Text style={styles.secondaryButtonText}>{t.systemPages.account.linkGoogle}</Text>
                             </Pressable>
@@ -10353,13 +10388,14 @@ function iosPaywallStoreState(phase: MobilePurchasePhase): IosPaywallStoreState 
 }
 
 function IosPaywallPanel({ locale,
+  store = "ios",
+  notice: rawNotice,
   view,
   personalAccess,
   plan,
   phase,
   accountReady,
   purchaseAvailable,
-  notice,
   onDismissNotice,
   compact = false,
   onPurchase,
@@ -10391,6 +10427,8 @@ function IosPaywallPanel({ locale,
   accountReady: boolean;
   purchaseAvailable: boolean;
   notice: string | null;
+  /** HPD-1243: the store this build sells through; notices name it. */
+  store?: HeyStorePlatform;
   onDismissNotice: () => void;
   compact?: boolean;
   onPurchase: (packageId: MobileRevenueCatPackageId) => Promise<void>;
@@ -10398,6 +10436,8 @@ function IosPaywallPanel({ locale,
   onManage: () => Promise<void>;
 }) {
   const busy = phase === "purchasing" || phase === "restoring";
+  // Notices are written once, App Store worded. iOS shows them untouched.
+  const notice = rawNotice && store === "android" ? heyStoreWording(staticUiMessage(locale, rawNotice), locale, store) : rawNotice;
   const purchaseDisabled = busy || !accountReady || !plan;
 
   if (!compact) {
@@ -10542,9 +10582,14 @@ function IosPaywallPanel({ locale,
 }
 
 // HPD-1085: brand blue from the landing page, brighter in dark mode.
-const paywallBrandColor = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4ed8", dark: "#7ea2ff" }) : "#1d4ed8";
-const paywallCtaColor = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4ed8", dark: "#3563e9" }) : "#1d4ed8";
-const paywallCheckBackground = Platform.OS === "ios" ? DynamicColorIOS({ light: "#e8eefc", dark: "#1e2742" }) : "#e8eefc";
+// HPD-1243: Android has no dynamic colour, and its palette is chosen once from
+// the scheme the system reports at load (mobile-palette.ts). These three and
+// the paywall drawing follow the same choice, so a dark Android start is dark
+// throughout instead of light blue on a dark page. Web keeps the light values.
+const androidStartsDark = Platform.OS === "android" && Appearance?.getColorScheme?.() === "dark";
+const paywallBrandColor = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4ed8", dark: "#7ea2ff" }) : androidStartsDark ? "#7ea2ff" : "#1d4ed8";
+const paywallCtaColor = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4ed8", dark: "#3563e9" }) : androidStartsDark ? "#3563e9" : "#1d4ed8";
+const paywallCheckBackground = Platform.OS === "ios" ? DynamicColorIOS({ light: "#e8eefc", dark: "#1e2742" }) : androidStartsDark ? "#1e2742" : "#e8eefc";
 const paywallIllustration = require("../assets/paywall-ink-key.png");
 // HPD-1105 v2 (Justus chose variant B1, 2026-10-09): for dark mode the same
 // drawing with its figure filled light and the paper cut away - crisp on a dark
@@ -10559,9 +10604,10 @@ const paywallIllustrationDark = require("../assets/paywall-ink-key-dark.png");
  * follows that choice.
  */
 function PaywallArt() {
-  // The paywall colours above are dynamic on iOS only, so only iOS goes dark here.
+  // The paywall colours above are dynamic on iOS only, so iOS follows the live
+  // scheme; Android follows the scheme its palette was built for at load.
   const scheme = useColorScheme();
-  const dark = Platform.OS === "ios" && scheme === "dark";
+  const dark = Platform.OS === "ios" ? scheme === "dark" : androidStartsDark;
   return (
     <View style={[styles.paywallArt, dark && styles.paywallArtDark]}>
       <Image source={dark ? paywallIllustrationDark : paywallIllustration} style={styles.paywallArtImage as ImageStyle} resizeMode="contain" accessibilityIgnoresInvertColors />

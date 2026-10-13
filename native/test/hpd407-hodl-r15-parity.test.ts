@@ -43,7 +43,9 @@ test("an external host keeps the R19 header and expandable account drawer withou
   assert.match(surface, /const \[accountMenuOpen, setAccountMenuOpen\] = useState\(false\)/);
   assert.match(surface, /host\.session\.mode === "standalone" \|\| !\["sign_out", "logout"\]\.includes\(item\.id\)/);
   assert.match(surface, /<Text style=\{styles\.mobileDrawerAccountLabel\} numberOfLines=\{1\}>\{accountLabel\}<\/Text>/);
-  assert.match(surface, /host\.session\.mode === "standalone" && Platform\.OS === "ios"/);
+  // HPD-1243: the account's purchase block is for the store this build sells through
+  // (iOS, or Android with the launch switch on), still never for an external host.
+  assert.match(surface, /host\.session\.mode === "standalone" && storePlatform \?/);
   assert.match(surface, /host\.session\.mode === "standalone" && snapshot/);
   assert.match(surface, /accessibilityLabel=\{t\.systemPages\.account\.exportData\}/);
   assert.match(surface, /onPress=\{\(\) => void createFullArchive\(\)\}/);

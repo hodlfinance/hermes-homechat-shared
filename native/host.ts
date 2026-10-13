@@ -76,6 +76,15 @@ export type NativeR8Platform = {
   Google: {
     useIdTokenAuthRequest(options: { clientId: string; extraParams?: { nonce: string }; iosClientId: string; selectAccount: boolean; shouldAutoExchangeCode?: boolean }): [NativeGoogleRequest | null, NativeGoogleResponse, () => Promise<unknown>];
   };
+  /**
+   * HPD-1243: Google's native sign-in on Android (Credential Manager). The id
+   * token it returns names `serverClientId` as its audience, which is the id
+   * the Plane publishes for the surface "android". Optional: without it an
+   * Android build offers no Google button.
+   */
+  GoogleNative?: {
+    signIn(input: { serverClientId: string; nonce: string }): Promise<{ idToken: string } | null>;
+  };
   WebBrowser: {
     maybeCompleteAuthSession(): unknown; openBrowserAsync(url: string): Promise<unknown>;
     openAuthSessionAsync(url: string, redirect: string): Promise<NativeBrowserResult>;
@@ -214,7 +223,17 @@ export type NativeR8Host = {
     };
   };
   session: NativeR8SessionHost;
-  policy: { preinstalledRanker: boolean; preinstalledEmailScanner: boolean };
+  policy: {
+    preinstalledRanker: boolean;
+    preinstalledEmailScanner: boolean;
+    /**
+     * HPD-1243: the one switch for Hey on Android. Absent or false: an Android
+     * build signs in by email link only and shows no paywall, as before. True:
+     * the Google Play paywall, the RevenueCat binding, Google sign-in and the
+     * sales status are on for Android. iOS never reads it.
+     */
+    heyAndroidLaunchEnabled?: boolean;
+  };
   transport: NativeR8Transport;
   platform: NativeR8Platform;
   purchases: {

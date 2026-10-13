@@ -748,7 +748,7 @@ export interface EmailMagicLinkAbuseProof {
 }
 
 export interface EmailMagicLinkSessionRequest {
-  surface: "ios" | "web";
+  surface: "ios" | "android" | "web";
   token: string;
 }
 
@@ -757,7 +757,7 @@ export interface EmailMagicLinkSessionResponse extends AuthSession {
 }
 
 export type HeyNativeAuthProvider = "apple" | "google";
-export type HeyNativeAuthSurface = "ios" | "web";
+export type HeyNativeAuthSurface = "ios" | "android" | "web";
 export type HeyNativeAuthMode = "link" | "login" | "reauthenticate";
 
 export interface HeyNativeAuthConfig {

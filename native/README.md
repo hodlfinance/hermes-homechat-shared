@@ -93,3 +93,32 @@ with a reason, or pending with an issue. A new option or call without one
 fails CI. A route Fin needs is permitted here and in the Finance BFF
 (`hodl-hermes-web` `native-r8.ts`); the Plane reads this policy through its
 own pin of this package, so it needs the same pin bump.
+
+## Hey Hermes on Android (HPD-1243)
+
+One switch opens the store side of the Hey surface on Android:
+`host.policy.heyAndroidLaunchEnabled`. Absent or false, an Android build is what
+it was before: sign-in by email link only (the request names the surface
+`ios`, as it always did), no paywall, no RevenueCat binding, no Google button,
+no sales status. True, on Android only:
+
+- the paywall and the account's purchase block are shown, with every purchase
+  text re-worded for Google Play by `heyStoreWording` (`src/hey-store-platform.ts`).
+  `src/ios-paywall.ts` is not changed and iOS texts pass through untouched;
+- RevenueCat is bound to the Hey account before a plan is read or bought. The
+  host builds its `MobilePurchasesController` with
+  `{ store: "play_store", personalMonthlyProductId }`; the product id has the
+  form `<subscription_id>:<base_plan_id>` and the free week is read from the
+  offer Google returns, because RevenueCat's eligibility check is iOS only;
+- sign-in requests name the surface `android`. Google signs in through the
+  optional port `platform.GoogleNative.signIn({ serverClientId, nonce })`; the
+  id token's audience is the client id the Plane publishes for `android`.
+  Without the port no Google button is shown;
+- the sales status is read, so the paywall closes when the host has no room.
+
+Not on Android: Sign in with Apple (the native module is iOS only; a web
+sign-in needs a redirect address the Plane does not publish), and Google
+re-authentication before account deletion (the email link covers it).
+
+The paywall colours and its drawing follow the scheme the Android palette was
+built for at load, with the switch on or off.
