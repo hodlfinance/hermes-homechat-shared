@@ -1,5 +1,5 @@
 import { scheduledRunFailure } from "./scheduled-view";
-import type { ChatRunStatus } from "./types";
+import type { AutomationPrivacyRoute, ChatRunStatus } from "./types";
 
 export const rankedTaskAutomationRoles = ["email_scanner", "ranker"] as const;
 export type RankedTaskAutomationRole = (typeof rankedTaskAutomationRoles)[number];
@@ -303,6 +303,8 @@ export interface RankedTaskAutomationView {
   readonly evidence: RankedTaskAutomationEvidence;
   /** `null` when there is nothing to say. */
   readonly stalled: RankedTaskAutomationStall | null;
+  /** HPD-1202: set when the native job is pinned to the approved Google-user-data route. */
+  readonly privacyRoute?: AutomationPrivacyRoute | null;
 }
 
 /**

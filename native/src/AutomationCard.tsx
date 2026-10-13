@@ -4,7 +4,12 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import type { AppLocale } from "../core/index";
 import { palette } from "./mobile-palette";
 import { mobileSystemSurfaceMetrics } from "./mobile-system-surface";
-import { automationCardNotice, automationScheduleSentence, type AutomationCardModel } from "./mobile-automation-card";
+import {
+  automationCardNotice,
+  automationPrivacyRouteLine,
+  automationScheduleSentence,
+  type AutomationCardModel,
+} from "./mobile-automation-card";
 
 /**
  * The one automation card (HPD-463).
@@ -32,6 +37,8 @@ export type AutomationCardCopy = Readonly<{
     not_stored: string;
   }>;
   storedResultFailure: string;
+  /** HPD-1234: `{model}` is replaced with the approved model's name. */
+  privacyRoute: string;
   chat: string;
   chatAbout: string;
   edit: string;
@@ -135,6 +142,7 @@ export function AutomationCard({
     ? `${copy.next}: ${new Date(automation.nextRunAt).toLocaleString(locale)}`
     : copy.noNext;
   const notice = automationCardNotice(automation, copy.storedResultFailure);
+  const privacyRouteLine = automationPrivacyRouteLine(automation, copy.privacyRoute);
 
   return (
     <View accessibilityLabel={automation.title} style={styles.card}>
@@ -150,6 +158,11 @@ export function AutomationCard({
       <Text style={styles.muted}>
         {[nextRun, automation.delivery ? `${copy.delivery}: ${automation.delivery}` : null].filter(Boolean).join(" · ")}
       </Text>
+      {/* HPD-1234: the server says this automation runs on the approved
+          Google-user-data model and not on the one the customer chose. */}
+      {privacyRouteLine ? (
+        <Text style={styles.muted}>{privacyRouteLine}</Text>
+      ) : null}
       {automation.resultStatus ? (
         <Text style={styles.muted}>{copy.result[automation.resultStatus]}</Text>
       ) : null}

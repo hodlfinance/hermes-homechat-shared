@@ -1,4 +1,10 @@
-import { scheduledRhythm, type AppLocale, type HermesAutomationJob, type ScheduledRhythm } from "../core/index";
+import {
+  scheduledRhythm,
+  type AppLocale,
+  type AutomationPrivacyRoute,
+  type HermesAutomationJob,
+  type ScheduledRhythm,
+} from "../core/index";
 import {
   rankedTaskAutomationLabels,
   type RankedTaskAutomationRole,
@@ -60,11 +66,44 @@ export type AutomationCardModel = Readonly<{
   /** The exact result was stored even though this run separately reported a native delivery/route failure. */
   nativeFailureAfterStoredResult: boolean;
   versions: readonly AutomationCardVersion[];
+  /**
+   * HPD-1234: set when the server reports this automation on the approved
+   * Google-user-data route instead of the model the customer chose. The server
+   * reads that from the route stored on the job; nothing here looks at a
+   * title, a prompt or a skill.
+   */
+  privacyRoute: AutomationPrivacyRoute | null;
   /** Set for a shipped automation; the role its mutations are addressed to. */
   role: RankedTaskAutomationRole | null;
   /** Set for an automation the customer wrote; the native job it stands for. */
   jobId: string | null;
 }>;
+
+/**
+ * What the server sent, or nothing. A malformed or unknown value yields no
+ * line, because the line is a statement about where Gmail data goes.
+ */
+export function automationPrivacyRoute(value: unknown): AutomationPrivacyRoute | null {
+  if (!value || typeof value !== "object") return null;
+  const route = value as Partial<AutomationPrivacyRoute>;
+  if (route.reason !== "google_user_data") return null;
+  const modelName = typeof route.modelName === "string" ? route.modelName.trim() : "";
+  return modelName ? { reason: "google_user_data", modelName } : null;
+}
+
+/**
+ * The one sentence the app and the web print under the next-run line, or
+ * `null` for an automation that follows the chosen model. `template` is
+ * `systemPages.automations.privacyRoute` in the reader's language.
+ */
+export function automationPrivacyRouteLine(
+  automation: Pick<AutomationCardModel, "privacyRoute">,
+  template: string,
+): string | null {
+  const route = automation.privacyRoute;
+  // A function, so that a `$` in a model name is printed and not interpreted.
+  return route ? template.replace("{model}", () => route.modelName) : null;
+}
 
 export function automationCardFromJob(job: HermesAutomationJob): AutomationCardModel {
   return {
@@ -86,6 +125,7 @@ export function automationCardFromJob(job: HermesAutomationJob): AutomationCardM
     resultStatus: null,
     nativeFailureAfterStoredResult: false,
     versions: [],
+    privacyRoute: automationPrivacyRoute(job.privacyRoute),
     role: null,
     jobId: job.id,
   };
@@ -114,6 +154,7 @@ export function automationCardFromManaged(automation: RankedTaskAutomationView):
       reason: version.reason,
       active: version.version === automation.metadata.activeUserVersion,
     })),
+    privacyRoute: automationPrivacyRoute(automation.privacyRoute),
     role: automation.metadata.role,
     jobId: automation.metadata.nativeJobId,
   };

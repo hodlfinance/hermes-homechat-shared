@@ -1856,6 +1856,18 @@ export interface KanbanTask {
 
 export type HermesAutomationStatus = "active" | "paused" | "unknown";
 
+/**
+ * HPD-1202. Set when an automation is pinned to the one approved route for
+ * Google user data (HPD-553/633) and therefore does not follow the model the
+ * customer chose. The server reads this from the job's own stored route; a
+ * client never infers it from a name, a prompt or a skill.
+ */
+export interface AutomationPrivacyRoute {
+  reason: "google_user_data";
+  /** The approved model's name as the customer knows it, e.g. "DeepSeek V4 Flash". */
+  modelName: string;
+}
+
 export interface HermesAutomationJob {
   id: string;
   title: string;
@@ -1865,6 +1877,8 @@ export interface HermesAutomationJob {
   lastRunAt: string | null;
   delivery: string | null;
   summary: string | null;
+  /** HPD-1202: absent or null when the automation follows the chosen model. */
+  privacyRoute?: AutomationPrivacyRoute | null;
 }
 
 export interface HermesAutomationsView {
