@@ -55,7 +55,7 @@ test("HPD-1105: Apple and Google share one look; the switch is one quiet line", 
 
 test("HPD-1085/HPD-1090: paywall, offer and preparing screens use the transparent dark dragon in dark mode", () => {
   const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
-  assert.match(source, /function PaywallArt\(\)[\s\S]*?Platform\.OS === "ios" && scheme === "dark"[\s\S]*?paywallIllustrationDark : paywallIllustration/);
+  assert.match(source, /function PaywallArt\(\)[\s\S]*?Platform\.OS === "ios" \? scheme === "dark" : androidStartsDark[\s\S]*?paywallIllustrationDark : paywallIllustration/);
   assert.equal(source.match(/<PaywallArt \/>/g)?.length, 3);
   assert.doesNotMatch(source, /<View style=\{styles\.paywallArt\}>/);
 });
@@ -64,7 +64,8 @@ test("HPD-1105 v2 (B1): sign-in keeps the ink dragon, dark mode uses the filled 
   const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   const start = source.indexOf("HPD-1105: the signed-out screen in the HPD-1085 paywall design.");
   const screen = source.slice(start, source.indexOf("</KeyboardAvoidingView>", start));
-  assert.match(screen, /resolvedColorScheme === "dark" \? paywallIllustrationDark : paywallIllustration/);
+  // HPD-1243: iOS follows the live scheme as before; Android the scheme its palette was built for.
+  assert.match(screen, /\(Platform\.OS === "ios" \? resolvedColorScheme === "dark" : androidStartsDark\) \? paywallIllustrationDark : paywallIllustration/);
   assert.match(screen, /styles\.paywallArtDark/);
   assert.doesNotMatch(screen, /<MobileWorkingDragon/);
   assert.match(source, /const paywallIllustrationDark = require\("\.\.\/assets\/paywall-ink-key-dark\.png"\)/);

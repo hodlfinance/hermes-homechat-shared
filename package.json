@@ -73,6 +73,7 @@
     "./native/secure-connection-copy": "./native/src/secure-connection-copy.ts",
     "./native/mobile-route-gate": "./native/src/mobile-route-gate.ts",
     "./native/ios-paywall": "./native/src/ios-paywall.ts",
+    "./native/hey-store-platform": "./native/src/hey-store-platform.ts",
     "./native/hey-preparing": "./native/src/hey-preparing.ts",
     "./native/hey-server-deleted": "./native/src/hey-server-deleted.ts",
     "./native/hey-sign-in": "./native/src/hey-sign-in.ts",

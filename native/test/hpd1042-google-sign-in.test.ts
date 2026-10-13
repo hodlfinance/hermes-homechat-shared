@@ -163,11 +163,15 @@ test("surface wiring: both modes run the bounded attempt and always re-enable th
   assert.match(flow, /completeNativeSignIn\("google", outcome\.idToken, attemptChallenge, mode\)/);
   assert.match(flow, /finally \{\s*setNativeAuthBusy\(null\);\s*setGoogleChallengeVersion/);
 
+  // HPD-1243: the same conditions, in one place for both buttons. Only the
+  // Android native sheet may do without the browser request.
+  assert.ok(
+    surface.includes('(!googleNativeSignIn && !googleAuthRequest) || !googleChallenge || googleChallenge.mode !== mode || !googleSignInReady || Boolean(nativeAuthBusy);'),
+    "the buttons wait for a request with the current nonce",
+  );
+  assert.match(surface, /const googleNativeSignIn = storePlatform === "android" \? GoogleNative \?\? null : null;/);
   for (const mode of ["login", "link"]) {
-    assert.ok(
-      surface.includes(`disabled={!googleAuthRequest || !googleChallenge || googleChallenge.mode !== "${mode}" || !googleSignInReady || Boolean(nativeAuthBusy)}`),
-      `${mode} button waits for a request with the current nonce`,
-    );
+    assert.ok(surface.includes(`disabled={googleButtonBlocked("${mode}")}`), `${mode} button waits for a request with the current nonce`);
   }
 });
 

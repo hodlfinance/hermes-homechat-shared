@@ -99,7 +99,8 @@ test("once the subscription has ended the deleted screen offers the paywall's pu
   const panel = functionBody("HeyServerDeletedPanel");
   assert.match(panel, /model\.purchaseOffered && onPurchase[\s\S]*?onPress=\{onPurchase\}[\s\S]*?paywallCta[\s\S]*?copy\.purchase/);
   const gate = surface.slice(surface.indexOf('if (productAccessScreen === "deleted" && snapshot.serverDeletion && !(deletedPaywallOpen'), surface.indexOf("if (pendingProductAccess || productAccessScreen === \"no_access\") {"));
-  assert.match(gate, /onPurchase=\{Platform\.OS === "ios" \? \(\) => setDeletedPaywallOpen\(true\) : null\}/);
+  // HPD-1243: offered where the build sells (iOS; Android only with the launch switch on).
+  assert.match(gate, /onPurchase=\{storePlatform \? \(\) => setDeletedPaywallOpen\(true\) : null\}/);
   // The paywall with its price, legal links and sales gate, while the subscription is still ended.
   assert.match(surface, /productAccessScreen === "purchase" \|\| \(productAccessScreen === "deleted" && deletedPaywallOpen && !hasValidMobileProductAccess\(snapshot\.entitlement\)\)/);
 });

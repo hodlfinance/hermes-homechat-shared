@@ -6,6 +6,33 @@ export const MOBILE_REVENUECAT_PRODUCTS = {
 
 export type MobileRevenueCatPackageId = keyof typeof MOBILE_REVENUECAT_PRODUCTS;
 
+/**
+ * HPD-1243: which store this build sells through. The App Store is the default
+ * and behaves exactly as before. Google Play differs in three places only:
+ * the product id is configured by the host (RevenueCat reports it as
+ * `<subscription_id>:<base_plan_id>` in an offering and as the bare
+ * subscription id on a purchase and an entitlement), the free week is read
+ * from Google's own offer because RevenueCat's eligibility check exists on iOS
+ * only, and the errors name the right store.
+ */
+export type MobilePurchasesStore = "app_store" | "play_store";
+export type MobilePurchasesOptions = {
+  store?: MobilePurchasesStore;
+  /** Required for Google Play, form `<subscription_id>:<base_plan_id>`. Ignored for the App Store. */
+  personalMonthlyProductId?: string;
+};
+
+/** True when a store-reported product id names the configured product. */
+export function mobileStoreProductMatches(reported: string | null | undefined, configured: string, store: MobilePurchasesStore = "app_store") {
+  if (!reported || !configured) return false;
+  if (reported === configured) return true;
+  if (store !== "play_store") return false;
+  // Google Play: an offering names `subscription:base-plan`, a purchase and an
+  // entitlement name the subscription alone. Only the subscription may be bare.
+  const [subscription, basePlan] = configured.split(":");
+  return Boolean(basePlan) && reported === subscription;
+}
+
 export type MobileStorePackage = {
   identifier: string;
   packageType: string;
@@ -66,7 +93,8 @@ export type MobilePurchasesAdapter = {
 
 export type MobilePurchasePlan = {
   packageId: MobileRevenueCatPackageId;
-  productId: (typeof MOBILE_REVENUECAT_PRODUCTS)[MobileRevenueCatPackageId];
+  /** The App Store product id, or the host-configured Google Play one. */
+  productId: string;
   displayName: "Personal";
   title: string;
   description: string;
@@ -112,12 +140,16 @@ function isAnonymousRevenueCatId(appUserId: string) {
   return appUserId.startsWith("$RCAnonymousID:");
 }
 
-export function mobileCustomerInfoActivePersonalExpirationAt(customerInfo: MobileCustomerInfo, timestamp = Date.now()) {
+export function mobileCustomerInfoActivePersonalExpirationAt(
+  customerInfo: MobileCustomerInfo,
+  timestamp = Date.now(),
+  product: { id: string; store: MobilePurchasesStore } = { id: MOBILE_REVENUECAT_PRODUCTS.personal_monthly, store: "app_store" },
+) {
   return customerInfo.activeEntitlements
     .filter(
       (entitlement) =>
         entitlement.identifier === "hey_hermes_access" &&
-        entitlement.productIdentifier === MOBILE_REVENUECAT_PRODUCTS.personal_monthly &&
+        mobileStoreProductMatches(entitlement.productIdentifier, product.id, product.store) &&
         Boolean(entitlement.expirationAt) &&
         Date.parse(entitlement.expirationAt!) > timestamp,
     )
@@ -189,7 +221,13 @@ export function mobilePersonalPurchaseCanStart<T extends {
     type?: string | null;
     expirationAt?: string | null;
   } | null;
-}>(accountId: string, state: T, purchaseCompletion: MobilePurchaseCompletion | null, timestamp = Date.now()) {
+}>(
+  accountId: string,
+  state: T,
+  purchaseCompletion: MobilePurchaseCompletion | null,
+  timestamp = Date.now(),
+  product: { id: string; store: MobilePurchasesStore } = { id: MOBILE_REVENUECAT_PRODUCTS.personal_monthly, store: "app_store" },
+) {
   const expectedAccountId = exactAccountId(accountId);
   const exactState = assertProductLocalSubscriptionState(expectedAccountId, state);
   if (
@@ -206,7 +244,7 @@ export function mobilePersonalPurchaseCanStart<T extends {
     evidence.environment === "SANDBOX" &&
     evidence.accountId === expectedAccountId &&
     evidence.appUserId === expectedAccountId &&
-    evidence.productId === MOBILE_REVENUECAT_PRODUCTS.personal_monthly &&
+    mobileStoreProductMatches(evidence.productId, product.id, product.store) &&
     evidence.entitlementId === "hey_hermes_access" &&
     exactState.workspaceAccess.runtimeAccess === "enabled" &&
     Boolean(evidence.expirationAt) &&
@@ -223,7 +261,24 @@ export class MobilePurchasesController {
   private packages = new Map<MobileRevenueCatPackageId, MobileStorePackage>();
   private sdkQueue: Promise<void> = Promise.resolve();
 
-  constructor(private readonly adapter: MobilePurchasesAdapter) {}
+  private readonly store: MobilePurchasesStore;
+  private readonly personalMonthlyProductId: string;
+
+  constructor(private readonly adapter: MobilePurchasesAdapter, options: MobilePurchasesOptions = {}) {
+    this.store = options.store ?? "app_store";
+    this.personalMonthlyProductId = this.store === "play_store"
+      ? (options.personalMonthlyProductId ?? "").trim()
+      : MOBILE_REVENUECAT_PRODUCTS.personal_monthly;
+  }
+
+  /** The product this build may sell, with its store. Empty id: Google Play is not configured. */
+  get personalProduct(): { id: string; store: MobilePurchasesStore } {
+    return { id: this.personalMonthlyProductId, store: this.store };
+  }
+
+  private get storeName() {
+    return this.store === "play_store" ? "Google Play" : "App Store";
+  }
 
   suspend() {
     this.epoch += 1;
@@ -233,7 +288,12 @@ export class MobilePurchasesController {
 
   async bindAccount(accountId: string, apiKey: string) {
     const exactId = exactAccountId(accountId);
-    if (!apiKey.trim()) throw new Error("RevenueCat is not configured for this iPhone build.");
+    if (!apiKey.trim()) {
+      throw new Error(this.store === "play_store"
+        ? "RevenueCat is not configured for this Android build."
+        : "RevenueCat is not configured for this iPhone build.");
+    }
+    if (!this.personalMonthlyProductId) throw new Error("The Google Play product is not configured for this Android build.");
 
     const epoch = ++this.epoch;
     this.boundAccountId = null;
@@ -259,7 +319,7 @@ export class MobilePurchasesController {
       this.boundAccountId = exactId;
       const customerInfo = await this.adapter.getCustomerInfo();
       await this.assertBoundAccount(exactId, epoch);
-      return { personalPurchaseExpirationAt: mobileCustomerInfoActivePersonalExpirationAt(customerInfo) };
+      return { personalPurchaseExpirationAt: mobileCustomerInfoActivePersonalExpirationAt(customerInfo, Date.now(), this.personalProduct) };
     });
   }
 
@@ -285,14 +345,14 @@ export class MobilePurchasesController {
         }
         const packageId = storePackage.identifier as MobileRevenueCatPackageId;
         if (nextPackages.has(packageId)) throw new Error("The Hey Hermes offering contains a duplicate package.");
-        if (storePackage.product.identifier !== MOBILE_REVENUECAT_PRODUCTS[packageId]) {
-          throw new Error("A Hey Hermes package is mapped to the wrong App Store product.");
+        if (storePackage.product.identifier !== this.personalMonthlyProductId) {
+          throw new Error(`A Hey Hermes package is mapped to the wrong ${this.storeName} product.`);
         }
         // `personal_monthly` is an intentional custom RevenueCat package ID, so
         // the SDK reports PACKAGE_TYPE.CUSTOM. The exact package, App Store
         // product, and StoreKit period above/below are the authoritative gates.
         if (storePackage.product.subscriptionPeriod !== "P1M") {
-          throw new Error("The Hey Hermes App Store product is not the approved monthly subscription.");
+          throw new Error(`The Hey Hermes ${this.storeName} product is not the approved monthly subscription.`);
         }
         nextPackages.set(packageId, storePackage);
       }
@@ -305,33 +365,39 @@ export class MobilePurchasesController {
       this.packages = nextPackages;
 
       let trialEligibilityByProduct: Record<string, MobileTrialEligibility> = {};
-      try {
-        trialEligibilityByProduct = await this.adapter.checkTrialEligibility(
-          orderedIds.map((packageId) => MOBILE_REVENUECAT_PRODUCTS[packageId]),
-        );
-      } catch {
-        // Eligibility must fail honestly to unknown without hiding the monthly plan.
-        trialEligibilityByProduct = {};
+      // HPD-1243: RevenueCat's eligibility check exists on iOS only. Google
+      // Play decides by the offer it returns for this buyer (below).
+      if (this.store === "app_store") {
+        try {
+          trialEligibilityByProduct = await this.adapter.checkTrialEligibility(
+            orderedIds.map((packageId) => MOBILE_REVENUECAT_PRODUCTS[packageId]),
+          );
+        } catch {
+          // Eligibility must fail honestly to unknown without hiding the monthly plan.
+          trialEligibilityByProduct = {};
+        }
+        await this.assertBoundAccount(exactId, epoch);
       }
-      await this.assertBoundAccount(exactId, epoch);
 
       return orderedIds.map((packageId) => {
         const storePackage = nextPackages.get(packageId)!;
         const storeEligibility = trialEligibilityByProduct[storePackage.product.identifier] ?? "unknown";
         const intro = storePackage.product.introPrice;
-        const hasApprovedSevenDayTrial = Boolean(
-          intro &&
-          intro.price === 0 &&
-          intro.period === "P7D" &&
-          intro.periodUnit === "DAY" &&
-          intro.periodNumberOfUnits === 7,
-        );
-        const trialEligibility: MobileTrialEligibility = storeEligibility === "eligible"
-          ? hasApprovedSevenDayTrial ? "eligible" : "unknown"
-          : storeEligibility;
+        const sevenDays = Boolean(intro && intro.period === "P7D" && intro.periodUnit === "DAY" && intro.periodNumberOfUnits === 7);
+        // Google Play may state the same seven days as one week.
+        const oneWeek = Boolean(this.store === "play_store" && intro && intro.period === "P1W" && intro.periodUnit === "WEEK" && intro.periodNumberOfUnits === 1);
+        const hasApprovedSevenDayTrial = Boolean(intro && intro.price === 0 && (sevenDays || oneWeek));
+        // Google Play returns a free phase only to a buyer it will give it to,
+        // so its presence is the eligibility. Any other intro offer (a paid
+        // one, another length) promises nothing: unknown, the sheet decides.
+        const trialEligibility: MobileTrialEligibility = this.store === "play_store"
+          ? hasApprovedSevenDayTrial ? "eligible" : intro ? "unknown" : "ineligible"
+          : storeEligibility === "eligible"
+            ? hasApprovedSevenDayTrial ? "eligible" : "unknown"
+            : storeEligibility;
         return {
           packageId,
-          productId: MOBILE_REVENUECAT_PRODUCTS[packageId],
+          productId: this.personalMonthlyProductId,
           displayName: planDetails[packageId].displayName,
           title: storePackage.product.title,
           description: storePackage.product.description,
@@ -356,12 +422,12 @@ export class MobilePurchasesController {
       const result = await this.adapter.purchasePackage(storePackage);
       onStoreTransactionCompleted();
       await this.assertBoundAccount(accountId, epoch);
-      if (result.productIdentifier !== MOBILE_REVENUECAT_PRODUCTS[packageId]) {
-        throw new Error("The App Store returned a different product than the one selected.");
+      if (!mobileStoreProductMatches(result.productIdentifier, this.personalMonthlyProductId, this.store)) {
+        throw new Error(`${this.store === "play_store" ? "Google Play" : "The App Store"} returned a different product than the one selected.`);
       }
-      const personalPurchaseExpirationAt = mobileCustomerInfoActivePersonalExpirationAt(result.customerInfo);
+      const personalPurchaseExpirationAt = mobileCustomerInfoActivePersonalExpirationAt(result.customerInfo, Date.now(), this.personalProduct);
       if (!personalPurchaseExpirationAt) {
-        throw new Error("The App Store purchase finished without exact active Personal authority. Do not purchase again.");
+        throw new Error(`The ${this.storeName} purchase finished without exact active Personal authority. Do not purchase again.`);
       }
       return { productId: result.productIdentifier, personalPurchaseExpirationAt };
     });

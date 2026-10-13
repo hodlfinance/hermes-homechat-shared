@@ -603,12 +603,12 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     fetchImpl,
     login: (body: LoginRequest) =>
       request<AuthSession>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
-    emailMagicLinkAbuseChallenge: (body: { surface: "ios" | "web" }) =>
+    emailMagicLinkAbuseChallenge: (body: { surface: "ios" | "android" | "web" }) =>
       request<EmailMagicLinkAbuseChallenge>("/auth/email-magic-link/challenge", {
         method: "POST",
         body: JSON.stringify(body),
       }),
-    startEmailMagicLink: (body: { abuseProof: EmailMagicLinkAbuseProof; email: string; surface: "ios" | "web"; website?: string }) =>
+    startEmailMagicLink: (body: { abuseProof: EmailMagicLinkAbuseProof; email: string; surface: "ios" | "android" | "web"; website?: string }) =>
       request<EmailMagicLinkStartResponse>("/auth/email-magic-link/start", {
         method: "POST",
         body: JSON.stringify(body),
@@ -651,7 +651,7 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     heyLinkedIdentities: () => request<HeyLinkedIdentities>("/account/linked-identities"),
     heyAccountDeletionReauthenticationMethods: () =>
       request<HeyAccountDeletionReauthenticationMethods>("/account/deletion/reauthentication-methods"),
-    startHeyAccountDeletionEmailReauthentication: (body: { surface: "ios" | "web" }) =>
+    startHeyAccountDeletionEmailReauthentication: (body: { surface: "ios" | "android" | "web" }) =>
       request<EmailMagicLinkStartResponse>("/account/deletion/email-reauthentication/start", {
         method: "POST",
         body: JSON.stringify(body),

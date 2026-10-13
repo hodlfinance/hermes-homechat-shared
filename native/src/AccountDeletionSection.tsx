@@ -55,6 +55,7 @@ export function AccountDeletionSection({
   emailReauthenticationCompleted,
   onNativeReauthenticationChange,
   reauthenticationActions,
+  signInSurface = "ios",
 }: {
   accountId: string;
   api: ReturnType<typeof createApiClient>;
@@ -65,6 +66,8 @@ export function AccountDeletionSection({
   emailReauthenticationCompleted?: boolean;
   onNativeReauthenticationChange?: (required: boolean) => void;
   reauthenticationActions?: (providers: HeyNativeAuthProvider[]) => ReactNode;
+  /** HPD-1243: the surface the confirmation link is asked for; the app completes it with the same one. */
+  signInSurface?: "ios" | "android";
 }) {
   const [credential, setCredential] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -101,7 +104,7 @@ export function AccountDeletionSection({
     setRequestingEmailReauthentication(true);
     setNotice(null);
     try {
-      await api.startHeyAccountDeletionEmailReauthentication({ surface: "ios" });
+      await api.startHeyAccountDeletionEmailReauthentication({ surface: signInSurface });
       setNotice(accountDeletionNativeReauthenticationCopy(locale).emailSent);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : copy.genericError);
