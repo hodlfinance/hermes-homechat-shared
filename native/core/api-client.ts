@@ -731,9 +731,13 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     subscriptionState: () => request<SubscriptionStateView>("/billing/subscription-state"),
     // HPD-1063: null = unknown (old server 404, network error, invalid shape);
     // callers then behave exactly as before.
-    salesStatus: async (): Promise<HeyHermesSalesStatus | null> => {
+    // HPD-1243: the Android paywall gives each read a deadline and aborts it
+    // through `signal`. Without one the request is the request it always was.
+    salesStatus: async (options: { signal?: AbortSignal } = {}): Promise<HeyHermesSalesStatus | null> => {
       try {
-        return parseHeyHermesSalesStatus(await request<unknown>("/billing/sales-status"));
+        return parseHeyHermesSalesStatus(
+          await request<unknown>("/billing/sales-status", options.signal ? { signal: options.signal } : {}),
+        );
       } catch {
         return null;
       }

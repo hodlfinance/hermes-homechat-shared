@@ -335,7 +335,7 @@ test("the surface reads the switch once and gates store, sign-in and sales statu
   assert.match(surface, /const storePlatform = heyStorePlatform\(Platform\.OS, host\.policy\.heyAndroidLaunchEnabled\);/);
   assert.match(surface, /const signInSurface = heySignInSurface\(Platform\.OS, host\.policy\.heyAndroidLaunchEnabled\);/);
   // Sales status, RevenueCat binding, the paywall decision.
-  assert.match(surface, /if \(!token \|\| host\.session\.mode !== "standalone" \|\| !storePlatform\) return;\s*let cancelled = false;\s*void api\.salesStatus\(\)/);
+  assert.match(surface, /if \(!token \|\| host\.session\.mode !== "standalone" \|\| !storePlatform\) return;\s*let cancelled = false;\s*void readHeySalesStatus\(storePlatform, \(options\) => api\.salesStatus\(options\), /);
   assert.match(surface, /if \(host\.session\.mode === "external" \|\| !storePlatform \|\| !accountId\) \{\s*mobilePurchasesController\.suspend\(\);/);
   assert.equal(surface.match(/ios: storePlatform !== null,/g)?.length, 2);
   // Binding comes before the plans, and the plans before any purchase button.
