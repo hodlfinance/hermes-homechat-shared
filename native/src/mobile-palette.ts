@@ -1,4 +1,4 @@
-import { DynamicColorIOS, Platform, type ColorValue } from "react-native";
+import { Appearance, DynamicColorIOS as iosDynamicColor, Platform, type ColorValue } from "react-native";
 import { palette as sharedPalette } from "../ui/index";
 
 /**
@@ -21,6 +21,12 @@ import { palette as sharedPalette } from "../ui/index";
  * to this single product-neutral native palette. Existing component aliases
  * (`teal`, `tealSoft`, `accentStrong`) stay in place so consumers keep the
  * same behavior while receiving the approved visual treatment.
+ *
+ * HPD-1228: the pairs below are only handed to React Native's DynamicColorIOS
+ * on iOS. Everywhere else that function throws, and because this module is
+ * loaded at app start the HODL Android app died before its first screen.
+ * Android now resolves each pair to a plain colour string, see the foot of
+ * this file.
  */
 const lightPalette = {
   ...sharedPalette,
@@ -42,7 +48,15 @@ const lightPalette = {
 export type MobilePaletteKey = keyof typeof lightPalette;
 export type MobilePalette = Readonly<Record<MobilePaletteKey, ColorValue>>;
 
-const iosPalette: MobilePalette = {
+type ColorPair = { light: string; dark: string };
+
+/**
+ * Every colour with its light and its dark value, written once. The caller
+ * decides what a pair becomes: a dynamic iOS colour, or one plain string.
+ * The parameter carries React Native's name on purpose, so each line reads
+ * (and is checked by the Hey app's tests) exactly as it did before.
+ */
+const buildPalette = (DynamicColorIOS: (pair: ColorPair) => ColorValue): MobilePalette => ({
   ink: DynamicColorIOS({ light: lightPalette.ink, dark: "#e9e9ed" }),
   text: DynamicColorIOS({ light: lightPalette.text, dark: "#e9e9ed" }),
   muted: DynamicColorIOS({ light: lightPalette.muted, dark: "#cfd3e5" }),
@@ -67,6 +81,20 @@ const iosPalette: MobilePalette = {
   violetSoft: DynamicColorIOS({ light: lightPalette.violetSoft, dark: "#3f424d" }),
   green: DynamicColorIOS({ light: lightPalette.green, dark: "#86efac" }),
   greenSoft: DynamicColorIOS({ light: lightPalette.greenSoft, dark: "#193528" }),
-};
+});
 
-export const palette: MobilePalette = Platform.OS === "ios" ? iosPalette : lightPalette;
+/**
+ * Android has no dynamic colour without native resources, and the styles that
+ * read this palette are created once at load. So Android takes the scheme the
+ * system reports at load and gets the same values as iOS for it, as plain
+ * strings; no scheme reported means light.
+ */
+function androidPalette(): MobilePalette {
+  const dark = Appearance?.getColorScheme?.() === "dark";
+  return buildPalette((pair) => (dark ? pair.dark : pair.light));
+}
+
+export const palette: MobilePalette =
+  Platform.OS === "ios" ? buildPalette(iosDynamicColor)
+  : Platform.OS === "android" ? androidPalette()
+  : lightPalette;

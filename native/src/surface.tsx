@@ -10559,7 +10559,7 @@ const paywallIllustrationDark = require("../assets/paywall-ink-key-dark.png");
  * follows that choice.
  */
 function PaywallArt() {
-  // Android keeps the light palette (mobile-palette.ts), so only iOS goes dark.
+  // The paywall colours above are dynamic on iOS only, so only iOS goes dark here.
   const scheme = useColorScheme();
   const dark = Platform.OS === "ios" && scheme === "dark";
   return (
