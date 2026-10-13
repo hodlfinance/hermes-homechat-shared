@@ -23,7 +23,8 @@ import { visibleUserMessageText } from "./voice-verbatim";
 
 export type NativeR8ChannelIdentity = {
   surface: "hey_hermes" | "finhermes";
-  channel: "hey_hermes_mobile" | "hodl_mobile";
+  // HPD-1226: LiveQuote iOS binds the finhermes surface with its own channel.
+  channel: "hey_hermes_mobile" | "hodl_mobile" | "livequote_mobile";
   allowedSurfaces: ("hey_hermes" | "finhermes")[];
 };
 
