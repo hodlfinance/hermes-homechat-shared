@@ -1,0 +1,146 @@
+{
+  "ink": {
+    "dynamic": {
+      "light": "#0b0b0c",
+      "dark": "#e9e9ed"
+    }
+  },
+  "text": {
+    "dynamic": {
+      "light": "#2a2a30",
+      "dark": "#e9e9ed"
+    }
+  },
+  "muted": {
+    "dynamic": {
+      "light": "#8a8a93",
+      "dark": "#cfd3e5"
+    }
+  },
+  "line": {
+    "dynamic": {
+      "light": "#eeeef1",
+      "dark": "#3f424d"
+    }
+  },
+  "surface": {
+    "dynamic": {
+      "light": "#ffffff",
+      "dark": "#292b31"
+    }
+  },
+  "pageBg": {
+    "dynamic": {
+      "light": "#ffffff",
+      "dark": "#161826"
+    }
+  },
+  "accent": {
+    "dynamic": {
+      "light": "#2f86e8",
+      "dark": "#9184d9"
+    }
+  },
+  "accentStrong": {
+    "dynamic": {
+      "light": "#2f86e8",
+      "dark": "transparent"
+    }
+  },
+  "accentText": {
+    "dynamic": {
+      "light": "#ffffff",
+      "dark": "#e9e9ed"
+    }
+  },
+  "brandBlue": {
+    "dynamic": {
+      "light": "#2f86e8",
+      "dark": "#d2cefd"
+    }
+  },
+  "teal": {
+    "dynamic": {
+      "light": "#2f86e8",
+      "dark": "#d2cefd"
+    }
+  },
+  "tealSoft": {
+    "dynamic": {
+      "light": "#f3f3f5",
+      "dark": "#3f424d"
+    }
+  },
+  "secondary": {
+    "dynamic": {
+      "light": "#5c5c60",
+      "dark": "#e4e7f5"
+    }
+  },
+  "lineStrong": {
+    "dynamic": {
+      "light": "#dedee1",
+      "dark": "#595d6c"
+    }
+  },
+  "userTint": {
+    "dynamic": {
+      "light": "#e8f1fc",
+      "dark": "#3f424d"
+    }
+  },
+  "chromeLine": {
+    "dynamic": {
+      "light": "#eeeef1",
+      "dark": "#9184d9"
+    }
+  },
+  "coral": {
+    "dynamic": {
+      "light": "#d1493f",
+      "dark": "#fca5a5"
+    }
+  },
+  "coralSoft": {
+    "dynamic": {
+      "light": "#f9e9e7",
+      "dark": "rgba(252,165,165,0.12)"
+    }
+  },
+  "amber": {
+    "dynamic": {
+      "light": "#9a6a1f",
+      "dark": "#fde68a"
+    }
+  },
+  "amberSoft": {
+    "dynamic": {
+      "light": "#f3ecdd",
+      "dark": "rgba(253,230,138,0.14)"
+    }
+  },
+  "violet": {
+    "dynamic": {
+      "light": "#5b61d6",
+      "dark": "#d2cefd"
+    }
+  },
+  "violetSoft": {
+    "dynamic": {
+      "light": "#ececf6",
+      "dark": "#3f424d"
+    }
+  },
+  "green": {
+    "dynamic": {
+      "light": "#2e9e6a",
+      "dark": "#86efac"
+    }
+  },
+  "greenSoft": {
+    "dynamic": {
+      "light": "#e8f6ee",
+      "dark": "#193528"
+    }
+  }
+}
