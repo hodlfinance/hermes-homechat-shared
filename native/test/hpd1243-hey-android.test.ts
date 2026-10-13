@@ -374,7 +374,9 @@ test("Android: the paywall colours and its drawing follow the scheme the palette
 
 test("Android: Manage opens Google Play, a web subscriber still goes to the web, iOS as before", () => {
   const manage = surface.slice(surface.indexOf("async function manageMobileSubscription()"), surface.indexOf("const loadNativeCapabilities"));
-  assert.match(manage, /if \(storePlatform === "android" && !webHref\) await Linking\.openURL\(ANDROID_PLAY_SUBSCRIPTIONS_URL\);\s*else if \(webHref\) await Linking\.openURL\(webHref\);\s*else await openIosSubscriptionManagement/);
+  // Phase 2: the store that holds the plan decides (hpd1243-play-product-and-manage.test.ts).
+  assert.match(manage, /const action = mobileSubscriptionManageAction\(storePlatform === "android" \? "android" : "ios", target\);/);
+  assert.match(manage, /if \(action\.kind === "open"\) await Linking\.openURL\(action\.href\);\s*else await openIosSubscriptionManagement/);
   assert.equal(ANDROID_PLAY_SUBSCRIPTIONS_URL, "https://play.google.com/store/account/subscriptions");
 });
 

@@ -11,7 +11,7 @@ import {
 } from "../src/hey-server-deleted";
 import { mobileProductAccessScreen } from "../src/mobile-product-access";
 import { IOS_APP_STORE_SUBSCRIPTIONS_URL } from "../src/ios-paywall";
-import { mobileSubscriptionManagementHref, mobileWebSubscriptionManagementHref } from "../src/subscription-management";
+import { mobileSubscriptionManageAction, mobileSubscriptionManagementHref, mobileSubscriptionManagementTarget, mobileWebSubscriptionManagementHref } from "../src/subscription-management";
 
 // HPD-1106: after "Server löschen" the account read "Dein Hermes wird eingerichtet" forever,
 // because the deletion fences new provisioning. The app now shows the deleted screen instead.
@@ -123,6 +123,11 @@ test("Manage subscription opens the web management for a web subscriber and the 
   ]) assert.equal(mobileSubscriptionManagementHref(value, identity), null, JSON.stringify(value));
   const manage = surface.slice(surface.indexOf("async function manageMobileSubscription()"), surface.indexOf("const loadNativeCapabilities"));
   assert.match(manage, /api\.revenueCatManagement\(\)/);
-  assert.match(manage, /mobileWebSubscriptionManagementHref\(/);
-  assert.match(manage, /if \(webHref\) await Linking\.openURL\(webHref\);\s*else await openIosSubscriptionManagement\(\(url\) => Linking\.openURL\(url\)\)/);
+  // HPD-1243: the answer is read for every store (mobileSubscriptionManagementTarget); a web
+  // plan still opens its portal and an iPhone without an answer still opens the App Store.
+  assert.match(manage, /mobileSubscriptionManagementTarget\(await api\.revenueCatManagement\(\)/);
+  assert.match(manage, /if \(action\.kind === "open"\) await Linking\.openURL\(action\.href\);\s*else await openIosSubscriptionManagement\(\(url\) => Linking\.openURL\(url\)\)/);
+  assert.deepEqual(mobileSubscriptionManageAction("ios", mobileSubscriptionManagementTarget({ ...identity, platform: "web_billing", href: web }, identity)), { kind: "open", href: web });
+  assert.deepEqual(mobileSubscriptionManageAction("ios", mobileSubscriptionManagementTarget({ ...identity, platform: "app_store", href: IOS_APP_STORE_SUBSCRIPTIONS_URL }, identity)), { kind: "ios_app_store" });
+  assert.deepEqual(mobileSubscriptionManageAction("ios", null), { kind: "ios_app_store" });
 });

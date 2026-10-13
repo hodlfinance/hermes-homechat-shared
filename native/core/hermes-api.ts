@@ -587,6 +587,12 @@ export type HeyHermesSalesStatus = {
   invitation: { expiresAt: string } | null;
   waitlist: { status: HeyHermesWaitlistStatus; position: number | null } | null;
   checkedAt: string;
+  /**
+   * HPD-1243: the Google Play product the Plane's catalog accepts for Hey
+   * Personal (`<subscription_id>:<base_plan_id>`). Null when the Plane has
+   * none configured or is too old to say. Only the Android paywall reads it.
+   */
+  playStorePersonalProductId: string | null;
 };
 
 const salesStatusReasons: readonly string[] = ["open", "waitlist", "capacity_unknown"];
@@ -631,5 +637,10 @@ export function parseHeyHermesSalesStatus(value: unknown): HeyHermesSalesStatus 
     invitation,
     waitlist,
     checkedAt: value.checkedAt,
+    // An absent or malformed value is "not stated", never a reason to drop the
+    // whole status: the iPhone paywall and the waitlist do not depend on it.
+    playStorePersonalProductId: typeof value.playStorePersonalProductId === "string" && value.playStorePersonalProductId.trim()
+      ? value.playStorePersonalProductId
+      : null,
   };
 }
