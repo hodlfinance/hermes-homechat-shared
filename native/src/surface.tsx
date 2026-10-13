@@ -8626,7 +8626,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             }}
             onManage={storePlatform ? () => void manageMobileSubscription() : null}
             onPurchase={storePlatform ? () => setDeletedPaywallOpen(true) : null}
-            manageNotice={mobilePurchaseNotice && storePlatform ? heyStoreWording(staticUiMessage(appLocale, mobilePurchaseNotice), appLocale, storePlatform) : mobilePurchaseNotice}
+            manageNotice={mobilePurchaseNotice && storePlatform === "android" ? heyStoreWording(staticUiMessage(appLocale, mobilePurchaseNotice), appLocale, storePlatform) : mobilePurchaseNotice}
             accountLabel={heyPaywallAccountCopy(appLocale).entry}
             onOpenAccount={() => setPaywallAccountOpen(true)}
             signOutLabel={staticUiCopy(appLocale)["Sign out"]}
