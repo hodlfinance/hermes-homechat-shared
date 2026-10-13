@@ -17,6 +17,7 @@ import {
   type HermesAutomationsView,
   type HermesRunEventsOptions,
 } from "../core/index";
+import { automationPrivacyRoute } from "./mobile-automation-card";
 import { mobileHomeChatActiveRunRecovery, mobileRunIsForeground } from "./mobile-home-chat-startup";
 import { mobileStopRunUnlessFinished } from "./mobile-stop-target";
 import { visibleUserMessageText } from "./voice-verbatim";
@@ -179,6 +180,8 @@ export function mobileAutomationsViewFromCanonical(
       lastRunAt: job.lastRunAt,
       delivery: automationDelivery(job.deliver),
       summary: job.prompt.trim() || null,
+      // HPD-1246: a self-made automation reaches the card over this route only.
+      privacyRoute: automationPrivacyRoute(job.privacyRoute),
     })),
   };
 }

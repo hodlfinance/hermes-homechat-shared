@@ -6,7 +6,7 @@ import type {
   HermesRunState,
   HermesSurface,
 } from "./hermes-channel";
-import type { BrowserResultCard } from "./types";
+import type { AutomationPrivacyRoute, BrowserResultCard } from "./types";
 
 export const HERMES_API_CONTRACT_VERSION = "2026-07-14.1" as const;
 export type HermesApiContractVersion =
@@ -530,6 +530,12 @@ export type HermesApiJob = {
   lastError: string | null;
   policy: HermesJobPolicy | null;
   native: Record<string, HermesJsonValue>;
+  /**
+   * HPD-1246: set by the server when this job is stored on the approved
+   * Google-user-data route (HPD-553/633). `native` names no model and no
+   * provider, so a client cannot and must not work it out itself.
+   */
+  privacyRoute?: AutomationPrivacyRoute | null;
 };
 
 export type CreateHermesJobRequest = {
