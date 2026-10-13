@@ -457,7 +457,7 @@ import {
 } from "./revenuecat-purchases";
 import type { HeyHermesSalesStatus } from "../core/hermes-api";
 import { heyNoAccessCopy, heyPaywallAccountCopy, heyPreparingBody, heyPreparingCopy, heyReadyEmailPromised } from "./hey-preparing";
-import { mobileWebSubscriptionManagementHref } from "./subscription-management";
+import { appStoreManagedSentence, mobileStoreNotice, mobileSubscriptionManageAction, mobileSubscriptionManagementTarget, type MobileSubscriptionManagementTarget } from "./subscription-management";
 import { heyServerDeletedCopy, heyServerDeletedDateLine, heyServerDeletedErrorMessage, heyServerDeletedModel, heyServerDeletedReceiptLine } from "./hey-server-deleted";
 import { deviceAppLocale, heySignInCopy, heySignInHeadline } from "./hey-sign-in";
 import { MobileGoogleMark } from "./mobile-google-mark";
@@ -471,7 +471,7 @@ import {
   shouldShowIosPaywallOnboarding,
   type IosPaywallStoreState,
 } from "./ios-paywall";
-import { ANDROID_PLAY_SUBSCRIPTIONS_URL, heySignInSurface, heyStorePlatform, heyStoreWordedView, heyStoreWording, type HeyStorePlatform } from "./hey-store-platform";
+import { heyPlayProductGuard, heySignInSurface, heyStorePlatform, heyStoreWordedView, heyStoreWording, type HeyStorePlatform } from "./hey-store-platform";
 import {
   isProductSessionAuthError,
   mobileChatGptConnectionCardView,
@@ -2343,13 +2343,19 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // HPD-1063: null = unknown (old server, network error); the paywall then
   // behaves exactly as before.
   const [salesStatus, setSalesStatus] = useState<HeyHermesSalesStatus | null>(null);
+  // HPD-1243: true once the Plane answered or failed to. Android waits for it
+  // before it offers a purchase (heyPlayProductGuard); iOS does not read it.
+  const [salesStatusSettled, setSalesStatusSettled] = useState(false);
   const [waitlistPhase, setWaitlistPhase] = useState<"idle" | "joining" | "error">("idle");
   useEffect(() => {
     setSalesStatus(null);
+    setSalesStatusSettled(false);
     if (!token || host.session.mode !== "standalone" || !storePlatform) return;
     let cancelled = false;
     void api.salesStatus().then((status) => {
-      if (!cancelled) setSalesStatus(status);
+      if (cancelled) return;
+      setSalesStatus(status);
+      setSalesStatusSettled(true);
     });
     return () => {
       cancelled = true;
@@ -3325,6 +3331,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     };
   }, [api, token]);
 
+  // HPD-1243: an Android build sells only the Google Play product the Plane's
+  // catalog accepts. With another id Google would take the payment and the
+  // Plane would match no catalog entry. iOS is always "match": this value never
+  // changes there, so the effect below runs exactly as it did.
+  const playProductGuard = storePlatform === "android"
+    ? heyPlayProductGuard({ buildProductId: mobilePurchasesController.personalProduct.id, salesStatusSettled, salesStatus })
+    : "match";
   useEffect(() => {
     const accountId = snapshot?.me.id ?? null;
     setMobilePurchaseCompletion(null);
@@ -3342,6 +3355,16 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       setMobilePurchaseAccountReady(false);
       setMobilePurchasePhase("unavailable");
       setMobilePurchaseNotice("App Store purchases are not configured in this build.");
+      return;
+    }
+    if (playProductGuard !== "match") {
+      // Nothing is bound, loaded or sold: waiting for the Plane's answer, or
+      // the existing "not configured" state when the two product ids differ.
+      mobilePurchasesController.suspend();
+      setMobilePurchasePlans([]);
+      setMobilePurchaseAccountReady(false);
+      setMobilePurchasePhase(playProductGuard === "pending" ? "loading" : "unavailable");
+      setMobilePurchaseNotice(playProductGuard === "pending" ? null : "App Store purchases are not configured in this build.");
       return;
     }
 
@@ -3375,7 +3398,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       cancelled = true;
       mobilePurchasesController.suspend();
     };
-  }, [snapshot?.me.id]);
+  }, [snapshot?.me.id, playProductGuard]);
 
   async function reconcileMobileSubscription(accountId: string) {
     const state = assertProductLocalSubscriptionState(accountId, await api.subscriptionState());
@@ -3460,19 +3483,24 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   async function manageMobileSubscription() {
     setMobilePurchaseNotice(null);
     // HPD-1106: a web subscriber manages the subscription on the web, not in the App Store. The
-    // Plane names the place; an unreadable or failed answer keeps the App Store as before.
-    let webHref: string | null = null;
+    // Plane names the place; an unreadable or failed answer keeps this build's own store as before.
+    let target: MobileSubscriptionManagementTarget | null = null;
     if (snapshot) {
       try {
-        webHref = mobileWebSubscriptionManagementHref(await api.revenueCatManagement(), { accountId: snapshot.me.id, workspaceId: snapshot.workspace.id });
+        target = mobileSubscriptionManagementTarget(await api.revenueCatManagement(), { accountId: snapshot.me.id, workspaceId: snapshot.workspace.id });
       } catch {
-        webHref = null;
+        target = null;
       }
     }
+    // HPD-1243: the store that holds the plan decides, not the phone in the hand.
+    const action = mobileSubscriptionManageAction(storePlatform === "android" ? "android" : "ios", target);
+    if (action.kind === "say_app_store") {
+      // An App Store plan cannot be opened on an Android phone: say where it is managed.
+      setMobilePurchaseNotice(appStoreManagedSentence(appLocale));
+      return;
+    }
     try {
-      // HPD-1243: an Android build manages a store plan in Google Play.
-      if (storePlatform === "android" && !webHref) await Linking.openURL(ANDROID_PLAY_SUBSCRIPTIONS_URL);
-      else if (webHref) await Linking.openURL(webHref);
+      if (action.kind === "open") await Linking.openURL(action.href);
       else await openIosSubscriptionManagement((url) => Linking.openURL(url));
     } catch {
       setMobilePurchaseNotice(
@@ -8642,7 +8670,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             }}
             onManage={storePlatform ? () => void manageMobileSubscription() : null}
             onPurchase={storePlatform ? () => setDeletedPaywallOpen(true) : null}
-            manageNotice={mobilePurchaseNotice && storePlatform === "android" ? heyStoreWording(staticUiMessage(appLocale, mobilePurchaseNotice), appLocale, storePlatform) : mobilePurchaseNotice}
+            manageNotice={mobileStoreNotice(mobilePurchaseNotice, appLocale, storePlatform ?? "ios")}
             accountLabel={heyPaywallAccountCopy(appLocale).entry}
             onOpenAccount={() => setPaywallAccountOpen(true)}
             signOutLabel={staticUiCopy(appLocale)["Sign out"]}
@@ -10453,7 +10481,7 @@ function IosPaywallPanel({ locale,
 }) {
   const busy = phase === "purchasing" || phase === "restoring";
   // Notices are written once, App Store worded. iOS shows them untouched.
-  const notice = rawNotice && store === "android" ? heyStoreWording(staticUiMessage(locale, rawNotice), locale, store) : rawNotice;
+  const notice = mobileStoreNotice(rawNotice, locale, store ?? "ios");
   const purchaseDisabled = busy || !accountReady || !plan;
 
   if (!compact) {

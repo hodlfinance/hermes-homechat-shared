@@ -26,6 +26,34 @@ export function heySignInSurface(os: string, androidLaunchEnabled: boolean | und
 
 export const ANDROID_PLAY_SUBSCRIPTIONS_URL = "https://play.google.com/store/account/subscriptions";
 
+/**
+ * HPD-1243: may this Android build sell its Google Play product?
+ *
+ * The build sells the product named by its own build value; the Plane's
+ * catalog accepts the product in HERMES_REVENUECAT_PERSONAL_ANDROID_STORE_IDENTIFIER.
+ * With two different ids Google takes the payment and the Plane's webhook
+ * matches no catalog entry, so the buyer pays and gets nothing. The Plane
+ * states its id in the sales status; the app sells only when both are the same
+ * string, character for character.
+ *
+ *  - "pending": the sales status has not been answered yet.
+ *  - "match": sell.
+ *  - "mismatch": the status is unreadable (an old Plane, a network error), the
+ *    Plane names no Play product, or it names another one. Nothing is sold.
+ *
+ * iOS never asks: its product id is a constant of the app and of the Plane.
+ */
+export type HeyPlayProductGuard = "pending" | "match" | "mismatch";
+export function heyPlayProductGuard(input: {
+  buildProductId: string;
+  salesStatusSettled: boolean;
+  salesStatus: { playStorePersonalProductId: string | null } | null;
+}): HeyPlayProductGuard {
+  if (!input.salesStatusSettled) return "pending";
+  const expected = input.salesStatus?.playStorePersonalProductId ?? null;
+  return expected !== null && input.buildProductId !== "" && expected === input.buildProductId ? "match" : "mismatch";
+}
+
 // The purchase texts were written for the App Store. On Android the same texts
 // are shown with the store named correctly; nothing else in a sentence changes
 // and nothing is cut. Each list is ordered: the specific phrase first, the bare
