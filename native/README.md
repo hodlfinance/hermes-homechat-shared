@@ -42,6 +42,10 @@ Finance OAuth credential. Hey must enforce that credential's immutable
 Finance policy on each permitted R8 route. The BFF translates its local
 `hodl_mobile` channel to its registered upstream `finhermes_web` channel, then
 projects response/event channel fields back. HODL credentials never reach Hey.
+LiveQuote iOS (HPD-1226) is a second host of the same `finhermes` surface with
+its own local channel `livequote_mobile`; a finance approval is accepted only
+when its channel equals the channel the surface is bound to, so HODL and
+LiveQuote never accept each other's.
 Preview sessions must remain limited to the selected private page and expire
 or fail immediately when the broker authority is revoked.
 

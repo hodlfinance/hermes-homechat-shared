@@ -19,10 +19,11 @@ export type LiveVoicePlatform = {
   open(input: { signal: AbortSignal; onFailure(): void }): Promise<LiveVoiceConnection>;
 };
 /** The binding the request names. HODL sends its local channel; its BFF
- * rewrites hodl_mobile to the registered upstream finhermes_web. */
+ * rewrites hodl_mobile to the registered upstream finhermes_web. LiveQuote
+ * iOS may name livequote_mobile (HPD-1226); the BFF must admit it first. */
 export type LiveVoiceBinding =
   | { surface: "hey_hermes"; channel: "hey_hermes_mobile" | "hey_hermes_web" }
-  | { surface: "finhermes"; channel: "hodl_mobile" };
+  | { surface: "finhermes"; channel: "hodl_mobile" | "livequote_mobile" };
 type Status = { sessionId: string; model: string; phase: LiveVoicePhase; revision: number; endedReason?: NativeLiveVoiceLimit };
 const model = "gpt-realtime-2.1-mini";
 const phases: readonly string[] = ["idle", "connecting", "listening", "waiting", "speaking", "error"];

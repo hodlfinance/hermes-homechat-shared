@@ -13,7 +13,7 @@ const PAYLOAD_SHA256 = /^[0-9a-f]{64}$/;
 const APPROVAL_SURFACES = new Set<NativeFinanceActionApprovalSurface>(["hey_hermes", "finhermes"]);
 const APPROVAL_CHANNELS = new Set<NativeFinanceActionApprovalChannel>([
   "hey_hermes_web", "hey_hermes_mobile", "finhermes_web", "finhermes_mobile",
-  "hodl_mobile", "capchat_app", "telegram", "hermes_cron",
+  "hodl_mobile", "livequote_mobile", "capchat_app", "telegram", "hermes_cron",
 ]);
 
 function record(value: unknown): Record<string, unknown> | null {

@@ -118,6 +118,7 @@ export type NativeFinanceActionApprovalChannel =
   | "finhermes_web"
   | "finhermes_mobile"
   | "hodl_mobile"
+  | "livequote_mobile"
   | "capchat_app"
   | "telegram"
   | "hermes_cron";
