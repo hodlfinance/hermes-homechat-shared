@@ -112,5 +112,4 @@ test("iOS is unchanged: without a report the bubble is the plain View it was", (
   assert.match(surface, /const BubbleContainer = \(onReport \? Pressable : View\) as typeof Pressable;/);
   assert.doesNotMatch(surface, /heyReplyReportEnabled\("ios"/);
   assert.match(surface, /accessible=\{onReport \? Boolean\(report\) : undefined\}/);
-  assert.match(surface, /accessible=\{onReport \? Boolean\(report\) : undefined\}/);
 });
