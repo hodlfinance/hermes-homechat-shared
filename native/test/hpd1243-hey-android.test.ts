@@ -418,8 +418,8 @@ test("account deletion says which store keeps billing: Google Play for a Play pl
   }
   assert.equal(heyStoreWording(mobileText("en").systemPages.account.deletion.subscriptionKept, "en", "android"), "Your Google Play subscription was not cancelled.");
   // Only the two sentences that name a store are re-worded; "Apple or Google" sign-in hints are not.
-  assert.match(surface, /const deletionNamesGooglePlay = subscriptionStore === "play_store" \|\| \(storePlatform === "android" && subscriptionStore !== "app_store"\);/);
-  assert.match(surface, /\? \{\s*\.\.\.t\.systemPages\.account\.deletion,\s*confirmBody: heyStoreWording\(t\.systemPages\.account\.deletion\.confirmBody, appLocale, "android"\),\s*subscriptionKept: heyStoreWording\(t\.systemPages\.account\.deletion\.subscriptionKept, appLocale, "android"\),\s*\}\s*: t\.systemPages\.account\.deletion;/);
+  // The rule moved into heyAccountDeletionStoreCopy; hpd1243-deletion-store.test.ts pins it, iOS included.
+  assert.match(surface, /const accountDeletionCopy = heyAccountDeletionStoreCopy\(/);
   assert.match(surface, /copy=\{accountDeletionCopy\}/);
 });
 
