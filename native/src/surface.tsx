@@ -11538,6 +11538,8 @@ function MessageBubble({
   return (
     <BubbleContainer
       style={[styles.message, isUser ? styles.userMessage : styles.assistantMessage]}
+      // Only a reportable reply becomes one TalkBack node; user bubbles and running replies keep their parts reachable.
+      accessible={onReport ? Boolean(report) : undefined}
       onLongPress={report ? () => confirmReplyReport() : undefined}
       accessibilityActions={report ? [{ name: "report", label: reportCopy.action }] : undefined}
       onAccessibilityAction={report ? (event) => { if (event.nativeEvent.actionName === "report") report(message); } : undefined}
