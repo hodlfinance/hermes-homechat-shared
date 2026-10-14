@@ -164,3 +164,57 @@ export function heyStoreWordedView<T>(view: T, locale: AppLocale, store: HeyStor
   };
   return walk(view, null) as T;
 }
+
+// HPD-1243: the two account-deletion sentences that name a store, for a plan
+// managed on the web (`webBilling.management` "web_billing"): the store name is
+// left out, as in the trial sentence for a web trial. Each pair replaces the
+// store phrase only; every other word of the sentence stays.
+const storelessDeletionRules: Record<AppLocale, ReadonlyArray<readonly [string, string]>> = {
+  en: [["your App Store subscription", "your subscription"], ["Your App Store subscription", "Your subscription"]],
+  de: [["dein App-Store-Abonnement", "dein Abonnement"], ["Dein App-Store-Abonnement", "Dein Abonnement"]],
+  fr: [["votre abonnement App Store", "votre abonnement"], ["Votre abonnement App Store", "Votre abonnement"]],
+  es: [["tu suscripción del App Store", "tu suscripción"], ["Tu suscripción del App Store", "Tu suscripción"]],
+  it: [["l’abbonamento App Store", "l’abbonamento"], ["Il tuo abbonamento App Store", "Il tuo abbonamento"]],
+  "pt-BR": [["sua assinatura da App Store", "sua assinatura"], ["Sua assinatura da App Store", "Sua assinatura"]],
+  ja: [["App Storeのサブスクリプション", "サブスクリプション"]],
+  ko: [["App Store 구독은", "구독은"]],
+};
+
+function storelessDeletionWording(text: string, locale: AppLocale) {
+  let worded = text;
+  for (const [from, to] of storelessDeletionRules[locale] ?? storelessDeletionRules.en) worded = worded.split(from).join(to);
+  if (locale !== "en") for (const [from, to] of storelessDeletionRules.en) worded = worded.split(from).join(to);
+  return worded;
+}
+
+/**
+ * HPD-1243: the account-deletion copy with its two store sentences
+ * (`confirmBody`, `subscriptionKept`) naming the store that manages the plan.
+ *
+ *  - iOS, and Android without the launch switch: as in phase 1 (#158), Google
+ *    Play for a Play plan, the App Store sentences otherwise.
+ *  - Android with the switch: the App Store sentences for an App Store plan,
+ *    no store name for a plan managed on the web, Google Play otherwise.
+ */
+export function heyAccountDeletionStoreCopy<T extends { confirmBody: string; subscriptionKept: string }>(
+  copy: T,
+  locale: AppLocale,
+  storePlatform: HeyStorePlatform | null,
+  store: "app_store" | "play_store" | "web_billing" | null,
+): T {
+  if (storePlatform === "android" && store === "web_billing") {
+    return {
+      ...copy,
+      confirmBody: storelessDeletionWording(copy.confirmBody, locale),
+      subscriptionKept: storelessDeletionWording(copy.subscriptionKept, locale),
+    };
+  }
+  const namesGooglePlay = store === "play_store" || (storePlatform === "android" && store !== "app_store");
+  return namesGooglePlay
+    ? {
+        ...copy,
+        confirmBody: heyStoreWording(copy.confirmBody, locale, "android"),
+        subscriptionKept: heyStoreWording(copy.subscriptionKept, locale, "android"),
+      }
+    : copy;
+}

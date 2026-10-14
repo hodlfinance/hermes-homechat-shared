@@ -125,5 +125,16 @@ managed in (`personalAccessStore`, read from `webBilling.management` of the
 subscription state): the App Store sentences as before, Google Play for a Play
 plan, and no store name for a web trial.
 
+On Android with the switch on, a plan managed on the web names no store in
+the two deletion sentences (`heyAccountDeletionStoreCopy`), as the trial
+sentence does for a web trial.
+
+"Report this reply" (Google Play, AI-generated content policy): on Android
+with the switch on, a long-press on a finished Hermes reply, or the bubble's
+accessibility action, opens a report sheet (reason, optional note). It is sent
+through the existing support client as an ordinary support case. The text
+names the message, conversation, run and reply time; it never contains the
+reply or any other chat content. iOS never shows it.
+
 The paywall colours and its drawing follow the scheme the Android palette was
 built for at load, with the switch on or off.

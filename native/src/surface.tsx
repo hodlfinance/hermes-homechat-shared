@@ -9,6 +9,8 @@ import { useChatClockDay } from "./use-chat-clock-day";
 import { supportAccessCopy, supportAccessOpenCount } from "../core/support-request";
 import { capabilityCopy, capabilityStatusCopy } from "../core/capability-copy";
 import { MobilePrivacySheet } from "./MobilePrivacySheet";
+import { MobileReplyReportSheet } from "./ReplyReportSheet";
+import { heyReplyReportable, heyReplyReportCopy, heyReplyReportEnabled } from "./hey-reply-report";
 import { MobileDelegatedActivityTimeline, useSteadyLine } from "./mobile-delegated-activity";
 import { FinanceArtifactCard } from "./FinanceArtifactCard";
 import { AssistantMessageImages, type AssistantImageReader } from "./AssistantMessageImages";
@@ -471,7 +473,7 @@ import {
   shouldShowIosPaywallOnboarding,
   type IosPaywallStoreState,
 } from "./ios-paywall";
-import { heyPlayProductGuard, heySignInSurface, heyStorePlatform, heyStoreWordedView, heyStoreWording, type HeyStorePlatform } from "./hey-store-platform";
+import { heyAccountDeletionStoreCopy, heyPlayProductGuard, heySignInSurface, heyStorePlatform, heyStoreWordedView, type HeyStorePlatform } from "./hey-store-platform";
 import { heySalesPaywallInView, heySalesStatusRereadOnOpen, readHeySalesStatus } from "./hey-sales-status-read";
 import {
   isProductSessionAuthError,
@@ -581,6 +583,9 @@ export function createNativeR8Surface(host: NativeR8Host) {
   // Android only with the host's switch on; null keeps Android on the email link.
   const storePlatform = heyStorePlatform(Platform.OS, host.policy.heyAndroidLaunchEnabled);
   const signInSurface = heySignInSurface(Platform.OS, host.policy.heyAndroidLaunchEnabled);
+  // HPD-1243 F3: "Report this reply" on a finished Hermes reply, Android with
+  // the launch switch only. iOS never shows it.
+  const replyReportEnabled = heyReplyReportEnabled(Platform.OS, host.policy.heyAndroidLaunchEnabled);
   const appCopy = host.identity.copy;
   const palette = { ...defaultPalette, ...host.theme } as MobilePalette;
   const createApiClient = host.transport.createApiClient;
@@ -2447,6 +2452,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     }),
     [appLocale, supportAppVersion, token],
   );
+  // HPD-1243 F3: the reply a customer is reporting; the sheet sends it through supportRequestClient.
+  const [replyReportTarget, setReplyReportTarget] = useState<ChatMessage | null>(null);
+  const openReplyReport = useCallback((message: ChatMessage) => setReplyReportTarget(message), []);
+  const closeReplyReport = useCallback(() => setReplyReportTarget(null), []);
   const anonymousSupportRequestClient = useMemo(
     () => createAnonymousSupportRequestClient({
       appVersion: supportAppVersion,
@@ -8398,18 +8407,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     runtimeAccess: snapshot.subscription.lifecycle.runtimeAccess,
     storeState: iosPaywallStoreState(mobilePurchasePhase),
   }), appLocale, storePlatform ?? "ios");
-  // HPD-1243: the deletion screen says which store keeps billing. A plan
-  // managed in Google Play, or an Android build whose plan is not known to be
-  // an App Store one, names Google Play; only these two sentences name a store.
+  // HPD-1243: the deletion screen says which store keeps billing: the App
+  // Store, Google Play, or (Android, a plan managed on the web) no store name.
+  // Only these two sentences name a store; iOS words them as before.
   const subscriptionStore = personalAccessStore(snapshot.subscription);
-  const deletionNamesGooglePlay = subscriptionStore === "play_store" || (storePlatform === "android" && subscriptionStore !== "app_store");
-  const accountDeletionCopy = deletionNamesGooglePlay
-    ? {
-        ...t.systemPages.account.deletion,
-        confirmBody: heyStoreWording(t.systemPages.account.deletion.confirmBody, appLocale, "android"),
-        subscriptionKept: heyStoreWording(t.systemPages.account.deletion.subscriptionKept, appLocale, "android"),
-      }
-    : t.systemPages.account.deletion;
+  const accountDeletionCopy = heyAccountDeletionStoreCopy(t.systemPages.account.deletion, appLocale, storePlatform, subscriptionStore);
   const personalAccess = personalAccessPresentation(
     snapshot.entitlement,
     appLocale,
@@ -9214,8 +9216,18 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                       ? recordFirstVisibleMobileToken
                       : undefined
                   }
+                  onReport={replyReportEnabled ? openReplyReport : undefined}
                 />
               ))}
+              {replyReportTarget ? (
+                <MobileReplyReportSheet
+                  locale={appLocale}
+                  message={replyReportTarget}
+                  client={supportRequestClient}
+                  replyEmailFallback={supportReplyEmailFallback}
+                  onClose={closeReplyReport}
+                />
+              ) : null}
               {openDelegatedTask ? (
                 <MobileDelegatedActivityTimeline
                   locale={appLocale}
@@ -11423,9 +11435,17 @@ function MessageBubble({
   showAssistantIdentity,
   onVisibleTextLayout,
   readImage,
+  onReport,
 }: {
   message: ChatMessage;
   locale: AppLocale;
+  /**
+   * HPD-1243 F3: passed only on Android with the launch switch. It applies to
+   * a finished Hermes reply only; everywhere else (iOS, the user's own
+   * messages, a reply still being written) the bubble is the plain View it
+   * always was.
+   */
+  onReport?: (message: ChatMessage) => void;
   /** HPD-1215: the reference day for the time stamp; from useChatClockDay. */
   now: Date;
   /** HPD-1062: reads one agent image of this message. */
@@ -11504,9 +11524,23 @@ function MessageBubble({
     });
   };
 
+  const report = onReport && heyReplyReportable(message, interimMark) ? onReport : undefined;
+  const reportCopy = heyReplyReportCopy(locale);
+  const confirmReplyReport = () => {
+    Alert.alert(reportCopy.action, undefined, [
+      { text: reportCopy.cancel, style: "cancel" },
+      { text: reportCopy.action, onPress: () => report?.(message) },
+    ]);
+  };
+  // The container type follows onReport (fixed per build), not the reply's state,
+  // so a reply that finishes is not remounted. Without onReport: the plain View.
+  const BubbleContainer = (onReport ? Pressable : View) as typeof Pressable;
   return (
-    <View
+    <BubbleContainer
       style={[styles.message, isUser ? styles.userMessage : styles.assistantMessage]}
+      onLongPress={report ? () => confirmReplyReport() : undefined}
+      accessibilityActions={report ? [{ name: "report", label: reportCopy.action }] : undefined}
+      onAccessibilityAction={report ? (event) => { if (event.nativeEvent.actionName === "report") report(message); } : undefined}
     >
       {!isUser && showAssistantIdentity ? (
         <View style={styles.assistantIdentity}>
@@ -11572,7 +11606,7 @@ function MessageBubble({
           {messageTime}
         </Text>
       ) : null}
-    </View>
+    </BubbleContainer>
   );
 }
 
