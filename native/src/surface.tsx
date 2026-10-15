@@ -534,6 +534,7 @@ import { ServerOwnerDeletionSection } from "./ServerOwnerDeletionSection";
 import { LapseExportSection } from "./LapseExportSection";
 import { LAPSE_EXPORT_DOWNLOAD_HREF } from "./lapse-export";
 import { serverOwnerDeletionVisible } from "./server-owner-deletion";
+import { effectiveAppearancePreference, resolvedAppearanceScheme, type AppearancePreference } from "./appearance-preference";
 import {
   MobileSwipeRemoveRow,
   type MobileRemovableNavigationEntry,
@@ -597,7 +598,6 @@ export function createNativeR8Surface(host: NativeR8Host) {
   const { bindMobilePurchasesAccount, isMobilePurchaseCancelled,
     mobilePurchasesConfiguredForBuild, mobilePurchasesController } = host.purchases;
 type Tab = "chat" | "suggestions" | "bookmarks" | "tasks" | "automations" | "ai_access" | "capabilities" | "connections_customer" | "account" | "support";
-type AppearancePreference = "system" | "light" | "dark";
 type StorageKind = "secure" | "local" | "memory";
 type SettingsSection = "overview" | "account" | "support" | "privacy" | "connections" | "diagnostics";
 type MobileForegroundNotificationContext = {
@@ -1688,7 +1688,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const accountPage = accountPageCopy(appLocale);
   const systemPageCopy = t.systemPages;
   const [appearancePreference, setAppearancePreference] = useState<AppearancePreference>("system");
-  const resolvedColorScheme = appearancePreference === "system" ? (systemColorScheme ?? "light") : appearancePreference;
+  // HPD-1238: before sign-in the screens follow the phone; the stored setting applies after sign-in.
+  const activeAppearancePreference = effectiveAppearancePreference({ stored: appearancePreference, signedIn: Boolean(token), sessionMode: host.session.mode });
+  const resolvedColorScheme = resolvedAppearanceScheme(activeAppearancePreference, systemColorScheme);
   const [email, setEmail] = useState("");
   const [accessCode, setAccessCode] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -4762,8 +4764,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }, []);
 
   useEffect(() => {
-    if (host.session.mode === "standalone") Appearance.setColorScheme(appearancePreference === "system" ? null : appearancePreference);
-  }, [appearancePreference]);
+    if (host.session.mode === "standalone") Appearance.setColorScheme(activeAppearancePreference === "system" ? null : activeAppearancePreference);
+  }, [activeAppearancePreference]);
 
   useEffect(() => {
     if (previousConversationSessionIdRef.current === activeConversationSessionId) return;
