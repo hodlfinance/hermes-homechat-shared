@@ -209,3 +209,31 @@ test("native wiring: the running-work clock ticks only while a task is active", 
   assert.match(indicator.slice(0, 600), /if \(!activeTaskCount\) return;/);
   assert.match(indicator.slice(0, 600), /\}, \[activeTaskCount\]\);/);
 });
+
+test("hiding or stopping while a read is in flight arms nothing afterwards", async () => {
+  const clock = fakeTimers();
+  let polls = 0;
+  let finish: (tasks: HermesDelegatedTask[]) => void = () => undefined;
+  const loop = createDelegatedTaskPollLoop({
+    poll: () => {
+      polls += 1;
+      return new Promise<HermesDelegatedTask[]>((resolve) => { finish = resolve; });
+    },
+    timers: clock.timers,
+  });
+  loop.setConditions({ inView: true, urgent: false });
+  loop.setConditions({ inView: false, urgent: false });
+  finish([task({ state: "running", completedAt: null })]);
+  await clock.advance(0);
+  assert.equal(clock.pendingCount(), 0, "a running task read after hiding does not re-arm the loop");
+  await clock.advance(10 * 60_000);
+  assert.equal(polls, 1);
+
+  loop.setConditions({ inView: true, urgent: false });
+  assert.equal(polls, 2);
+  loop.stop();
+  finish([task({ state: "running", completedAt: null })]);
+  await clock.advance(10 * 60_000);
+  assert.equal(clock.pendingCount(), 0, "a read that lands after stop arms nothing");
+  assert.equal(polls, 2);
+});

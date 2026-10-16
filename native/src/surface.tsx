@@ -4935,6 +4935,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 deliveredDelegationResultIdsRef.current.add(resultMessageId);
               }
             }
+          } catch {
+            // A failed transcript refresh is tried again on the next read; the
+            // tasks of this read still decide the poll cadence.
           } finally {
             messageRefreshActive = false;
           }
@@ -11877,7 +11880,7 @@ function MobileDelegatedTasksIndicator({ locale,
   const [nowMs, setNowMs] = useState(() => Date.now());
   // HPD-1276: the elapsed time ticks only while a shown task still runs; a
   // list of finished tasks draws nothing here and needs no clock.
-  const activeTaskCount = tasks.filter((task) => !mobileDelegatedTaskIsTerminal(task.state)).length;
+  const activeTaskCount = tasks.filter((task) => !dismissedTaskIds.includes(task.taskId) && !mobileDelegatedTaskIsTerminal(task.state)).length;
   useEffect(() => {
     if (!activeTaskCount) return;
     setNowMs(Date.now());
