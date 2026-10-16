@@ -226,6 +226,10 @@ export type LiveVoiceWebRtcModules = {
     beforeCapture?(): Promise<void> | void;
     /** After the answer is applied: e.g. route to the loudspeaker on iOS. */
     afterAnswer?(): Promise<void> | void;
+    /** Once audio really flows (HPD-1267). WebRTC configures its own iOS
+     * audio session when the call connects, after the answer, and that puts
+     * the output back on the earpiece; the host applies its route again here. */
+    afterReady?(): Promise<void> | void;
     /** After close: e.g. InCallManager.stop(). */
     afterClose?(): Promise<void> | void;
   };
@@ -287,13 +291,14 @@ export function createWebRtcLiveVoicePlatform(modules: LiveVoiceWebRtcModules): 
           attach: async track => { await audio.sender.replaceTrack(track); },
           keep: captured => { if (closed) captured.getTracks().forEach(track => track.stop()); else stream = captured; } });
         microphone.then(() => { if (!closed) link.microphone(true); }, () => { if (!closed) link.microphone(false); });
+        link.ready.then(async () => { if (!closed) await modules.audio?.afterReady?.(); }).catch(() => undefined);
         return { offer: offer.sdp, close, ready: link.ready,
           async answer(sdp: string) {
             // Capture configures the audio session first, then WebRTC accepts
             // the answer, then the host routes audio (Hey Build 119 order).
             await microphone.catch(() => undefined);
             await connection.setRemoteDescription(modules.createAnswer(sdp));
-            await modules.audio?.afterAnswer?.();
+            if (!closed) await modules.audio?.afterAnswer?.();
           } };
       } catch { await close(); throw new Error("Voice microphone is unavailable."); }
     },

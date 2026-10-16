@@ -133,6 +133,71 @@ test("the WebRTC adapter uses only the injected modules and releases media on cl
   assert.deepEqual(log.slice(-3), ["track.stop", "peer.close", "route.stop"]);
 });
 
+test("HPD-1267: the host re-applies the audio route once the call really connects", async () => {
+  // WebRTC configures its own iOS audio session when the call connects, after
+  // the answer. That drops the loudspeaker choice, so the route runs again then.
+  const log: string[] = [];
+  const track = { stop() {} };
+  let peerState: { onconnectionstatechange: (() => void) | null; connectionState: string } | null = null;
+  const channel: { onopen: (() => void) | null } = { onopen: null };
+  const platform = createWebRtcLiveVoicePlatform({
+    createPeer() {
+      const peer = { connectionState: "new", onconnectionstatechange: null as (() => void) | null,
+        addTransceiver: () => ({ sender: { async replaceTrack() {} } }), createDataChannel: () => channel,
+        async createOffer() { return { sdp: "v=0\r\no" }; }, async setLocalDescription() {},
+        async setRemoteDescription() { log.push("remote"); }, close() { log.push("peer.close"); } };
+      peerState = peer; return peer;
+    },
+    createAnswer: sdp => sdp, async getUserMedia() { return { getTracks: () => [track], getAudioTracks: () => [track] }; },
+    async requestMicrophone() { return true; }, randomUUID: () => sessionId,
+    audio: { afterAnswer() { log.push("speaker"); }, afterReady() { log.push("speaker.ready"); } },
+  });
+  const connection = await platform.open({ signal: new AbortController().signal, onFailure() {} });
+  await connection.answer("v=0\r\nanswer");
+  assert.deepEqual(log, ["remote", "speaker"]);
+  channel.onopen?.(); peerState!.connectionState = "connected"; peerState!.onconnectionstatechange?.();
+  await connection.ready; await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(log, ["remote", "speaker", "speaker.ready"]);
+  await connection.close();
+});
+
+test("HPD-1267: a call closed before it connects never re-applies the route", async () => {
+  const log: string[] = [];
+  const platform = createWebRtcLiveVoicePlatform({
+    createPeer: () => ({ connectionState: "new", onconnectionstatechange: null,
+      addTransceiver: () => ({ sender: { async replaceTrack() {} } }), createDataChannel: () => ({ onopen: null }),
+      async createOffer() { return { sdp: "v=0\r\no" }; }, async setLocalDescription() {}, async setRemoteDescription() {},
+      close() {} }),
+    createAnswer: sdp => sdp, async getUserMedia() { const t = { stop() {} }; return { getTracks: () => [t], getAudioTracks: () => [t] }; },
+    async requestMicrophone() { return true; }, randomUUID: () => sessionId,
+    audio: { afterReady() { log.push("speaker.ready"); } },
+  });
+  const connection = await platform.open({ signal: new AbortController().signal, onFailure() {} });
+  await connection.close();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(log, []);
+});
+
+test("HPD-1267: an answer that lands after End never applies the route", async () => {
+  const log: string[] = [];
+  let accept!: () => void;
+  const platform = createWebRtcLiveVoicePlatform({
+    createPeer: () => ({ connectionState: "new", onconnectionstatechange: null,
+      addTransceiver: () => ({ sender: { async replaceTrack() {} } }), createDataChannel: () => ({ onopen: null }),
+      async createOffer() { return { sdp: "v=0\r\no" }; }, async setLocalDescription() {},
+      setRemoteDescription: () => new Promise<void>(resolve => { accept = resolve; }), close() {} }),
+    createAnswer: sdp => sdp, async getUserMedia() { const t = { stop() {} }; return { getTracks: () => [t], getAudioTracks: () => [t] }; },
+    async requestMicrophone() { return true; }, randomUUID: () => sessionId,
+    audio: { afterAnswer() { log.push("speaker"); }, afterClose() { log.push("route.stop"); } },
+  });
+  const connection = await platform.open({ signal: new AbortController().signal, onFailure() {} });
+  const answering = connection.answer("v=0\r\nanswer");
+  await new Promise(resolve => setImmediate(resolve));
+  await connection.close();
+  accept(); await answering;
+  assert.deepEqual(log, ["route.stop"]);
+});
+
 test("a denied microphone fails the start without leaking media", async () => {
   const log: string[] = [];
   const platform = createWebRtcLiveVoicePlatform({
