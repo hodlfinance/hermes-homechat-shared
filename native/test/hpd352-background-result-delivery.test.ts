@@ -48,8 +48,10 @@ test("native task observer refreshes the visible transcript independently of pus
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   const observer = surface.slice(
     surface.indexOf("const poll = () =>"),
-    surface.indexOf("poll();"),
+    // HPD-1276: the poll is driven by the visibility-aware loop now.
+    surface.indexOf("createDelegatedTaskPollLoop({ poll })"),
   );
+  assert.ok(observer.length > 0, "the poll body is found");
   assert.match(observer, /mobileDelegatedTaskResultMessageIds/);
   assert.match(observer, /chatConversationController\.refreshMessages/);
   assert.match(observer, /mergeHomechatMessages/);
