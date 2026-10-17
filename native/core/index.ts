@@ -1,6 +1,7 @@
 export * from "./types";
 export * from "./product";
 export * from "./budget";
+export * from "./included-ai-week";
 export * from "./api-client";
 export * from "./assistant-message-images";
 export * from "./assistant-message-links";
