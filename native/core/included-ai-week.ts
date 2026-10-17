@@ -6,7 +6,7 @@ import type { AppLocale } from "./types";
  * trial or paid alike, and renews exactly seven days after the previous
  * renewal. The arithmetic is plain UTC milliseconds, so a renewal never drifts
  * with a daylight-saving change; the customer's local clock only decides how
- * the next renewal is written ("Resets Saturday, Oct 24, 8:00 AM").
+ * the next renewal is written ("Resets Saturday 8:00 AM").
  */
 export const INCLUDED_AI_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -29,7 +29,7 @@ export function includedAiWeekWindow(anchorAt: string, at: string): IncludedAiWe
 }
 
 const resetTemplates: Record<AppLocale, string> = {
-  en: "Resets {when}, {time}",
+  en: "Resets {when} {time}",
   de: "Erneuert sich am {when} um {time}",
   fr: "Se renouvelle {when} à {time}",
   es: "Se renueva el {when} a las {time}",
@@ -40,20 +40,24 @@ const resetTemplates: Record<AppLocale, string> = {
 };
 
 /**
- * "Resets Saturday, Oct 24, 8:00 AM" in the reader's language and local time.
- * Justus, 2026-10-17 (HPD-452): the line always names weekday, date and time,
- * whether the reset is days away (a week) or weeks away (a monthly window).
+ * "Resets Saturday 8:00 AM" in the reader's language and local time. A reset
+ * more than a week away (a monthly window that has not moved to weekly) names
+ * the date instead of a weekday, so it never reads as this week.
  */
 export function includedAiResetText(
   resetAt: string | null | undefined,
   locale: AppLocale,
-  options: { timeZone?: string } = {},
+  options: { timeZone?: string; now?: number } = {},
 ): string | null {
   if (!resetAt) return null;
   const reset = Date.parse(resetAt);
   if (!Number.isFinite(reset)) return null;
+  const now = options.now ?? Date.now();
   const timeZone = options.timeZone;
-  const when = new Intl.DateTimeFormat(locale, { weekday: "long", month: "short", day: "numeric", timeZone }).format(reset);
+  const withinWeek = reset - now <= INCLUDED_AI_WEEK_MS;
+  const when = new Intl.DateTimeFormat(locale, withinWeek
+    ? { weekday: "long", timeZone }
+    : { month: "short", day: "numeric", timeZone }).format(reset);
   const time = new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit", timeZone }).format(reset);
   // ICU separates "8:00" and "AM" with a narrow no-break space; one plain space reads the same everywhere.
   return (resetTemplates[locale] ?? resetTemplates.en)
