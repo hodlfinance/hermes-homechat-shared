@@ -26,34 +26,55 @@ test("an account that starts mid-week renews exactly seven days later at its own
   assert.equal(includedAiWeekWindow("not a date", anchor), null);
 });
 
-test("the reset reads as weekday and local time, and follows the reader's DST", () => {
-  const now = Date.parse("2026-10-20T10:00:00.000Z");
+// HPD-452, Justus 2026-10-17: the reset line always names weekday, date and time, e.g.
+// "Resets Saturday, Oct 25, 8:00 AM", in the reader's language and local time.
+test("the reset always reads as weekday, date and local time, and follows the reader's DST", () => {
   // Saturday 06:00 UTC = 08:00 in Berlin (CEST, UTC+2).
   assert.equal(
-    includedAiResetText("2026-10-24T06:00:00.000Z", "en", { timeZone: "Europe/Berlin", now }),
-    "Resets Saturday 8:00 AM",
+    includedAiResetText("2026-10-24T06:00:00.000Z", "en", { timeZone: "Europe/Berlin" }),
+    "Resets Saturday, Oct 24, 8:00 AM",
   );
-  // A week later Berlin is on CET (UTC+1): the same instant-of-week reads 07:00.
+  // After the European DST change on 2026-10-25 Berlin is on CET (UTC+1): 07:00.
   assert.equal(
-    includedAiResetText("2026-10-31T06:00:00.000Z", "en", { timeZone: "Europe/Berlin", now: Date.parse("2026-10-27T10:00:00.000Z") }),
-    "Resets Saturday 7:00 AM",
+    includedAiResetText("2026-10-31T06:00:00.000Z", "en", { timeZone: "Europe/Berlin" }),
+    "Resets Saturday, Oct 31, 7:00 AM",
+  );
+  // New York changes on 2026-11-01: the same UTC instant reads 2:00 before, 1:00 after.
+  assert.equal(
+    includedAiResetText("2026-10-24T06:00:00.000Z", "en", { timeZone: "America/New_York" }),
+    "Resets Saturday, Oct 24, 2:00 AM",
   );
   assert.equal(
-    includedAiResetText("2026-10-24T06:00:00.000Z", "en", { timeZone: "America/New_York", now }),
-    "Resets Saturday 2:00 AM",
+    includedAiResetText("2026-11-07T06:00:00.000Z", "en", { timeZone: "America/New_York" }),
+    "Resets Saturday, Nov 7, 1:00 AM",
+  );
+  // A local date can differ from the UTC date: Sunday 01:30 in Berlin is Saturday in UTC.
+  assert.equal(
+    includedAiResetText("2026-10-24T23:30:00.000Z", "de", { timeZone: "Europe/Berlin" }),
+    "Erneuert sich am Sonntag, 25. Okt. um 1:30",
   );
   assert.equal(
-    includedAiResetText("2026-10-24T06:00:00.000Z", "de", { timeZone: "Europe/Berlin", now }),
-    "Erneuert sich am Samstag um 8:00",
+    includedAiResetText("2026-10-24T06:00:00.000Z", "de", { timeZone: "Europe/Berlin" }),
+    "Erneuert sich am Samstag, 24. Okt. um 8:00",
   );
   assert.equal(includedAiResetText(null, "en"), null);
   assert.equal(includedAiResetText("garbage", "en"), null);
 });
 
-test("a reset more than a week away names its date, not a weekday", () => {
-  const now = Date.parse("2026-10-17T10:00:00.000Z");
+test("every locale names the weekday, the date and the time, near or far", () => {
+  const reset = "2026-10-24T06:00:00.000Z";
+  for (const locale of ["en", "de", "fr", "es", "it", "pt-BR", "ja", "ko"] as const) {
+    const text = includedAiResetText(reset, locale, { timeZone: "Europe/Berlin" })!;
+    const part = (options: Intl.DateTimeFormatOptions) =>
+      new Intl.DateTimeFormat(locale, { ...options, timeZone: "Europe/Berlin" }).format(Date.parse(reset));
+    assert.ok(text.includes(part({ weekday: "long" })), `${locale} weekday: ${text}`);
+    assert.ok(text.includes("24"), `${locale} date: ${text}`);
+    assert.ok(text.includes("8:00"), `${locale} time: ${text}`);
+    assert.ok(!/[\u202f\u00a0]/.test(text), `${locale} plain spaces: ${text}`);
+  }
+  // A monthly window's reset, weeks away, reads the same way.
   assert.equal(
-    includedAiResetText("2026-11-01T00:00:00.000Z", "en", { timeZone: "UTC", now }),
-    "Resets Nov 1 12:00 AM",
+    includedAiResetText("2026-11-01T00:00:00.000Z", "en", { timeZone: "UTC" }),
+    "Resets Sunday, Nov 1, 12:00 AM",
   );
 });

@@ -12501,8 +12501,8 @@ function MobileAiAccessPanel({
   }));
   const labelFor = (value: ChatRoutePreference) => value === "chatgpt_account" ? copy.chatGpt : value === "claude_account" ? copy.claude : copy.included;
   const detailFor = (value: ChatRoutePreference) => value === "chatgpt_account" ? copy.chatGptDetail : value === "claude_account" ? copy.claudeDetail : copy.includedDetail;
-  // HPD-452 (Justus, 2026-10-17): beside the remaining percent, the next reset as weekday
-  // and time in the reader's local time, e.g. "Resets Saturday 8:00 AM".
+  // HPD-452 (Justus, 2026-10-17): beside the remaining percent, the next reset as weekday,
+  // date and time in the reader's local time, e.g. "Resets Saturday, Oct 24, 8:00 AM".
   const resetText = truthAvailable ? includedAiResetText(statusTruth.aiAccess.cycleResetAt, locale) : null;
   const includedStatus = truth.included === "confirmed" && managedModelName
     ? `${managedModelName} · ${remainingPercent === null ? copy.statusUnavailable : [copy.allowanceRemaining.replace("{percent}", String(remainingPercent)), resetText].filter(Boolean).join(" ")}`
