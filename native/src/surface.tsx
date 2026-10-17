@@ -47,7 +47,8 @@ import {
   mobileDrawerSections,
 } from "./mobile-automation-threads";
 import { subscribeKeyboardInsetRelease } from "./mobile-keyboard-inset";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createDelegatedTaskPollLoop, nextDelegatedTasks, type DelegatedTaskPollConditions } from "./delegated-task-poll";
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -4858,9 +4859,23 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     }
   }, [salesPaywallInView]);
 
+  // HPD-1276: the delegated-task read runs only while the surface is visible
+  // in its host and the app is in front; coming back reads at once. It keeps
+  // the 2.5 s cadence while a task runs, a chat run may delegate, or the
+  // ranked Tasks list is on screen, and reads once per 30 s otherwise.
+  const delegatedTaskPollConditions: DelegatedTaskPollConditions = {
+    inView: hostVisible && appInFront,
+    urgent: Boolean(activeChatRunId) || (tab === "tasks" && rankedTaskState.phase === "ready"),
+  };
+  const delegatedTaskPollConditionsRef = useRef(delegatedTaskPollConditions);
+  delegatedTaskPollConditionsRef.current = delegatedTaskPollConditions;
+  const delegatedTaskPollLoopRef = useRef<ReturnType<typeof createDelegatedTaskPollLoop> | null>(null);
+  useEffect(() => {
+    delegatedTaskPollLoopRef.current?.setConditions(delegatedTaskPollConditions);
+  }, [delegatedTaskPollConditions.inView, delegatedTaskPollConditions.urgent]);
   useEffect(() => {
     if (!token || !snapshot) {
-      setDelegatedTasks([]);
+      setDelegatedTasks((previous) => (previous.length ? [] : previous));
       deliveredDelegationResultIdsRef.current.clear();
       return;
     }
@@ -4874,10 +4889,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       void rankedTaskObserver.observe();
       requestController?.abort();
       requestController = new AbortController();
-      void hermesApi.delegatedTasks({ signal: requestController.signal })
+      return hermesApi.delegatedTasks({ signal: requestController.signal })
         .then(async (tasks) => {
-          if (cancelled) return;
-          setDelegatedTasks(tasks);
+          if (cancelled) return null;
+          // HPD-1276: the same values keep the same array, so nothing re-renders.
+          setDelegatedTasks((previous) => nextDelegatedTasks(previous, tasks));
 
           // HPD-352: the native runtime persists a completed delegation reply
           // independently of the browser run that started it. The task read
@@ -4898,7 +4914,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             !visibleConversationId ||
             !resultMessageIds.length ||
             messageRefreshActive
-          ) return;
+          ) return tasks;
           messageRefreshActive = true;
           try {
             const page = await chatConversationController.refreshMessages(
@@ -4909,7 +4925,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
               cancelled ||
               page.phase !== "ready" ||
               activeConversationSessionIdRef.current !== visibleConversationId
-            ) return;
+            ) return tasks;
             const merged = mergeHomechatMessages(messagesStateRef.current, page.items);
             messagesStateRef.current = merged;
             setMessages(merged);
@@ -4919,18 +4935,24 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 deliveredDelegationResultIdsRef.current.add(resultMessageId);
               }
             }
+          } catch {
+            // A failed transcript refresh is tried again on the next read; the
+            // tasks of this read still decide the poll cadence.
           } finally {
             messageRefreshActive = false;
           }
+          return tasks;
         })
-        .catch(() => undefined);
+        .catch(() => null);
     };
-    poll();
-    const timer = setInterval(poll, 2_500);
+    const loop = createDelegatedTaskPollLoop({ poll });
+    delegatedTaskPollLoopRef.current = loop;
+    loop.setConditions(delegatedTaskPollConditionsRef.current);
     return () => {
       cancelled = true;
       requestController?.abort();
-      clearInterval(timer);
+      loop.stop();
+      if (delegatedTaskPollLoopRef.current === loop) delegatedTaskPollLoopRef.current = null;
     };
   }, [chatConversationController, hermesApi, rankedTaskObserver, snapshot?.workspace.id, tab, token]);
 
@@ -11431,7 +11453,11 @@ function ChatEmptyState({
   );
 }
 
-function MessageBubble({
+// HPD-1276: a bubble whose props did not change is not drawn again. The
+// message objects keep their identity across renders (the transcript helpers
+// filter, they do not copy), so a re-render of the surface no longer parses
+// every message of a long chat once more.
+const MessageBubble = memo(function MessageBubble({
   message,
   locale,
   now,
@@ -11615,7 +11641,7 @@ function MessageBubble({
       ) : null}
     </BubbleContainer>
   );
-}
+});
 
 function MobileChatApprovalCard({
   locale,
@@ -11855,12 +11881,15 @@ function MobileDelegatedTasksIndicator({ locale,
 }) {
   const reduceMotion = useReduceMotion();
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // HPD-1276: the elapsed time ticks only while a shown task still runs; a
+  // list of finished tasks draws nothing here and needs no clock.
+  const activeTaskCount = tasks.filter((task) => !dismissedTaskIds.includes(task.taskId) && !mobileDelegatedTaskIsTerminal(task.state)).length;
   useEffect(() => {
-    if (!tasks.length) return;
+    if (!activeTaskCount) return;
     setNowMs(Date.now());
     const timer = setInterval(() => setNowMs(Date.now()), 1_000);
     return () => clearInterval(timer);
-  }, [tasks.length]);
+  }, [activeTaskCount]);
   // This compact indicator contains active work only. Closing a visible row
   // dismisses it locally and calls the running sub order off.
   const view = delegatedTasksView(
