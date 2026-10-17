@@ -1996,7 +1996,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [withdrawnFollowUpRunIds, setWithdrawnFollowUpRunIds] = useState<ReadonlySet<string>>(() => new Set());
   // HPD-1291: queue cards whose "Send now" tap is on its way, and cards whose
   // tap Hermes could not take (they stay queued and run next).
-  const [steeringFollowUps, setSteeringFollowUps] = useState<ReadonlySet<number>>(() => new Set());
+  // Keyed by card, valued by the running reply the tap was for: a tap counts
+  // as on its way only while that same reply is still the active one.
+  const [steeringFollowUps, setSteeringFollowUps] = useState<ReadonlyMap<number, string>>(() => new Map());
   const [steerRefusedFollowUps, setSteerRefusedFollowUps] = useState<ReadonlySet<number>>(() => new Set());
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [voiceNoteState, setVoiceNoteState] = useState<SharedHomechatVoiceState>({
@@ -7335,22 +7337,27 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     const queued = queuedFollowUpRef.current.get(ownershipToken);
     const runningRunId = activeChatRunId;
     if (!queued || queued.status !== "queued" || !queued.runId || !runningRunId) return;
-    if (steeringFollowUps.has(ownershipToken)) return;
+    if (steeringFollowUps.get(ownershipToken) === runningRunId) return;
     const withToken = (current: ReadonlySet<number>) => new Set([...current, ownershipToken]);
     const withoutToken = (current: ReadonlySet<number>) => new Set([...current].filter((token) => token !== ownershipToken));
+    const steeringWithout = (current: ReadonlyMap<number, string>) =>
+      new Map([...current].filter(([token]) => token !== ownershipToken));
     setSteerRefusedFollowUps(withoutToken);
-    setSteeringFollowUps(withToken);
+    setSteeringFollowUps((current) => new Map([...current, [ownershipToken, runningRunId]]));
     try {
       const outcome = await hermesApi.steerRun(runningRunId, queued.runId, {});
-      if (outcome.state === "refused") {
-        setSteeringFollowUps(withoutToken);
+      // "already_claimed": an earlier tap is on its way. "unconfirmed": the
+      // Plane could not hear the guest's answer and settles it when the reply
+      // ends. Neither means it stays queued, so neither shows the notice.
+      if (outcome.state === "refused" && outcome.reason !== "already_claimed" && outcome.reason !== "unconfirmed") {
+        setSteeringFollowUps(steeringWithout);
         setSteerRefusedFollowUps(withToken);
         recordDiagnostic("info", "Send now refused", outcome.reason);
       }
       // accepted/delivered: the card keeps its spinner until the run's own
       // status closes it (sent into the reply) or starts it (came back).
     } catch (err) {
-      setSteeringFollowUps(withoutToken);
+      setSteeringFollowUps(steeringWithout);
       setSteerRefusedFollowUps(withToken);
       recordDiagnostic("error", "Send now failed", displayError(err, "Could not send the message into the current reply."));
     }
@@ -9393,7 +9400,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   runId: queued.runId,
                   status: queued.status,
                   hasAttachments: Boolean(queuedFollowUpRef.current.get(queued.ownershipToken)?.attachments?.length),
-                  steering: steeringFollowUps.has(queued.ownershipToken),
+                  steering: Boolean(activeChatRunId) && steeringFollowUps.get(queued.ownershipToken) === activeChatRunId,
                 }, {
                   activeRunId: activeChatRunId,
                   activeRunStatus: activeChatRunId ? chatRunStatusesById[activeChatRunId] : undefined,

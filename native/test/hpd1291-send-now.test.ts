@@ -105,3 +105,16 @@ test("every app locale has the new words", () => {
   }
   assert.equal((interactionUiCopy("de") as Record<string, string>)["Send now"], "Jetzt einreichen");
 });
+
+test("a tap counts as on its way only for the reply it was sent to", () => {
+  const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  // Two queued cards: the tap on card 2 came back, card 1 became the running
+  // reply. Card 2 must not keep a spinner and a disabled Cancel for that reply.
+  assert.match(surface, /useState<ReadonlyMap<number, string>>/);
+  assert.match(surface, /steering: Boolean\(activeChatRunId\) && steeringFollowUps\.get\(queued\.ownershipToken\) === activeChatRunId/);
+  const handler = surface.slice(surface.indexOf("async function steerQueuedFollowUp("));
+  const body = handler.slice(0, handler.indexOf("\n  }\n") + 4);
+  // An earlier tap on its way, or an answer the Plane settles later, is not a refusal.
+  assert.match(body, /already_claimed/);
+  assert.match(body, /unconfirmed/);
+});
