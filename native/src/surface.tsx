@@ -322,6 +322,7 @@ import {
   mobileQueuedFollowUpKeepsOwnershipAfterBackgroundError,
   mobileQueuedFollowUpBlocksComposer,
   mobileQueuedFollowUpNoticeActionState,
+  mobileQueuedFollowUpSteerState,
   mobileQueuedFollowUpNoticeVisible,
   mobileQueuedFollowUpShouldEnterTranscript,
   mobileTranscriptWithoutUnsentFollowUps,
@@ -1993,6 +1994,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [queuedFollowUps, setQueuedFollowUps] = useState<MobileQueuedFollowUpView[]>([]);
   // HPD-891: follow-ups cancelled before they were sent; never a chat bubble.
   const [withdrawnFollowUpRunIds, setWithdrawnFollowUpRunIds] = useState<ReadonlySet<string>>(() => new Set());
+  // HPD-1291: queue cards whose "Send now" tap is on its way, and cards whose
+  // tap Hermes could not take (they stay queued and run next).
+  // Keyed by card, valued by the running reply the tap was for: a tap counts
+  // as on its way only while that same reply is still the active one.
+  const [steeringFollowUps, setSteeringFollowUps] = useState<ReadonlyMap<number, string>>(() => new Map());
+  const [steerRefusedFollowUps, setSteerRefusedFollowUps] = useState<ReadonlySet<number>>(() => new Set());
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [voiceNoteState, setVoiceNoteState] = useState<SharedHomechatVoiceState>({
     error: null,
@@ -7320,6 +7327,42 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     }
   }
 
+  /**
+   * HPD-1291. "Send now": hand a queued message to the running reply as a
+   * Hermes steer. The queued run is left as it is (never aborted, never
+   * removed here): if Hermes takes it, the Plane closes that run as sent into
+   * the reply and the card goes with it; if not, it runs next as before.
+   */
+  async function steerQueuedFollowUp(ownershipToken: number) {
+    const queued = queuedFollowUpRef.current.get(ownershipToken);
+    const runningRunId = activeChatRunId;
+    if (!queued || queued.status !== "queued" || !queued.runId || !runningRunId) return;
+    if (steeringFollowUps.get(ownershipToken) === runningRunId) return;
+    const withToken = (current: ReadonlySet<number>) => new Set([...current, ownershipToken]);
+    const withoutToken = (current: ReadonlySet<number>) => new Set([...current].filter((token) => token !== ownershipToken));
+    const steeringWithout = (current: ReadonlyMap<number, string>) =>
+      new Map([...current].filter(([token]) => token !== ownershipToken));
+    setSteerRefusedFollowUps(withoutToken);
+    setSteeringFollowUps((current) => new Map([...current, [ownershipToken, runningRunId]]));
+    try {
+      const outcome = await hermesApi.steerRun(runningRunId, queued.runId, {});
+      // "already_claimed": an earlier tap is on its way. "unconfirmed": the
+      // Plane could not hear the guest's answer and settles it when the reply
+      // ends. Neither means it stays queued, so neither shows the notice.
+      if (outcome.state === "refused" && outcome.reason !== "already_claimed" && outcome.reason !== "unconfirmed") {
+        setSteeringFollowUps(steeringWithout);
+        setSteerRefusedFollowUps(withToken);
+        recordDiagnostic("info", "Send now refused", outcome.reason);
+      }
+      // accepted/delivered: the card keeps its spinner until the run's own
+      // status closes it (sent into the reply) or starts it (came back).
+    } catch (err) {
+      setSteeringFollowUps(steeringWithout);
+      setSteerRefusedFollowUps(withToken);
+      recordDiagnostic("error", "Send now failed", displayError(err, "Could not send the message into the current reply."));
+    }
+  }
+
   function dismissQueuedFollowUp(ownershipToken: number) {
     if (queuedFollowUpRef.current.has(ownershipToken)) return;
     removeQueuedFollowUpView(ownershipToken);
@@ -9353,6 +9396,18 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 position={index + 1}
                 onCancel={() => void cancelQueuedFollowUp(queued.ownershipToken)}
                 onDismiss={() => dismissQueuedFollowUp(queued.ownershipToken)}
+                steer={mobileQueuedFollowUpSteerState({
+                  runId: queued.runId,
+                  status: queued.status,
+                  hasAttachments: Boolean(queuedFollowUpRef.current.get(queued.ownershipToken)?.attachments?.length),
+                  steering: Boolean(activeChatRunId) && steeringFollowUps.get(queued.ownershipToken) === activeChatRunId,
+                }, {
+                  activeRunId: activeChatRunId,
+                  activeRunStatus: activeChatRunId ? chatRunStatusesById[activeChatRunId] : undefined,
+                  liveVoiceConnected,
+                })}
+                steerRefused={queued.status === "queued" && steerRefusedFollowUps.has(queued.ownershipToken)}
+                onSteer={() => void steerQueuedFollowUp(queued.ownershipToken)}
               />
             ))}
             </ScrollView> : null}
@@ -12272,30 +12327,54 @@ function QueuedFollowUpNotice({ locale,
   position,
   onCancel,
   onDismiss,
+  steer,
+  steerRefused,
+  onSteer,
 }: { locale: AppLocale } & {
   queued: MobileQueuedFollowUpView;
   position: number;
   onCancel: () => void;
   onDismiss: () => void;
+  steer: { showSteer: boolean; steerDisabled: boolean };
+  steerRefused: boolean;
+  onSteer: () => void;
 }) {
   const actions = mobileQueuedFollowUpNoticeActionState(queued.status);
+  const steering = steer.showSteer && steer.steerDisabled;
   return (
     <View style={[styles.message, styles.queuedFollowUpMessage]}>
       <View style={styles.failedMessageHead}>
-        {actions.cancelDisabled ? <ActivityIndicator size="small" color={palette.teal} /> : <Clock3 size={15} color={palette.teal} />}
-        <Text style={styles.queuedFollowUpTitle}>{position}. {queuedFollowUpStatusText(queued.status, locale)}</Text>
+        {actions.cancelDisabled || steering ? <ActivityIndicator size="small" color={palette.teal} /> : <Clock3 size={15} color={palette.teal} />}
+        <Text style={styles.queuedFollowUpTitle}>{position}. {steering
+          ? staticUiCopy(locale)["Sending into the current reply"]
+          : queuedFollowUpStatusText(queued.status, locale)}</Text>
       </View>
       <Text style={styles.failedMessageBody} numberOfLines={3}>
         {queued.content}
       </Text>
+      {steerRefused ? (
+        <Text style={styles.failedMessageBody}>{staticUiCopy(locale)["Hermes could not take it right now. It stays in the queue."]}</Text>
+      ) : null}
       <View style={styles.messageActions}>
+        {steer.showSteer ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={staticUiCopy(locale)["Send this message into the current reply"]}
+            style={[styles.messageActionButton, steer.steerDisabled && styles.disabledButton]}
+            onPress={onSteer}
+            disabled={steer.steerDisabled}
+          >
+            <Send size={14} color={palette.teal} />
+            <Text style={styles.messageActionText}>{staticUiCopy(locale)["Send now"]}</Text>
+          </Pressable>
+        ) : null}
         {actions.showCancel ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={staticUiCopy(locale)["Cancel queued follow-up"]}
-            style={[styles.messageActionButton, actions.cancelDisabled && styles.disabledButton]}
+            style={[styles.messageActionButton, (actions.cancelDisabled || steering) && styles.disabledButton]}
             onPress={onCancel}
-            disabled={actions.cancelDisabled}
+            disabled={actions.cancelDisabled || steering}
           >
             <X size={14} color={palette.teal} />
             <Text style={styles.messageActionText}>{staticUiCopy(locale)["Cancel"]}</Text>

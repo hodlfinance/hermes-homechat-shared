@@ -414,6 +414,27 @@ export function mobileQueuedFollowUpNoticeActionState(
   };
 }
 
+/**
+ * HPD-1291. Whether a queued message's card shows "Send now". Only a plain
+ * text message still waiting in the queue, behind a reply of the same chat
+ * that is running (not waiting on an approval or a question). A message with
+ * a photo or file keeps waiting (Justus 2026-10-17, 2a); live voice has no
+ * queue box. The Plane and the guest check all of this again.
+ */
+export function mobileQueuedFollowUpSteerState(
+  queued: { runId: string | null; status: MobileQueuedFollowUpStatus; hasAttachments: boolean; steering: boolean },
+  context: { activeRunId: string | null; activeRunStatus: ChatRunStatus | undefined; liveVoiceConnected: boolean },
+): { showSteer: boolean; steerDisabled: boolean } {
+  const showSteer = queued.status === "queued"
+    && Boolean(queued.runId)
+    && !queued.hasAttachments
+    && Boolean(context.activeRunId)
+    && context.activeRunId !== queued.runId
+    && context.activeRunStatus === "running"
+    && !context.liveVoiceConnected;
+  return { showSteer, steerDisabled: showSteer && queued.steering };
+}
+
 export function mobileMessagesAfterPreStartFollowUpCancel<T extends { id: string }>(
   messages: T[],
   optimisticMessageId: string | null,

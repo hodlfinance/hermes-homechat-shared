@@ -53,6 +53,11 @@ function isRetryableHermesHttpStatus(status: number): boolean {
   return status === 408 || status === 425 || status === 429 || (status >= 500 && status <= 599);
 }
 
+/** HPD-1291: what the Plane did with a tapped queued message. */
+export type HermesSteerOutcome =
+  | { state: "accepted" | "delivered" }
+  | { state: "refused"; reason: string };
+
 export class HermesApiClientError extends Error {
   readonly retryable: boolean;
   readonly status?: number;
@@ -248,6 +253,37 @@ export function createHermesApiClient({ baseUrl, token = "", fetchImpl = fetch }
         method: "POST",
         signal: options.signal,
       }),
+    // HPD-1291. "Send now" on a queued message: hand it to the running reply
+    // as a Hermes steer. The Plane answers 202 accepted, 200 delivered, or 409
+    // with a reason when it stays queued; any other failure stays an error.
+    async steerRun(
+      runId: string,
+      queuedRunId: string,
+      options: HermesRequestOptions = {},
+    ): Promise<HermesSteerOutcome> {
+      let response: Response;
+      try {
+        response = await fetchImpl(`${root}/hermes/runs/${encodeURIComponent(runId)}/steer`, {
+          method: "POST",
+          body: JSON.stringify({ queuedRunId }),
+          headers: headers({ "Content-Type": "application/json" }),
+          signal: options.signal,
+        });
+      } catch (error) {
+        if (isAbortError(error)) throw error;
+        throw new HermesApiClientError("Hermes steer request failed.", { cause: error, retryable: false });
+      }
+      const body = await response.json().catch(() => null) as { state?: unknown; reason?: unknown; error?: unknown } | null;
+      if (response.status === 409) {
+        const reason = typeof body?.reason === "string" && body.reason.trim() ? body.reason.trim() : "refused";
+        return { state: "refused", reason };
+      }
+      if (response.ok && (body?.state === "accepted" || body?.state === "delivered")) return { state: body.state };
+      throw new HermesApiClientError(
+        typeof body?.error === "string" ? body.error : `Hermes steer API returned ${response.status}.`,
+        { status: response.status },
+      );
+    },
     delegatedTasks: (
       query: { surface?: string } = {},
       options: HermesRequestOptions = {},
