@@ -386,6 +386,9 @@ export function createNativeR8CanonicalController(
       }
       return response.task;
     },
+    // HPD-1291: "Send now" on a queued message of the running reply runId.
+    steerRun: (runId: string, queuedRunId: string, context: MobileHermesRequestContext = {}) =>
+      client.steerRun(runId, queuedRunId, context),
     // HPD-871: every stop from the chat passes here. A run that has already
     // finished is returned as read, and no stop is sent to it.
     stopRun: async (runId: string, context: MobileHermesRequestContext = {}) => {
