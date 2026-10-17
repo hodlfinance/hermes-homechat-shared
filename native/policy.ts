@@ -14,6 +14,9 @@ const routes: ReadonlyArray<readonly [string, RegExp]> = [
   ["POST", /^\/hermes\/(?:conversations|runs|runs\/[^/]+\/(?:stop|latency)|jobs|jobs\/[^/]+\/(?:pause|resume|run))$/],
   // HPD-1062: an image the agent made in a run (a chart), read as JSON.
   ["GET", /^\/hermes\/runs\/[A-Za-z0-9_-]{1,160}\/images\/img_[0-9a-f]{32}$/],
+  // HPD-1291: "Send now" sends a queued message into the running reply
+  // (Hermes steer). Without it the HODL transport refused the tap.
+  ["POST", /^\/hermes\/runs\/[A-Za-z0-9_-]{1,160}\/steer$/],
   // HPD-924: the read acknowledgement for the newest rendered message.
   ["POST", /^\/hermes\/conversations\/[^/]+\/read$/],
   // HPD-841: the X on a running background task stops it on the plane.
