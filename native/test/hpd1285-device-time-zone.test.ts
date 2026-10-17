@@ -5,7 +5,8 @@ import { DEVICE_TIME_ZONE_HEADER, deviceTimeZone } from "../core/device-time-zon
 
 // HPD-1285: the Hey app reports the device's IANA time zone with every request;
 // the Hey Control Plane keeps it per workspace, so the customer's Hermes runs in
-// his zone. A Finance host (HODL, LiveQuote) sends nothing new.
+// his zone. Justus, 2026-10-17: the same for Fin, so a Finance host (HODL,
+// LiveQuote) reports it too; the Fin BFF forwards it to the Plane.
 
 function transport(surface: "hey_hermes" | "finhermes") {
   const seen: Headers[] = [];
@@ -39,10 +40,12 @@ test("every Hey request carries it, beside the session and the caller's own head
   assert.equal(seen[2]?.get("accept"), "a");
 });
 
-test("a Finance host sends nothing new", async () => {
+test("a Finance host (HODL, LiveQuote) reports it too", async () => {
   const { t, seen } = transport("finhermes");
+  await t.createApiClient({ baseUrl: "https://synthetic.invalid", token: "tok" }).snapshot();
   await t.fetchStream("https://synthetic.invalid/y", { headers: { Accept: "x" } });
-  assert.equal(seen[0]?.get(DEVICE_TIME_ZONE_HEADER), null);
+  for (const headers of seen) assert.equal(headers.get(DEVICE_TIME_ZONE_HEADER), deviceTimeZone());
+  assert.equal(seen[1]?.get("accept"), "x");
 });
 
 test("a device that cannot name its zone sends no header", async () => {

@@ -84,14 +84,14 @@ function approvalDecisionBody(approval: NativeFinanceActionApproval, decision: "
 }
 
 /**
- * HPD-1285: the Hey app reports the device's IANA time zone with every request,
+ * HPD-1285: every host reports the device's IANA time zone with every request,
  * read per request so it follows the customer when he travels; the Hey Control
- * Plane keeps it per workspace. A Finance host (HODL, LiveQuote) sends nothing
- * new. A header the caller set itself is kept; a plain object stays a plain
- * object, so the host fetch sees the same shape as before.
+ * Plane keeps it per workspace. Justus, 2026-10-17: Fin too, so a Finance host
+ * (HODL, LiveQuote) sends it as well and the Fin BFF forwards it to the Plane.
+ * A header the caller set itself is kept; a plain object stays a plain object,
+ * so the host fetch sees the same shape as before.
  */
-function withDeviceTimeZone(init: RequestInit | undefined, identity: NativeR8ChannelIdentity): RequestInit | undefined {
-  if (identity.surface !== "hey_hermes") return init;
+function withDeviceTimeZone(init: RequestInit | undefined): RequestInit | undefined {
   const zone = deviceTimeZone();
   if (!zone) return init;
   const headers = init?.headers;
@@ -111,7 +111,7 @@ export function createNativeR8Transport(options: {
 }): NativeR8Transport {
   const nativeFetch: typeof fetch = (input, init) => options.fetch(
     input,
-    withDeviceTimeZone(init?.credentials === "same-origin" ? { ...init, credentials: "omit" } : init, options.identity),
+    withDeviceTimeZone(init?.credentials === "same-origin" ? { ...init, credentials: "omit" } : init),
   );
   const request = async (token: string, path: string, init: RequestInit = {}) => {
     const response = await nativeFetch(`${options.baseUrl}${path}`, {
