@@ -1,4 +1,5 @@
 import { createApiClient, createHermesApiClient } from "./core/index";
+import { DEVICE_TIME_ZONE_HEADER, deviceTimeZone } from "./core/device-time-zone";
 import { createSupportRequestClient, createAnonymousSupportRequestClient } from "./core/support-request";
 import { createNativeR8CanonicalController, type NativeR8ChannelIdentity } from "./src/hermes-canonical";
 import type {
@@ -82,6 +83,26 @@ function approvalDecisionBody(approval: NativeFinanceActionApproval, decision: "
   });
 }
 
+/**
+ * HPD-1285: the Hey app reports the device's IANA time zone with every request,
+ * read per request so it follows the customer when he travels; the Hey Control
+ * Plane keeps it per workspace. A Finance host (HODL, LiveQuote) sends nothing
+ * new. A header the caller set itself is kept; a plain object stays a plain
+ * object, so the host fetch sees the same shape as before.
+ */
+function withDeviceTimeZone(init: RequestInit | undefined, identity: NativeR8ChannelIdentity): RequestInit | undefined {
+  if (identity.surface !== "hey_hermes") return init;
+  const zone = deviceTimeZone();
+  if (!zone) return init;
+  const headers = init?.headers;
+  if (headers instanceof Headers || Array.isArray(headers)) {
+    const merged = new Headers(headers);
+    if (!merged.has(DEVICE_TIME_ZONE_HEADER)) merged.set(DEVICE_TIME_ZONE_HEADER, zone);
+    return { ...init, headers: merged };
+  }
+  return { ...init, headers: { [DEVICE_TIME_ZONE_HEADER]: zone, ...(headers ?? {}) } };
+}
+
 /** Host supplied fetch is the only network capability of the shared native UI. */
 export function createNativeR8Transport(options: {
   baseUrl: string;
@@ -90,7 +111,7 @@ export function createNativeR8Transport(options: {
 }): NativeR8Transport {
   const nativeFetch: typeof fetch = (input, init) => options.fetch(
     input,
-    init?.credentials === "same-origin" ? { ...init, credentials: "omit" } : init,
+    withDeviceTimeZone(init?.credentials === "same-origin" ? { ...init, credentials: "omit" } : init, options.identity),
   );
   const request = async (token: string, path: string, init: RequestInit = {}) => {
     const response = await nativeFetch(`${options.baseUrl}${path}`, {
