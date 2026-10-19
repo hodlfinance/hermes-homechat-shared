@@ -1046,6 +1046,8 @@ export interface BillingPlanChangePreview {
   targetMonthlyPriceCents: number;
   currentIncludedAiCents: number;
   targetIncludedAiCents: number;
+  /** HPD-1296: included managed AI is stated per week; absent from an older API. */
+  includedAiPeriod?: "week";
   currentHostingProfileId: WorkspaceHostingProfileId;
   targetHostingProfileId: WorkspaceHostingProfileId;
   targetServerType: string;
@@ -2956,7 +2958,9 @@ export interface ProductPrice {
   plan: Exclude<PlanTier, "trial">;
   monthlyPriceCents: number;
   currency: "USD";
+  /** HPD-1296: the included managed-AI amount per `includedAiPeriod`. */
   includedAiCreditsCents: number;
+  includedAiPeriod: "week";
   description: string;
 }
 
