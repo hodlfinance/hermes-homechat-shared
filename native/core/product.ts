@@ -8,8 +8,14 @@ export interface SelfServePlanConfig {
   publicName: "Personal" | "Pro" | "Business";
   monthlyPriceCents: number;
   billingCurrency: "USD";
+  /** The former monthly amount; public texts name the weekly amount since HPD-1296. */
   includedAiCreditsCents: number;
-  dayCeilingCents: number;
+  /**
+   * HPD-452, Justus 2026-10-17: every plan carries USD 3.75 of included managed AI
+   * per account week; the daily ceiling is removed. Public texts state it since
+   * HPD-1296 (Justus' "Ja", 2026-10-19). Mirrors hey-hermes packages/core/src/product.ts.
+   */
+  weeklyIncludedAiCreditsCents: number;
   serverType: "cx23" | "cx33" | "cx43";
   vcpu: number;
   memoryMb: number;
@@ -28,10 +34,10 @@ export const selfServePlans = {
     monthlyPriceCents: 2900,
     billingCurrency: "USD",
     // Justus decided on 2026-10-07: Personal includes USD 10 of managed AI a
-    // month (was USD 5). The daily soft ceiling keeps the 25 % ratio every plan
-    // uses. Mirrors hey-hermes packages/core/src/product.ts (HPD-1086).
+    // month (was USD 5). Weekly since HPD-452 (below). Mirrors hey-hermes
+    // packages/core/src/product.ts (HPD-1086).
     includedAiCreditsCents: 1000,
-    dayCeilingCents: 250,
+    weeklyIncludedAiCreditsCents: 375,
     serverType: "cx23",
     vcpu: 2,
     memoryMb: 4096,
@@ -48,7 +54,7 @@ export const selfServePlans = {
     monthlyPriceCents: 4900,
     billingCurrency: "USD",
     includedAiCreditsCents: 1500,
-    dayCeilingCents: 375,
+    weeklyIncludedAiCreditsCents: 375,
     serverType: "cx33",
     vcpu: 4,
     memoryMb: 8192,
@@ -65,7 +71,7 @@ export const selfServePlans = {
     monthlyPriceCents: 12900,
     billingCurrency: "USD",
     includedAiCreditsCents: 3000,
-    dayCeilingCents: 750,
+    weeklyIncludedAiCreditsCents: 375,
     serverType: "cx43",
     vcpu: 8,
     memoryMb: 16384,
@@ -103,21 +109,27 @@ export const productPrices: ProductPrice[] = [
     plan: "personal",
     monthlyPriceCents: selfServePlans.personal.monthlyPriceCents,
     currency: "USD",
-    includedAiCreditsCents: selfServePlans.personal.includedAiCreditsCents,
+    // HPD-1296: the public price names the weekly amount every plan carries.
+    includedAiCreditsCents: selfServePlans.personal.weeklyIncludedAiCreditsCents,
+    includedAiPeriod: "week",
     description: "Personal workspace on a managed CX23 EU VPS with automatic AI routing, daily backups, and BYOK support.",
   },
   {
     plan: "plus",
     monthlyPriceCents: selfServePlans.plus.monthlyPriceCents,
     currency: "USD",
-    includedAiCreditsCents: selfServePlans.plus.includedAiCreditsCents,
+    // HPD-1296: the public price names the weekly amount every plan carries.
+    includedAiCreditsCents: selfServePlans.plus.weeklyIncludedAiCreditsCents,
+    includedAiPeriod: "week",
     description: "Pro workspace on a managed CX33 EU VPS with the same automatic AI quality policy, more included usage, daily backups, and BYOK support.",
   },
   {
     plan: "business",
     monthlyPriceCents: selfServePlans.business.monthlyPriceCents,
     currency: "USD",
-    includedAiCreditsCents: selfServePlans.business.includedAiCreditsCents,
+    // HPD-1296: the public price names the weekly amount every plan carries.
+    includedAiCreditsCents: selfServePlans.business.weeklyIncludedAiCreditsCents,
+    includedAiPeriod: "week",
     description: "Business workspace on a managed shared-vCPU CX43 EU VPS with frontier AI, higher parallel-agent concurrency, priority support, daily backups, and BYOK support.",
   },
 ];
