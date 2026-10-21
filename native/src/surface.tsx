@@ -118,7 +118,7 @@ import {
   X,
   UserPlus,
 } from "lucide-react-native";
-import { accountPageCopy, linkedIdentityConfirmation, linkedIdentityLine, type LinkedIdentityView, chatRouteAutomationFollowState, heyChatRouteChoices, heyOfferedChatRoutes, personalAccessPresentation, personalAccessStore } from "../core/index";
+import { accountPageCopy, linkedIdentityConfirmation, linkedIdentityLine, type LinkedIdentityView, chatRouteAutomationFollowState, heyChatRouteChoices, heyOfferedChatRoutesFrom, personalAccessPresentation, personalAccessStore } from "../core/index";
 import { createMobileLiveVoiceController, liveVoiceActive, liveVoiceCopy, liveVoiceNotice, liveVoiceStartVisible, type NativeLiveVoiceState } from "./mobile-live-voice";
 import { MobileLiveVoiceBar } from "./mobile-live-voice-bar";
 import type {
@@ -9602,9 +9602,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
               <PluginCatalogScreen
                 locale={appLocale}
                 aiAccessConnections={(([
-                  ["chatgpt_account", t.systemPages.aiAccess.chatGpt, t.systemPages.aiAccess.chatGptDetail],
+                  ["chatgpt_account", t.systemPages.aiAccess.chatGpt, t.systemPages.aiAccess.chatGptPrivacyDetail],
                   ["claude_account", t.systemPages.aiAccess.claude, t.systemPages.aiAccess.claudeDetail],
-                ] as const).filter(([provider]) => heyOfferedChatRoutes.includes(provider))).map(([provider, label, description]) => ({
+                ] as const).filter(([provider]) => heyOfferedChatRoutesFrom(modelOptions?.offeredChatRoutes).includes(provider))).map(([provider, label, description]) => ({
                   provider,
                   label,
                   description,
@@ -12574,12 +12574,19 @@ function MobileAiAccessPanel({
     : [];
   // HPD-401, HPD-386: only the routes the product offers, plus whatever this
   // workspace already stands on, so nobody sees a screen with nothing selected.
-  const choices = heyChatRouteChoices(preference ?? "included_ai").map((value) => ({
+  // HPD-1426: the server decides which routes this workspace is offered.
+  const offeredRoutes = heyOfferedChatRoutesFrom(modelOptions?.offeredChatRoutes);
+  const chatGptOffered = offeredRoutes.includes("chatgpt_account");
+  const choices = heyChatRouteChoices(preference ?? "included_ai", offeredRoutes).map((value) => ({
     value,
     logoKey: mobileAiAccessRouteLogoKey(value, canonicalProviderIds),
   }));
   const labelFor = (value: ChatRoutePreference) => value === "chatgpt_account" ? copy.chatGpt : value === "claude_account" ? copy.claude : copy.included;
-  const detailFor = (value: ChatRoutePreference) => value === "chatgpt_account" ? copy.chatGptDetail : value === "claude_account" ? copy.claudeDetail : copy.includedDetail;
+  // Before connecting, an offered ChatGPT row says where messages go, that the
+  // plan allowance is not used, and that Google-data chats stay on Included AI.
+  const detailFor = (value: ChatRoutePreference) => value === "chatgpt_account"
+    ? (chatGptOffered ? copy.chatGptPrivacyDetail : copy.chatGptDetail)
+    : value === "claude_account" ? copy.claudeDetail : copy.includedDetail;
   // HPD-452 (Justus, 2026-10-17): beside the remaining percent, the next reset as weekday
   // and time in the reader's local time, e.g. "Resets Saturday 8:00 AM".
   const resetText = truthAvailable ? includedAiResetText(statusTruth.aiAccess.cycleResetAt, locale) : null;

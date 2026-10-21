@@ -222,10 +222,28 @@ export type ChatRoutePreference = "included_ai" | "chatgpt_account" | "claude_ac
  */
 export const heyOfferedChatRoutes: readonly ChatRoutePreference[] = Object.freeze(["included_ai"]);
 
-export function heyChatRouteChoices(selected: ChatRoutePreference): readonly ChatRoutePreference[] {
-  return heyOfferedChatRoutes.includes(selected)
-    ? heyOfferedChatRoutes
-    : [...heyOfferedChatRoutes, selected];
+/**
+ * HPD-1426 (Justus, 2026-10-21): ChatGPT comes back, behind a switch the server
+ * holds. The server names the routes it offers this workspace in
+ * `ModelOptionsView.offeredChatRoutes`; this reads that list strictly. Included
+ * AI is always offered and always first, Claude stays withheld, and anything
+ * missing or unknown falls back to `heyOfferedChatRoutes` -- so an older server,
+ * or a server with the switch off, shows exactly what it showed before.
+ */
+export function heyOfferedChatRoutesFrom(value: unknown): readonly ChatRoutePreference[] {
+  if (!Array.isArray(value)) return heyOfferedChatRoutes;
+  return value.includes("chatgpt_account")
+    ? Object.freeze(["included_ai", "chatgpt_account"] as ChatRoutePreference[])
+    : heyOfferedChatRoutes;
+}
+
+export function heyChatRouteChoices(
+  selected: ChatRoutePreference,
+  offered: readonly ChatRoutePreference[] = heyOfferedChatRoutes,
+): readonly ChatRoutePreference[] {
+  return offered.includes(selected)
+    ? offered
+    : [...offered, selected];
 }
 
 // Model slots are user-facing choices backed by configurable concrete OpenRouter models.
@@ -377,6 +395,12 @@ export interface ModelOptionsView {
   models: ModelOptionItem[];
   curatedModels: CuratedModelTruthItem[];
   legacySelectedModel?: CuratedModelTruthItem;
+  /**
+   * HPD-1426: the AI routes the server offers this workspace. Optional, so an
+   * installed client that does not know it keeps showing Included AI only.
+   * Read it through `heyOfferedChatRoutesFrom`.
+   */
+  offeredChatRoutes?: ChatRoutePreference[];
   selectedModelId: ModelSlotId;
   selectedSlotId: ModelSlotId;
   defaultSlotId: ModelSlotId;
