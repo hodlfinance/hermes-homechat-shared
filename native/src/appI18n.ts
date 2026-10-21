@@ -2908,7 +2908,7 @@ const systemPagesJa: MobileSystemPagesCopy = {
     "resultUnknown": "接続はまだ確認できていません。ログインを完了してから再確認してください。",
     "includedUnavailableAction": "このワークスペースの付属AIを確認できていません。更新して再試行してください。",
     "chatGptDetail": "OAuth でご自身の ChatGPT アカウントを使います。",
-    "chatGptPrivacyDetail": "ご自身の ChatGPT アカウントを使います。メッセージは ChatGPT アカウントの規約に基づき OpenAI に送信され、プランの利用枠は消費しません。Gmail、カレンダー、ドライブのデータを含むチャットは、付属の AI でのみ続行できます。",
+    "chatGptPrivacyDetail": "ご自身の ChatGPT アカウントを使います。メッセージは ChatGPT アカウントの規約に基づき OpenAI に送信され、プランの利用枠は消費しません。Gmail、カレンダー、ドライブのデータを含むチャットは、含まれる AI でのみ続行できます。",
     "claudeDetail": "OAuth でご自身の Claude アカウントを使います。このルートはプランの割り当てではなく Claude アカウントの追加利用予算を消費するため、追加利用を有効にする必要があります。",
     "includedDetail": "プランに含まれる管理割り当てを使います。",
     "allowanceLoading": "付属の利用枠を確認中です。残量を推測して表示することはありません。",
