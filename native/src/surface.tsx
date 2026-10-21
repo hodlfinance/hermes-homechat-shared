@@ -10649,7 +10649,7 @@ function IosPaywallPanel({ locale,
     <View style={[styles.mobilePurchaseSection, compact && styles.mobilePurchaseSectionCompact, !compact && styles.paywallPanel]}>
       {!compact ? (
         <View style={styles.paywallHero}>
-          <LogoMark />
+          <LogoMark thread={HOME_ASSISTANT_THREAD} />
           <Text style={styles.paywallHeroTitle}>{view.heroTitle}</Text>
           <Text style={styles.paywallHeroBody}>{view.heroBody}</Text>
         </View>
