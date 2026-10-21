@@ -65,3 +65,18 @@ export function subscribeKeyboardInsetRelease(
     for (const subscription of subscriptions) subscription.remove();
   };
 }
+
+// HPD-1466: helpers of WindowKeyboardAvoidingView (window-keyboard-avoiding-view.tsx).
+
+/** The offset for a view whose top edge sits `windowY` points below the top of the window. */
+export function windowKeyboardOffset(windowY: unknown): number {
+  return typeof windowY === "number" && Number.isFinite(windowY) ? Math.max(0, Math.round(windowY)) : 0;
+}
+
+/** Recomputes a KeyboardAvoidingView's padding from its last keyboard event, after the offset changed while the keyboard is up. */
+export function refreshKeyboardAvoidingInset(view: unknown): boolean {
+  const instance = view as KeyboardAvoidingInstance | null | undefined;
+  if (!instance || !instance._keyboardEvent || typeof instance._updateBottomIfNecessary !== "function") return false;
+  void Promise.resolve(instance._updateBottomIfNecessary()).catch(() => undefined);
+  return true;
+}

@@ -231,6 +231,12 @@ export type NativeR8Host = {
     /** HPD-606: Fin Hermes suggestions page, drawer entry and chat carousel. */
     finSuggestions?: boolean;
     keyboardVerticalOffset?: number;
+    /**
+     * HPD-1466: the chat measures its own position in the window and keeps the
+     * composer right above the keyboard on every device and orientation. When
+     * true, keyboardVerticalOffset is not used for the chat.
+     */
+    keyboardOffsetFromWindow?: boolean;
     openingMode?: "brand" | "chat";
     openingStatus?: string;
     showAssistantIdentity?: boolean;

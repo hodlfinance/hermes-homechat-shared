@@ -49,6 +49,7 @@ import {
 } from "./mobile-automation-threads";
 import { mobileHostHeaderMenuItems, mobileHostHeaderMoreLabel, mobileHostHeaderThreadKey, mobileHostHeaderThreadOpened, mobileHostHeaderTitle, type MobileHostHeaderMenuItem, type MobileHostHeaderThread } from "./mobile-host-header";
 import { subscribeKeyboardInsetRelease } from "./mobile-keyboard-inset";
+import { WindowKeyboardAvoidingView } from "./window-keyboard-avoiding-view";
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createDelegatedTaskPollLoop, nextDelegatedTasks, type DelegatedTaskPollConditions } from "./delegated-task-poll";
 import {
@@ -1683,6 +1684,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const keyboardVerticalOffset = Number.isFinite(host.presentation?.keyboardVerticalOffset)
     ? Math.max(0, host.presentation?.keyboardVerticalOffset ?? 0)
     : 8;
+  // HPD-1466: a host whose chat can sit at different heights (HODL Bots: no
+  // fixed bar above it, any iPhone, landscape) lets the chat measure its own
+  // position for the keyboard instead of a fixed offset.
+  const ChatKeyboardAvoidingView = (host.presentation?.keyboardOffsetFromWindow === true
+    ? WindowKeyboardAvoidingView
+    : KeyboardAvoidingView) as typeof KeyboardAvoidingView;
   // HPD-846: the chat composer returns to the tab bar when the keyboard hides.
   const chatKeyboardAvoidingRef = useRef<KeyboardAvoidingView | null>(null);
   useEffect(() => subscribeKeyboardInsetRelease(
@@ -9201,7 +9208,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       ) : null}
 
       {tab === "chat" ? (
-        <KeyboardAvoidingView
+        <ChatKeyboardAvoidingView
           ref={chatKeyboardAvoidingRef}
           style={styles.chatKeyboard}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -9723,7 +9730,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
               </View>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </ChatKeyboardAvoidingView>
       ) : (
         <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} keyboardShouldPersistTaps="handled">
           {error ? <Notice locale={appLocale} tone="error" text={error} onDismiss={dismissAppError} dismissLabel={t.systemPages.common.dismiss} /> : null}

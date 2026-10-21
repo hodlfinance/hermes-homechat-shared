@@ -52,6 +52,7 @@ const HOST_OPTIONS: Readonly<Record<string, { hey: Verdict; hodl: Verdict }>> = 
   "presentation.hideDrawerPreferences": { hey: "unused", hodl: "wired: dark and English only (HPD-801, product decision)" },
   "presentation.finSuggestions": { hey: "unused", hodl: "wired (HPD-606)" },
   "presentation.keyboardVerticalOffset": { hey: "unused", hodl: "wired (HODL tab bar)" },
+  "presentation.keyboardOffsetFromWindow": { hey: "unused (fixed offset)", hodl: "wired (HPD-1466, HODL Bots chat only: composer right above the keyboard on every iPhone)" },
   "presentation.openingMode": { hey: "unused (brand)", hodl: "wired (chat)" },
   "presentation.openingStatus": { hey: "unused", hodl: "wired" },
   "presentation.showAssistantIdentity": { hey: "unused", hodl: "wired" },
