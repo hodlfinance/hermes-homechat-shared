@@ -15108,7 +15108,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingVertical: 2,
     backgroundColor: "transparent",
-    alignSelf: "flex-start",
+    // HPD-1422: an answer takes the transcript's full width. Shrink-to-fit
+    // (flex-start) left Yoga without a definite width for the flex:1 list
+    // bodies inside: a long bullet answer was measured at one width, drawn in a
+    // narrow column, ran past its own bottom and under the next message.
+    alignSelf: "stretch",
   },
   userMessage: {
     backgroundColor: palette.userTint,
@@ -15377,7 +15381,11 @@ const styles = StyleSheet.create({
     minWidth: 14,
   },
   markdownListBody: {
-    flex: 1,
+    // HPD-1422: grow into the row from the text's own width (flex-basis auto),
+    // never from zero; flex: 1 measured bullet text in a collapsed column.
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   activityTrail: {
     marginTop: 2,
