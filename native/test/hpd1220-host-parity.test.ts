@@ -55,6 +55,7 @@ const HOST_OPTIONS: Readonly<Record<string, { hey: Verdict; hodl: Verdict }>> = 
   "presentation.openingMode": { hey: "unused (brand)", hodl: "wired (chat)" },
   "presentation.openingStatus": { hey: "unused", hodl: "wired" },
   "presentation.showAssistantIdentity": { hey: "unused", hodl: "wired" },
+  "presentation.assistantAvatar": { hey: "unused (keeps the dragon and brand icon)", hodl: "wired (HPD-1442, round bot figure per thread)" },
   "presentation.sessionFailure": { hey: "unused", hodl: "wired" },
 };
 
