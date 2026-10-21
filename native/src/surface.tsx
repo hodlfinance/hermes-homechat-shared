@@ -47,7 +47,7 @@ import {
   isAutomationThread,
   mobileDrawerSections,
 } from "./mobile-automation-threads";
-import { mobileHostHeaderMenuItems, mobileHostHeaderMoreLabel, mobileHostHeaderTitle, type MobileHostHeaderMenuItem } from "./mobile-host-header";
+import { mobileHostHeaderMenuItems, mobileHostHeaderMoreLabel, mobileHostHeaderThreadKey, mobileHostHeaderThreadOpened, mobileHostHeaderTitle, type MobileHostHeaderMenuItem, type MobileHostHeaderThread } from "./mobile-host-header";
 import { subscribeKeyboardInsetRelease } from "./mobile-keyboard-inset";
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createDelegatedTaskPollLoop, nextDelegatedTasks, type DelegatedTaskPollConditions } from "./delegated-task-poll";
@@ -1659,6 +1659,13 @@ type NativeR8SurfaceProps = {
    * user's Hermes account carries a placeholder); a server email wins.
    */
   supportReplyEmailFallback?: string | null;
+  /**
+   * HPD-1468: with presentation.headerBack only. The thread the host opened
+   * the chat for; the header row shows its figure and name until the chat has
+   * switched to it, then follows the chat as before. Without it nothing
+   * changes (Hey).
+   */
+  headerThread?: MobileHostHeaderThread | null;
 };
 
 function NativeR8Surface(props: NativeR8SurfaceProps = {}) {
@@ -1669,7 +1676,7 @@ function NativeR8Surface(props: NativeR8SurfaceProps = {}) {
   );
 }
 
-function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest, hostVisible = true, supportReplyEmailFallback = null }: NativeR8SurfaceProps = {}) {
+function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest, hostVisible = true, supportReplyEmailFallback = null, headerThread = null }: NativeR8SurfaceProps = {}) {
   const systemColorScheme = useColorScheme();
   const reduceMotion = useReduceMotion();
   const hostAppLocale = host.presentation?.appLocale;
@@ -8027,6 +8034,26 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     return () => { active = false; };
   }, [token, snapshot?.workspace.id, homeRequest?.requestId]);
 
+  // HPD-1468: until the chat has switched to the thread the host opened it
+  // for, the one header row names that thread, never the one restored first.
+  const hostHeaderThreadKey = headerThread && host.presentation?.headerBack ? mobileHostHeaderThreadKey(headerThread) : null;
+  const hostHeaderThreadOpened = Boolean(hostHeaderThreadKey && headerThread && mobileHostHeaderThreadOpened(
+    headerThread,
+    chatSessions.find((session) => session.id === activeConversationSessionId) ?? null,
+  ));
+  const [openedHostHeaderThreadKey, setOpenedHostHeaderThreadKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (hostHeaderThreadOpened && hostHeaderThreadKey) setOpenedHostHeaderThreadKey(hostHeaderThreadKey);
+  }, [hostHeaderThreadOpened, hostHeaderThreadKey]);
+  const pendingHostHeaderThread = hostHeaderThreadKey && !hostHeaderThreadOpened && openedHostHeaderThreadKey !== hostHeaderThreadKey
+    ? headerThread
+    : null;
+  const pendingHostAssistantThread = useMemo<AssistantThread | null>(
+    () => pendingHostHeaderThread
+      ? { conversationId: pendingHostHeaderThread.home ? null : pendingHostHeaderThread.conversationId, home: pendingHostHeaderThread.home }
+      : null,
+    [pendingHostHeaderThread ? hostHeaderThreadKey : null],
+  );
   const presentedChatTitle = host.presentation?.chatTitle || mobileScreenTitle(tab, settingsSection, t, appLocale);
   const ChatHeaderSupportIcon = host.presentation?.chatHeaderSupportIcon;
   const presentedAccountLabel = host.presentation?.accountLabel?.trim()
@@ -8070,7 +8097,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         )}
         {hostHeaderBack ? (
           <View style={styles.hostHeaderTitleRow}>
-            <Text style={styles.chatHeaderTitle} numberOfLines={1}>{appCopy.productName}</Text>
+            <Text style={styles.chatHeaderTitle} numberOfLines={1}>{pendingHostHeaderThread?.title || appCopy.productName}</Text>
           </View>
         ) : (
           <View style={[styles.mobileAppBarTitle, host.presentation?.centerChatTitle && styles.mobileAppBarTitleCentered]}>
@@ -8913,13 +8940,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           <View style={styles.hostHeaderTitleRow}>
             {tab === "chat" ? (
               HostAssistantAvatar ? (
-                <HostIdentityFigure size={28} thread={activeAssistantThread} />
+                <HostIdentityFigure size={28} thread={pendingHostAssistantThread ?? activeAssistantThread} />
               ) : (
                 <Image source={brandIcon} style={styles.hostHeaderBrandMark as ImageStyle} accessibilityIgnoresInvertColors />
               )
             ) : null}
             <Text style={[styles.chatHeaderTitle, styles.flexShrinkOne]} numberOfLines={1} accessibilityRole="header">
-              {mobileHostHeaderTitle({ tab, session: activeChatSession, productName: appCopy.productName, screenTitle: mobileScreenTitle(tab, settingsSection, t, appLocale) })}
+              {tab === "chat" && pendingHostHeaderThread
+                ? pendingHostHeaderThread.title
+                : mobileHostHeaderTitle({ tab, session: activeChatSession, productName: appCopy.productName, screenTitle: mobileScreenTitle(tab, settingsSection, t, appLocale) })}
             </Text>
           </View>
         ) : (
