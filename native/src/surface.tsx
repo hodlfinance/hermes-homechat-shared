@@ -74,6 +74,7 @@ import {
   TextInput,
   View,
   useColorScheme,
+  type ColorValue,
   type ImageStyle,
   type NativeScrollEvent,
 } from "react-native";
@@ -583,6 +584,9 @@ export function createNativeR8Surface(host: NativeR8Host) {
     RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync,
     useAudioRecorder, useAudioRecorderState, FileSystem } = host.platform;
   const brandIcon = host.identity.icon ?? require("../assets/baby-dragon-neutral.png");
+  // HPD-1442: a host may draw Hermes itself (HODL: a round bot figure in the
+  // colour of the thread). Without it every mark stays the dragon or the brand icon.
+  const HostAssistantAvatar = host.presentation?.assistantAvatar ?? null;
   // HPD-1243: the store this build sells and signs in through. iOS as before;
   // Android only with the host's switch on; null keeps Android on the email link.
   const storePlatform = heyStorePlatform(Platform.OS, host.policy.heyAndroidLaunchEnabled);
@@ -8154,7 +8158,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           />
         ) : (
           <View style={styles.openingActivityTrail}>
-            <MobileWorkingDragon
+            <HermesWorkingMark
               animated={reduceMotion === false}
               accessibilityLabel={staticUiCopy(appLocale)["Hermes is working"]}
               size={24}
@@ -8194,7 +8198,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       <SafeAreaView style={styles.safe}>
         <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
         <View style={styles.loading}>
-          <MobileWorkingDragon
+          <HermesWorkingMark
             animated={reduceMotion === false}
             accessibilityLabel={staticUiCopy(appLocale)["Opening Hey Hermes"]}
             size={72}
@@ -8435,7 +8439,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       <SafeAreaView style={styles.safe}>
         <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
         <View style={styles.loading}>
-          <MobileWorkingDragon
+          <HermesWorkingMark
             animated={reduceMotion === false}
             accessibilityLabel={staticUiCopy(appLocale)["Opening Hey Hermes"]}
             size={72}
@@ -8658,6 +8662,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     selectedPreference: selectedChatRoutePreference,
   });
   const activeChatSession = chatSessions.find((session) => session.id === activeConversationSessionId) ?? null;
+  const activeAssistantThread = assistantThreadFor(activeConversationSessionId, activeChatSession?.role === "home");
   const isHomeChatActive = tab === "chat" && activeChatSession?.role === "home";
   const automationThreadHeader = tab === "chat" && activeSubthreadHeader.kind !== "subthread" && isAutomationThread(activeChatSession)
     ? activeChatSession
@@ -8844,6 +8849,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }
 
   return (
+    <AssistantThreadContext.Provider value={activeAssistantThread}>
     <SafeAreaView style={styles.safe}>
       <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
       <View style={styles.mobileAppBar}>
@@ -10303,6 +10309,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       )}
 
     </SafeAreaView>
+    </AssistantThreadContext.Provider>
   );
 }
 
@@ -10642,7 +10649,7 @@ function IosPaywallPanel({ locale,
     <View style={[styles.mobilePurchaseSection, compact && styles.mobilePurchaseSectionCompact, !compact && styles.paywallPanel]}>
       {!compact ? (
         <View style={styles.paywallHero}>
-          <LogoMark />
+          <LogoMark thread={HOME_ASSISTANT_THREAD} />
           <Text style={styles.paywallHeroTitle}>{view.heroTitle}</Text>
           <Text style={styles.paywallHeroBody}>{view.heroBody}</Text>
         </View>
@@ -10953,7 +10960,62 @@ function IosPaywallOfferPanel({ locale,
   );
 }
 
-function LogoMark() {
+type AssistantThread = { conversationId: string | null; home: boolean };
+const HOME_ASSISTANT_THREAD: AssistantThread = { conversationId: null, home: true };
+// HPD-1442: the thread on screen, for the host-drawn Hermes figure. Only read
+// when the host draws one; the dragon and the brand icon ignore it.
+const AssistantThreadContext = createContext<AssistantThread>({ conversationId: null, home: false });
+let assistantThreadCache: AssistantThread = { conversationId: null, home: false };
+// One stable value per thread, so the context changes only when the thread does.
+function assistantThreadFor(conversationId: string | null, home: boolean): AssistantThread {
+  if (assistantThreadCache.conversationId !== conversationId || assistantThreadCache.home !== home) {
+    assistantThreadCache = { conversationId, home };
+  }
+  return assistantThreadCache;
+}
+
+function HostAssistantFigure({ size, animated, working, accessibilityLabel, thread }: {
+  size: number;
+  animated: boolean;
+  working: boolean;
+  accessibilityLabel?: string;
+  thread?: AssistantThread;
+}) {
+  const contextThread = useContext(AssistantThreadContext);
+  if (!HostAssistantAvatar) return null;
+  const shown = thread ?? contextThread;
+  return (
+    <HostAssistantAvatar
+      size={size}
+      conversationId={shown.conversationId}
+      home={shown.home}
+      animated={animated}
+      working={working}
+      accessibilityLabel={accessibilityLabel}
+    />
+  );
+}
+
+/** The working mark: the host's figure when it draws one, else the dragon. */
+function HermesWorkingMark({ animated, accessibilityLabel, size, tintColor }: {
+  animated: boolean;
+  accessibilityLabel: string;
+  size: number;
+  tintColor?: ColorValue;
+}) {
+  if (HostAssistantAvatar) {
+    return <HostAssistantFigure size={size} animated={animated} working accessibilityLabel={accessibilityLabel} />;
+  }
+  return <MobileWorkingDragon animated={animated} accessibilityLabel={accessibilityLabel} size={size} tintColor={tintColor} />;
+}
+
+function HostIdentityFigure({ size, thread }: { size: number; thread?: AssistantThread }) {
+  const reduceMotion = useReduceMotion();
+  return <HostAssistantFigure size={size} animated={reduceMotion === false} working={false} thread={thread} />;
+}
+
+function LogoMark({ thread }: { thread?: AssistantThread } = {}) {
+  if (HostAssistantAvatar) return <HostIdentityFigure size={36} thread={thread} />;
   return <Image source={brandIcon} style={styles.brandMark as ImageStyle} accessibilityIgnoresInvertColors />;
 }
 
@@ -11074,7 +11136,7 @@ function MobileNavigationDrawer({
       <Pressable style={styles.mobileMenuBackdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={t.nav.closeMenu} />
       <View style={[styles.mobileDrawer, { paddingTop: drawerTopPadding, paddingBottom: drawerBottomPadding }]}>
         <View style={styles.mobileDrawerHeader}>
-          <LogoMark />
+          <LogoMark thread={HOME_ASSISTANT_THREAD} />
           <View style={styles.flexOne}>
             <Text style={styles.brand}>{appCopy.productName}</Text>
           </View>
@@ -11630,7 +11692,11 @@ const MessageBubble = memo(function MessageBubble({
     >
       {!isUser && showAssistantIdentity ? (
         <View style={styles.assistantIdentity}>
-          <Image source={brandIcon} style={styles.assistantIdentityMark as ImageStyle} accessibilityIgnoresInvertColors />
+          {HostAssistantAvatar ? (
+            <HostIdentityFigure size={28} />
+          ) : (
+            <Image source={brandIcon} style={styles.assistantIdentityMark as ImageStyle} accessibilityIgnoresInvertColors />
+          )}
           <Text style={styles.assistantIdentityLabel}>{appCopy.productName}</Text>
         </View>
       ) : null}
@@ -11889,7 +11955,7 @@ function MobileRunActivityTrail({ locale,
       <View style={styles.activityTrailSummary}>
         <View style={styles.activityTrailIcon}>
           {tone === "working" ? (
-            <MobileWorkingDragon
+            <HermesWorkingMark
               animated={symbol === "spinner"}
               accessibilityLabel={staticUiCopy(locale)["Hermes is working"]}
               size={24}
@@ -11954,17 +12020,29 @@ function MobileDelegatedTasksIndicator({ locale,
 
   return (
     <View style={styles.delegatedTasksIndicator} accessibilityLabel={staticUiCopy(locale)["Delegated tasks"]}>
-      <View style={styles.delegatedTasksDragon}>
-        <MobileWorkingDragon
-          animated={view.animated && reduceMotion === false}
-          accessibilityLabel={staticUiMessage(locale, view.animated ? "Delegated work is running" : "Delegated work is waiting")}
-          size={20}
-          tintColor={palette.brandBlue}
-        />
-      </View>
+      {/* HPD-1442: a host-drawn figure goes on each row instead, in that task's own thread colour. */}
+      {HostAssistantAvatar ? null : (
+        <View style={styles.delegatedTasksDragon}>
+          <MobileWorkingDragon
+            animated={view.animated && reduceMotion === false}
+            accessibilityLabel={staticUiMessage(locale, view.animated ? "Delegated work is running" : "Delegated work is waiting")}
+            size={20}
+            tintColor={palette.brandBlue}
+          />
+        </View>
+      )}
       <View style={styles.delegatedTasksRows}>
         {view.rows.map((task) => (
           <View key={task.taskId} style={styles.delegatedTaskRow}>
+            {HostAssistantAvatar ? (
+              <HostAssistantFigure
+                size={18}
+                animated={task.state === "running" && reduceMotion === false}
+                working={task.state === "running"}
+                accessibilityLabel={staticUiMessage(locale, task.state === "running" ? "Delegated work is running" : "Delegated work is waiting")}
+                thread={{ conversationId: task.conversationId, home: false }}
+              />
+            ) : null}
             <Pressable
               accessibilityRole="link"
               accessibilityLabel={staticUiMessage(locale, "Open delegated task {name}").replace("{name}", () => task.name)}

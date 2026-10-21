@@ -165,6 +165,25 @@ export type NativeR8Transport = {
     signal?: AbortSignal;
   }): Promise<unknown | null>;
 };
+
+/**
+ * HPD-1442: what the surface tells a host-drawn Hermes figure. The host picks
+ * colour and motion from it; the surface only says which thread the figure
+ * stands for and whether it may move.
+ */
+export type NativeR8AssistantAvatarProps = {
+  size: number;
+  /** The thread the figure stands for; null while the chat has not opened one yet. */
+  conversationId: string | null;
+  /** True for the Home conversation (and the drawer's brand mark). */
+  home: boolean;
+  /** False when Reduce Motion is on or the mark should stand still. */
+  animated: boolean;
+  /** True while Hermes (or the background task) is working. */
+  working: boolean;
+  /** Absent: the figure is decoration next to a text that says the same. */
+  accessibilityLabel?: string;
+};
 export type NativeR8Host = {
   /**
    * HPD-1097: opens the protected browser takeover (an authenticated
@@ -215,6 +234,14 @@ export type NativeR8Host = {
     openingMode?: "brand" | "chat";
     openingStatus?: string;
     showAssistantIdentity?: boolean;
+    /**
+     * HPD-1442: the host's own figure for Hermes in the chat. When set, it
+     * replaces the dragon and the brand icon on the chat surface: the name mark
+     * above a reply, the working mark beside the live status, the opening line,
+     * the drawer and live voice brand, and one small mark per background task
+     * (drawn for that task's own thread). Without it nothing changes (Hey).
+     */
+    assistantAvatar?: ComponentType<NativeR8AssistantAvatarProps>;
     sessionFailure?: {
       title: string;
       body: string;
