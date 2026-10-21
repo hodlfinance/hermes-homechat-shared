@@ -105,6 +105,6 @@ test("HPD-846: the chat's KeyboardAvoidingView is the one released", () => {
   );
   assert.match(
     surface,
-    /<KeyboardAvoidingView\s+ref=\{chatKeyboardAvoidingRef\}\s+style=\{styles\.chatKeyboard\}/,
+    /<ChatKeyboardAvoidingView\s+ref=\{chatKeyboardAvoidingRef\}\s+style=\{styles\.chatKeyboard\}/,
   );
 });
