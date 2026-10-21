@@ -11170,9 +11170,9 @@ function MobileHostHeaderMenu({
     return { Icon: LogOut, label: t.nav.signOut };
   };
   return (
-    <View style={styles.mobileMenuLayer} pointerEvents="box-none">
+    <View style={styles.mobileMenuLayer} pointerEvents="box-none" accessibilityViewIsModal onAccessibilityEscape={onClose}>
       <Pressable style={styles.mobileMenuBackdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={cancelLabel} />
-      <View style={[styles.hostHeaderMenu, { paddingBottom: bottomPadding }]} accessibilityViewIsModal>
+      <View style={[styles.hostHeaderMenu, { paddingBottom: bottomPadding }]}>
         <Text style={styles.hostHeaderMenuTitle} numberOfLines={1}>{title}</Text>
         <ScrollView style={styles.hostHeaderMenuList} bounces={false}>
           {items.map((item) => {
