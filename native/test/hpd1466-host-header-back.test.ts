@@ -14,7 +14,7 @@ const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "ut
 const host = readFileSync(new URL("../host.ts", import.meta.url), "utf8");
 
 test("the host option is optional and typed", () => {
-  assert.match(host, /headerBack\?: \{ onPress: \(\) => void; accessibilityLabel: string \};/);
+  assert.match(host, /headerBack\?: \{\s*onPress: \(\) => void;\s*accessibilityLabel: string;\s*button\?: ComponentType<\{ onPress: \(\) => void; accessibilityLabel: string \}>;\s*\};/);
   assert.match(surface, /const hostHeaderBack = host\.presentation\?\.headerBack \?\? null;/);
 });
 
@@ -24,7 +24,10 @@ test("with the option no left menu can open; without it the menu button stays", 
   assert.equal((surface.match(/<MobileNavigationDrawer\b/g) ?? []).length, 2);
   // The menu button is still drawn in both headers when the option is absent.
   assert.equal((surface.match(/onPress=\{\(\) => setMenuOpen\(true\)\}/g) ?? []).length, 2);
-  assert.match(surface, /\) : hostHeaderBack \? \(\s*\/\/ HPD-1466[^]*?onPress=\{\(\) => \{ if \(tab === "chat"\) hostHeaderBack\.onPress\(\); else selectMobileScreen\("chat"\); \}\}/);
+  assert.match(surface, /\) : hostHeaderBack \? \(\s*\/\/ HPD-1466[^]*?\(\) => \{ if \(tab === "chat"\) hostHeaderBack\.onPress\(\); else selectMobileScreen\("chat"\); \}/);
+  // A subthread's back uses the host's button too; Hey keeps its chevron.
+  assert.match(surface, /activeSubthreadHeader\.kind === "subthread" && hostHeaderBack \? \(\s*renderHostBackButton\(/);
+  assert.match(surface, /const HostHeaderBackButton = hostHeaderBack\?\.button \?\? null;/);
 });
 
 test("one header row: back, the thread's mark and name, and ... in the Home chat", () => {

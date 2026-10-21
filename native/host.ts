@@ -251,9 +251,15 @@ export type NativeR8Host = {
      * Home chat "..." lists everything the left menu offered (Pages, New App or
      * Page, Suggestions, Automations, Connections, AI Access, Account, Support,
      * Privacy, Hermes dashboard); an automation thread keeps its own options.
-     * Without it nothing changes (Hey keeps its menu).
+     * Without it nothing changes (Hey keeps its menu). `button` lets the host
+     * draw every back control of the chat in its own look (HODL: HPD-1440's
+     * round back button); without it a plain chevron is drawn.
      */
-    headerBack?: { onPress: () => void; accessibilityLabel: string };
+    headerBack?: {
+      onPress: () => void;
+      accessibilityLabel: string;
+      button?: ComponentType<{ onPress: () => void; accessibilityLabel: string }>;
+    };
     sessionFailure?: {
       title: string;
       body: string;

@@ -8038,21 +8038,27 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // HPD-1466: a host that lists the threads itself (HODL Bots) gives a back
   // action instead of the left menu; the header is then one row.
   const hostHeaderBack = host.presentation?.headerBack ?? null;
+  const HostHeaderBackButton = hostHeaderBack?.button ?? null;
+  const renderHostBackButton = (onPress: () => void, accessibilityLabel: string) => HostHeaderBackButton ? (
+    <View style={styles.mobileMenuButton}>
+      <HostHeaderBackButton onPress={onPress} accessibilityLabel={accessibilityLabel} />
+    </View>
+  ) : (
+    <Pressable
+      style={styles.mobileMenuButton}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+    >
+      <ChevronLeft size={22} color={palette.brandBlue} />
+    </Pressable>
+  );
 
   const renderChatOpening = (message: string, retry = false) => (
     <SafeAreaView style={styles.safe}>
       <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
       <View style={styles.mobileAppBar}>
-        {hostHeaderBack ? (
-          <Pressable
-            style={styles.mobileMenuButton}
-            onPress={hostHeaderBack.onPress}
-            accessibilityRole="button"
-            accessibilityLabel={hostHeaderBack.accessibilityLabel}
-          >
-            <ChevronLeft size={22} color={palette.brandBlue} />
-          </Pressable>
-        ) : (
+        {hostHeaderBack ? renderHostBackButton(hostHeaderBack.onPress, hostHeaderBack.accessibilityLabel) : (
           <Pressable
             style={styles.mobileMenuButton}
             onPress={() => setMenuOpen(true)}
@@ -8876,7 +8882,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     <SafeAreaView style={styles.safe}>
       <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
       <View style={styles.mobileAppBar}>
-        {activeSubthreadHeader.kind === "subthread" ? (
+        {activeSubthreadHeader.kind === "subthread" && hostHeaderBack ? (
+          renderHostBackButton(() => void leaveMobileSubthread(activeSubthreadHeader.parentConversationId), t.nav.back)
+        ) : activeSubthreadHeader.kind === "subthread" ? (
           <Pressable
             style={styles.mobileMenuButton}
             onPress={() => void leaveMobileSubthread(activeSubthreadHeader.parentConversationId)}
@@ -8887,14 +8895,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           </Pressable>
         ) : hostHeaderBack ? (
           // HPD-1466: back to the host's list; from any other page back to the chat first.
-          <Pressable
-            style={styles.mobileMenuButton}
-            onPress={() => { if (tab === "chat") hostHeaderBack.onPress(); else selectMobileScreen("chat"); }}
-            accessibilityRole="button"
-            accessibilityLabel={tab === "chat" ? hostHeaderBack.accessibilityLabel : t.nav.back}
-          >
-            <ChevronLeft size={22} color={palette.brandBlue} />
-          </Pressable>
+          renderHostBackButton(
+            () => { if (tab === "chat") hostHeaderBack.onPress(); else selectMobileScreen("chat"); },
+            tab === "chat" ? hostHeaderBack.accessibilityLabel : t.nav.back,
+          )
         ) : (
           <Pressable
             style={styles.mobileMenuButton}
