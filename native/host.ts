@@ -242,6 +242,18 @@ export type NativeR8Host = {
      * (drawn for that task's own thread). Without it nothing changes (Hey).
      */
     assistantAvatar?: ComponentType<NativeR8AssistantAvatarProps>;
+    /**
+     * HPD-1466: for a host that shows the chat as one entry of its own list
+     * (HODL Bots). When set, the chat has no left menu and no menu button: the
+     * header is one row with a back arrow on the left (it calls `onPress`;
+     * from a page other than the chat it returns to the chat first), the
+     * assistant mark with the thread's name, and "..." on the right. In the
+     * Home chat "..." lists everything the left menu offered (Pages, New App or
+     * Page, Suggestions, Automations, Connections, AI Access, Account, Support,
+     * Privacy, Hermes dashboard); an automation thread keeps its own options.
+     * Without it nothing changes (Hey keeps its menu).
+     */
+    headerBack?: { onPress: () => void; accessibilityLabel: string };
     sessionFailure?: {
       title: string;
       body: string;
