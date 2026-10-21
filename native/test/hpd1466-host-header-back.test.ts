@@ -31,7 +31,7 @@ test("with the option no left menu can open; without it the menu button stays", 
 });
 
 test("one header row: back, the thread's mark and name, and ... in the Home chat", () => {
-  assert.match(surface, /<HostIdentityFigure size=\{28\} thread=\{activeAssistantThread\} \/>/);
+  assert.match(surface, /<HostIdentityFigure size=\{28\} thread=\{pendingHostAssistantThread \?\? activeAssistantThread\} \/>/);
   assert.match(surface, /mobileHostHeaderTitle\(\{ tab, session: activeChatSession, productName: appCopy\.productName/);
   assert.match(surface, /onPress=\{\(\) => setHostHeaderMenuOpen\(true\)\}[^]*?accessibilityLabel=\{mobileHostHeaderMoreLabel\(appLocale\)\}/);
   // The automation thread keeps its own options (View all automations, Delete).
