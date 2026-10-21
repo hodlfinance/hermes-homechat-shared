@@ -47,6 +47,7 @@ import {
   isAutomationThread,
   mobileDrawerSections,
 } from "./mobile-automation-threads";
+import { mobileHostHeaderMenuItems, mobileHostHeaderMoreLabel, mobileHostHeaderTitle, type MobileHostHeaderMenuItem } from "./mobile-host-header";
 import { subscribeKeyboardInsetRelease } from "./mobile-keyboard-inset";
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createDelegatedTaskPollLoop, nextDelegatedTasks, type DelegatedTaskPollConditions } from "./delegated-task-poll";
@@ -1687,6 +1688,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [tab, setTab] = useState<Tab>("chat");
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  // HPD-1466: the "..." list of a host without the left menu (HODL Bots).
+  const [hostHeaderMenuOpen, setHostHeaderMenuOpen] = useState(false);
   // HPD-1105: before sign-in there is no account preference; follow the device language.
   const [appLocale, setAppLocale] = useState<AppLocale>(() => hostAppLocale ?? deviceAppLocale());
   // HPD-1215: changes once a day, at midnight, so message stamps move from "today" to "Yesterday".
@@ -8032,23 +8035,49 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     || appCopy.productName;
   const showPresentedChatSubtitle = host.presentation?.hideChatSubtitle !== true;
   const sessionFailureCopy = host.presentation?.sessionFailure;
+  // HPD-1466: a host that lists the threads itself (HODL Bots) gives a back
+  // action instead of the left menu; the header is then one row.
+  const hostHeaderBack = host.presentation?.headerBack ?? null;
+  const HostHeaderBackButton = hostHeaderBack?.button ?? null;
+  const renderHostBackButton = (onPress: () => void, accessibilityLabel: string) => HostHeaderBackButton ? (
+    <View style={styles.mobileMenuButton}>
+      <HostHeaderBackButton onPress={onPress} accessibilityLabel={accessibilityLabel} />
+    </View>
+  ) : (
+    <Pressable
+      style={styles.mobileMenuButton}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+    >
+      <ChevronLeft size={22} color={palette.brandBlue} />
+    </Pressable>
+  );
 
   const renderChatOpening = (message: string, retry = false) => (
     <SafeAreaView style={styles.safe}>
       <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
       <View style={styles.mobileAppBar}>
-        <Pressable
-          style={styles.mobileMenuButton}
-          onPress={() => setMenuOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel={t.nav.openMenu}
-        >
-          <Menu size={22} color={palette.ink} />
-        </Pressable>
-        <View style={[styles.mobileAppBarTitle, host.presentation?.centerChatTitle && styles.mobileAppBarTitleCentered]}>
-          <Text style={styles.chatHeaderTitle}>{presentedChatTitle}</Text>
-          {showPresentedChatSubtitle ? <Text style={styles.chatHeaderSubtitle} numberOfLines={1}>{appCopy.productName}</Text> : null}
-        </View>
+        {hostHeaderBack ? renderHostBackButton(hostHeaderBack.onPress, hostHeaderBack.accessibilityLabel) : (
+          <Pressable
+            style={styles.mobileMenuButton}
+            onPress={() => setMenuOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t.nav.openMenu}
+          >
+            <Menu size={22} color={palette.ink} />
+          </Pressable>
+        )}
+        {hostHeaderBack ? (
+          <View style={styles.hostHeaderTitleRow}>
+            <Text style={styles.chatHeaderTitle} numberOfLines={1}>{appCopy.productName}</Text>
+          </View>
+        ) : (
+          <View style={[styles.mobileAppBarTitle, host.presentation?.centerChatTitle && styles.mobileAppBarTitleCentered]}>
+            <Text style={styles.chatHeaderTitle}>{presentedChatTitle}</Text>
+            {showPresentedChatSubtitle ? <Text style={styles.chatHeaderSubtitle} numberOfLines={1}>{appCopy.productName}</Text> : null}
+          </View>
+        )}
         {ChatHeaderSupportIcon ? (
           // HPD-837: a host with its own support button shows no lock.
           <View style={styles.mobileAppBarSpacer} />
@@ -8064,7 +8093,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           </View>
         )}
       </View>
-      {menuOpen ? (
+      {menuOpen && !hostHeaderBack ? (
         <MobileNavigationDrawer
           t={t}
           accountLabel={presentedAccountLabel}
@@ -8853,7 +8882,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     <SafeAreaView style={styles.safe}>
       <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
       <View style={styles.mobileAppBar}>
-        {activeSubthreadHeader.kind === "subthread" ? (
+        {activeSubthreadHeader.kind === "subthread" && hostHeaderBack ? (
+          renderHostBackButton(() => void leaveMobileSubthread(activeSubthreadHeader.parentConversationId), t.nav.back)
+        ) : activeSubthreadHeader.kind === "subthread" ? (
           <Pressable
             style={styles.mobileMenuButton}
             onPress={() => void leaveMobileSubthread(activeSubthreadHeader.parentConversationId)}
@@ -8862,6 +8893,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           >
             <ChevronLeft size={22} color={palette.brandBlue} />
           </Pressable>
+        ) : hostHeaderBack ? (
+          // HPD-1466: back to the host's list; from any other page back to the chat first.
+          renderHostBackButton(
+            () => { if (tab === "chat") hostHeaderBack.onPress(); else selectMobileScreen("chat"); },
+            tab === "chat" ? hostHeaderBack.accessibilityLabel : t.nav.back,
+          )
         ) : (
           <Pressable
             style={styles.mobileMenuButton}
@@ -8872,6 +8909,20 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             <Menu size={22} color={palette.ink} />
           </Pressable>
         )}
+        {hostHeaderBack && activeSubthreadHeader.kind !== "subthread" ? (
+          <View style={styles.hostHeaderTitleRow}>
+            {tab === "chat" ? (
+              HostAssistantAvatar ? (
+                <HostIdentityFigure size={28} thread={activeAssistantThread} />
+              ) : (
+                <Image source={brandIcon} style={styles.hostHeaderBrandMark as ImageStyle} accessibilityIgnoresInvertColors />
+              )
+            ) : null}
+            <Text style={[styles.chatHeaderTitle, styles.flexShrinkOne]} numberOfLines={1} accessibilityRole="header">
+              {mobileHostHeaderTitle({ tab, session: activeChatSession, productName: appCopy.productName, screenTitle: mobileScreenTitle(tab, settingsSection, t, appLocale) })}
+            </Text>
+          </View>
+        ) : (
         <View style={[
           styles.mobileAppBarTitle,
           activeSubthreadHeader.kind !== "subthread" && tab === "chat" && host.presentation?.centerChatTitle && styles.mobileAppBarTitleCentered,
@@ -8889,6 +8940,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             </Text>
           ) : null}
         </View>
+        )}
         {automationThreadHeader ? (
           // HPD-924: an open automation thread shows its options top right in
           // place of Help (or the privacy lock): View all automations and
@@ -8907,6 +8959,22 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             extraAction={{ label: automationThreadViewAllLabel(appLocale), onPress: () => selectMobileScreen("automations") }}
           />
         ) : null}
+        {hostHeaderBack ? (
+          // HPD-1466: one header row. The Home chat's "..." holds everything the
+          // left menu offered; an automation thread keeps its own options above.
+          automationThreadHeader ? null : tab === "chat" && activeSubthreadHeader.kind !== "subthread" ? (
+            <Pressable
+              style={({ pressed }) => [styles.mobilePrivacyButton, pressed && styles.systemRowPressed]}
+              onPress={() => setHostHeaderMenuOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={mobileHostHeaderMoreLabel(appLocale)}
+            >
+              <Ellipsis size={24} color={palette.ink} />
+            </Pressable>
+          ) : (
+            <View style={styles.mobileAppBarSpacer} />
+          )
+        ) : (<>
         {automationThreadHeader ? null : tab === "chat" && ChatHeaderSupportIcon && activeSubthreadHeader.kind !== "subthread" ? (
           // HPD-837: the host's support glyph in the colour of the other header
           // icon (the menu). With it the header shows no lock; Privacy stays
@@ -8932,6 +9000,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         ) : tab === "chat" && ChatHeaderSupportIcon && activeSubthreadHeader.kind !== "subthread" ? null : (
           <View style={styles.mobileAppBarSpacer} />
         )}
+        </>)}
       </View>
 
       {dashboardOpenState !== "idle" ? (
@@ -9005,7 +9074,36 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       {privacyWorkspace === snapshot.workspace.id ? <MobilePrivacySheet
         key={snapshot.workspace.id} client={api} workspaceId={snapshot.workspace.id} locale={appLocale}
         onClose={() => setPrivacyWorkspace(null)} /> : null}
-      {menuOpen ? (
+      {hostHeaderBack && hostHeaderMenuOpen ? (
+        <MobileHostHeaderMenu
+          title={appCopy.productName}
+          cancelLabel={t.nav.removeCancel}
+          items={mobileHostHeaderMenuItems({
+            suggestions: finSuggestionsEnabled,
+            tasks: host.policy.preinstalledRanker,
+            signOut: host.session.mode === "standalone",
+          })}
+          appLocale={appLocale}
+          t={t}
+          onClose={() => setHostHeaderMenuOpen(false)}
+          onSelect={(item) => {
+            setHostHeaderMenuOpen(false);
+            if (item === "pages") selectMobileScreen("bookmarks");
+            else if (item === "newPage") void openPageEntry();
+            else if (item === "suggestions") selectMobileScreen("suggestions");
+            else if (item === "tasks") selectMobileScreen("tasks");
+            else if (item === "automations") selectMobileScreen("automations");
+            else if (item === "connections") selectMobileScreen("connections_customer");
+            else if (item === "ai_access") selectMobileScreen("ai_access");
+            else if (item === "account") selectMobileScreen("account");
+            else if (item === "support") selectMobileScreen("support");
+            else if (item === "privacy") setPrivacyWorkspace(snapshot.workspace.id);
+            else if (item === "dashboard") void openNativeHermesDashboard();
+            else void logout();
+          }}
+        />
+      ) : null}
+      {menuOpen && !hostHeaderBack ? (
         <MobileNavigationDrawer
           t={t}
           accountLabel={presentedAccountLabel}
@@ -11033,6 +11131,77 @@ function mobileScreenTitle(tab: Tab, settingsSection: SettingsSection | null, co
   if (tab === "support") return copy.nav.support;
   if (settingsSection) return settingsSectionText(settingsSection, copy).label;
   return copy.nav.settings;
+}
+
+/**
+ * HPD-1466: the "..." list of a host without the left menu (HODL Bots), as a
+ * sheet from the bottom edge: every destination the menu offered, then Cancel.
+ */
+function MobileHostHeaderMenu({
+  title,
+  cancelLabel,
+  items,
+  appLocale,
+  t,
+  onClose,
+  onSelect,
+}: {
+  title: string;
+  cancelLabel: string;
+  items: MobileHostHeaderMenuItem[];
+  appLocale: AppLocale;
+  t: ReturnType<typeof mobileText>;
+  onClose: () => void;
+  onSelect: (item: MobileHostHeaderMenuItem) => void;
+}) {
+  const bottomPadding = Platform.OS === "ios" ? 28 : 12;
+  const entry = (item: MobileHostHeaderMenuItem) => {
+    if (item === "pages") return { Icon: FileText, label: t.nav.pages };
+    if (item === "newPage") return { Icon: Plus, label: pageStarterCopy(appLocale).label };
+    if (item === "suggestions") return { Icon: Lightbulb, label: staticUiCopy(appLocale)["Suggestions"] };
+    if (item === "tasks") return { Icon: ClipboardList, label: t.nav.tasks };
+    if (item === "automations") return { Icon: CalendarClock, label: t.nav.automations };
+    if (item === "connections") return { Icon: PlugZap, label: t.nav.plugins };
+    if (item === "ai_access") return { Icon: Bot, label: t.nav.aiAccess };
+    if (item === "account") return { Icon: UserPlus, label: t.nav.account };
+    if (item === "support") return { Icon: MessageSquare, label: t.nav.support };
+    if (item === "privacy") return { Icon: LockKeyhole, label: workspacePrivacyCopy(appLocale).title };
+    if (item === "dashboard") return { Icon: ExternalLink, label: t.nav.dashboard };
+    return { Icon: LogOut, label: t.nav.signOut };
+  };
+  return (
+    <View style={styles.mobileMenuLayer} pointerEvents="box-none" accessibilityViewIsModal onAccessibilityEscape={onClose}>
+      <Pressable style={styles.mobileMenuBackdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={cancelLabel} />
+      <View style={[styles.hostHeaderMenu, { paddingBottom: bottomPadding }]}>
+        <Text style={styles.hostHeaderMenuTitle} numberOfLines={1}>{title}</Text>
+        <ScrollView style={styles.hostHeaderMenuList} bounces={false}>
+          {items.map((item) => {
+            const { Icon, label } = entry(item);
+            return (
+              <Pressable
+                key={item}
+                style={({ pressed }) => [styles.hostHeaderMenuRow, pressed && styles.systemRowPressed]}
+                onPress={() => onSelect(item)}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+              >
+                <Icon size={18} color={palette.text} />
+                <Text style={styles.hostHeaderMenuText} numberOfLines={1}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        <Pressable
+          style={({ pressed }) => [styles.hostHeaderMenuCancel, pressed && styles.systemRowPressed]}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel={cancelLabel}
+        >
+          <Text style={styles.hostHeaderMenuCancelText}>{cancelLabel}</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
 }
 
 function MobileNavigationDrawer({
@@ -14455,6 +14624,71 @@ const styles = StyleSheet.create({
   },
   mobileAppBarTitleCentered: {
     alignItems: "center",
+  },
+  // HPD-1466: the one header row of a host without the left menu.
+  hostHeaderTitleRow: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  hostHeaderBrandMark: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+  },
+  flexShrinkOne: {
+    flexShrink: 1,
+  },
+  hostHeaderMenu: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    maxHeight: "80%",
+    backgroundColor: palette.surface,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderTopWidth: 1,
+    borderColor: palette.chromeLine,
+    paddingTop: 12,
+  },
+  hostHeaderMenuTitle: {
+    color: palette.muted,
+    fontSize: 13,
+    textAlign: "center",
+    paddingBottom: 8,
+  },
+  hostHeaderMenuList: {
+    flexGrow: 0,
+  },
+  hostHeaderMenuRow: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingHorizontal: 20,
+  },
+  hostHeaderMenuText: {
+    color: palette.text,
+    fontSize: 17,
+    flexShrink: 1,
+  },
+  hostHeaderMenuCancel: {
+    minHeight: 48,
+    marginTop: 6,
+    marginHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: palette.chromeLine,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hostHeaderMenuCancelText: {
+    color: palette.ink,
+    fontSize: 17,
+    fontWeight: "600",
   },
   mobileMenuButton: {
     width: 44,
