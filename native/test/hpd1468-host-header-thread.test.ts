@@ -17,12 +17,15 @@ const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "ut
 test("the requested thread counts as open only once the chat shows it", () => {
   const thread = { conversationId: "conv_b", home: false, title: "News" };
   assert.equal(mobileHostHeaderThreadOpened(thread, null), false);
-  assert.equal(mobileHostHeaderThreadOpened(thread, { id: "conv_a", role: "automation" }), false);
-  assert.equal(mobileHostHeaderThreadOpened(thread, { id: "home_1", role: "home" }), false);
-  assert.equal(mobileHostHeaderThreadOpened(thread, { id: "conv_b", role: "automation" }), true);
+  // The thread restored first (the previous one, or Home) does not count.
+  assert.equal(mobileHostHeaderThreadOpened(thread, "conv_a"), false);
+  assert.equal(mobileHostHeaderThreadOpened(thread, "home_1"), false);
+  assert.equal(mobileHostHeaderThreadOpened(thread, "conv_b"), true);
+  // Home has no navigation request: whatever the chat selects first is what it shows.
   const home = { conversationId: null, home: true, title: "Hermes" };
-  assert.equal(mobileHostHeaderThreadOpened(home, { id: "conv_a", role: "automation" }), false);
-  assert.equal(mobileHostHeaderThreadOpened(home, { id: "home_1", role: "home" }), true);
+  assert.equal(mobileHostHeaderThreadOpened(home, null), false);
+  assert.equal(mobileHostHeaderThreadOpened(home, "home_1"), true);
+  assert.equal(mobileHostHeaderThreadOpened(home, "conv_a"), true);
   assert.notEqual(mobileHostHeaderThreadKey(thread), mobileHostHeaderThreadKey(home));
   assert.notEqual(mobileHostHeaderThreadKey(thread), mobileHostHeaderThreadKey({ ...thread, conversationId: "conv_c" }));
 });
@@ -37,4 +40,13 @@ test("the header shows the requested thread until it is open, only with headerBa
   // Once open, the header follows the chat again, also after a later switch inside it.
   assert.match(surface, /if \(hostHeaderThreadOpened && hostHeaderThreadKey\) setOpenedHostHeaderThreadKey\(hostHeaderThreadKey\);/);
   assert.match(surface, /openedHostHeaderThreadKey !== hostHeaderThreadKey/);
+});
+
+test("a thread that cannot be opened releases the header; the hooks run before any early return", () => {
+  assert.match(surface, /if \(active && hostHeaderThreadKeyRef\.current\) setOpenedHostHeaderThreadKey\(hostHeaderThreadKeyRef\.current\);/);
+  const body = surface.slice(surface.indexOf("function NativeR8SurfaceBody("));
+  const hooks = body.indexOf("const [openedHostHeaderThreadKey, setOpenedHostHeaderThreadKey] = useState");
+  const memo = body.indexOf("const pendingHostAssistantThread = useMemo");
+  const firstEarlyReturn = body.indexOf("if (!sessionRestored)");
+  assert.ok(hooks > 0 && memo > hooks && firstEarlyReturn > memo);
 });

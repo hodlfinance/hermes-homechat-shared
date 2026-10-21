@@ -29,10 +29,6 @@ export function mobileHostHeaderMenuItems(input: { suggestions: boolean; tasks: 
 }
 
 /**
- * The one title of the header row: the thread's name in the chat (Hermes for
- * the Home chat or while no thread is known yet), the page's name elsewhere.
- */
-/**
  * HPD-1468: the thread the host opened the chat for (HODL Bots: the row the
  * user tapped). Until the chat has actually switched to it, the header row
  * shows this thread's figure and name instead of whatever thread the surface
@@ -44,15 +40,20 @@ export function mobileHostHeaderThreadKey(thread: MobileHostHeaderThread): strin
   return thread.home ? "home" : `thread:${thread.conversationId ?? ""}`;
 }
 
-/** True once the chat shows the thread the host asked for. */
-export function mobileHostHeaderThreadOpened(
-  requested: MobileHostHeaderThread,
-  active: { id: string; role?: string | null } | null | undefined,
-): boolean {
-  if (!active) return false;
-  return requested.home ? active.role === "home" : active.id === requested.conversationId;
+/**
+ * True once the header may follow the chat again: the requested thread is on
+ * screen, or (Home, which the host opens without a navigation request) the
+ * chat has selected any thread at all, which is then what it shows.
+ */
+export function mobileHostHeaderThreadOpened(requested: MobileHostHeaderThread, activeConversationId: string | null): boolean {
+  if (!activeConversationId) return false;
+  return requested.home ? true : activeConversationId === requested.conversationId;
 }
 
+/**
+ * The one title of the header row: the thread's name in the chat (Hermes for
+ * the Home chat or while no thread is known yet), the page's name elsewhere.
+ */
 export function mobileHostHeaderTitle(input: {
   tab: string;
   session: { role?: string | null; title?: string | null } | null | undefined;
