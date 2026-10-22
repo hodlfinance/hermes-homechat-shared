@@ -401,6 +401,11 @@ export interface ModelOptionsView {
    * Read it through `heyOfferedChatRoutesFrom`.
    */
   offeredChatRoutes?: ChatRoutePreference[];
+  /**
+   * HPD-1498: the switch "my ChatGPT may also see Gmail, Calendar and Drive
+   * data" and when the customer last set it. Optional; null when unreadable.
+   */
+  chatGptGoogleData?: { allowed: boolean; changedAt: string | null } | null;
   selectedModelId: ModelSlotId;
   selectedSlotId: ModelSlotId;
   defaultSlotId: ModelSlotId;

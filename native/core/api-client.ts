@@ -960,6 +960,9 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     modelOptions: () => request<ModelOptionsView>("/workspace/model-options"),
     setChatRoutePreference: (body: ChatRoutePreferenceRequest) =>
       request<ChatRoutePreferenceResponse>("/workspace/chat-route-preference", { method: "POST", body: JSON.stringify(body) }),
+    // HPD-1498: the switch "my ChatGPT may also see Gmail, Calendar and Drive data".
+    setChatGptGoogleData: (body: { allowed: boolean; source: "chatgpt_connect" | "ai_access" }) =>
+      request<{ allowed: boolean; changedAt: string }>("/workspace/chatgpt-google-data", { method: "POST", body: JSON.stringify(body) }),
     setModelPreference: (modelId: string | null) =>
       request<ModelPreferenceResponse>("/workspace/model-preference", {
         method: "POST",

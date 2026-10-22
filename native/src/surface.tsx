@@ -4288,6 +4288,17 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     }
   }
 
+  // HPD-1498: the switch "my ChatGPT may also see Gmail, Calendar and Drive data".
+  async function setMobileChatGptGoogleData(allowed: boolean, source: "chatgpt_connect" | "ai_access") {
+    try {
+      const saved = await api.setChatGptGoogleData({ allowed, source });
+      setModelOptions((current) => current ? { ...current, chatGptGoogleData: saved } : current);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function openMobileClaudeOauth() {
     if (!claudeConnection || busy) return;
     try {
@@ -9989,6 +10000,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             onChooseModel={confirmMobileIncludedModelChange}
             onAskOther={askAboutOtherAiConnection}
             onOpenChatGpt={openMobileChatGptOauth}
+            onSetChatGptGoogleData={setMobileChatGptGoogleData}
             onOpenClaude={openMobileClaudeOauth}
             onReconnectClaude={reconnectMobileClaudeOauth}
             onCompleteChatGpt={completeChatGptConnection}
@@ -12816,7 +12828,7 @@ function MobileAiAccessPanel({
   locale, statusTruth, modelOptions, modelBusyId, modelError, truth, state, copy, modelCopy, chatGptConnection, claudeConnection, claudeCode, notice,
   automationFailureRoute, automationFailureCopy,
   refreshing, refreshError, onRefresh, onCopyCode,
-  onChoose, onChooseModel, onOpenAutomations, onAskOther, onOpenChatGpt, onOpenClaude, onReconnectClaude, onCompleteChatGpt, onDismissChatGpt,
+  onChoose, onChooseModel, onOpenAutomations, onAskOther, onOpenChatGpt, onSetChatGptGoogleData, onOpenClaude, onReconnectClaude, onCompleteChatGpt, onDismissChatGpt,
   onClaudeCodeChange, onCompleteClaude, onDismissClaude,
 }: {
   locale: AppLocale;
@@ -12843,6 +12855,8 @@ function MobileAiAccessPanel({
   onOpenAutomations: () => void;
   onAskOther: () => void;
   onOpenChatGpt: () => void | Promise<void>;
+  /** HPD-1498: saves the Google-data switch; resolves false when it was not saved. */
+  onSetChatGptGoogleData: (allowed: boolean, source: "chatgpt_connect" | "ai_access") => Promise<boolean>;
   onOpenClaude: () => void | Promise<void>;
   onReconnectClaude: () => void | Promise<void>;
   onCompleteChatGpt: () => void | Promise<void>;
@@ -12873,6 +12887,40 @@ function MobileAiAccessPanel({
   // Justus, 2026-10-22: the row carries a short line; the approved full text
   // opens behind a details button below it.
   const [chatGptDetailsOpen, setChatGptDetailsOpen] = useState(false);
+  // HPD-1498 (Justus, 2026-10-22): one switch, on by default on the connect
+  // screen before "Open sign-in"; connecting with it on is the consent. Later it
+  // is changed here under AI Access. Never decided reads as off.
+  const googleDataAllowed = modelOptions?.chatGptGoogleData?.allowed === true;
+  // A reconnect starts from the customer's stored choice; a first connect from on.
+  const storedGoogleData = modelOptions?.chatGptGoogleData?.changedAt ? googleDataAllowed : true;
+  const [connectGoogleData, setConnectGoogleDataState] = useState(storedGoogleData);
+  const connectTouched = useRef(false);
+  const setConnectGoogleData = (update: boolean | ((on: boolean) => boolean)) => {
+    connectTouched.current = true;
+    setConnectGoogleDataState(update);
+  };
+  const connectSessionId = chatGptConnection?.sessionId ?? null;
+  const storedChangedAt = modelOptions?.chatGptGoogleData?.changedAt ?? null;
+  useEffect(() => {
+    // A new sign-in box starts from the stored choice; so does one opened
+    // before the stored choice had loaded, until the customer touches it.
+    connectTouched.current = false;
+    setConnectGoogleDataState(storedGoogleData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectSessionId]);
+  useEffect(() => {
+    if (!connectTouched.current) setConnectGoogleDataState(storedGoogleData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storedChangedAt]);
+  const [googleDataBusy, setGoogleDataBusy] = useState(false);
+  const [googleDataError, setGoogleDataError] = useState<string | null>(null);
+  const saveGoogleData = async (allowed: boolean, source: "chatgpt_connect" | "ai_access") => {
+    setGoogleDataBusy(true);
+    setGoogleDataError(null);
+    const saved = await onSetChatGptGoogleData(allowed, source).catch(() => false);
+    setGoogleDataBusy(false);
+    if (!saved) setGoogleDataError(copy.chatGptGoogleDataSaveFailed);
+  };
   const detailFor = (value: ChatRoutePreference) => value === "chatgpt_account"
     ? (chatGptOffered ? copy.chatGptShortDetail : copy.chatGptDetail)
     : value === "claude_account" ? copy.claudeDetail : copy.includedDetail;
@@ -12941,8 +12989,28 @@ function MobileAiAccessPanel({
                 <Copy size={16} color={palette.teal} />
               </Pressable>
             </View>
-            <Pressable style={styles.secondaryButtonWide} onPress={() => void onOpenChatGpt()}><Text style={styles.secondaryButtonText}>{copy.openSignIn}</Text></Pressable>
-            <Pressable style={styles.primaryButtonWide} onPress={() => void onCompleteChatGpt()}><Text style={styles.primaryButtonText}>{copy.checkStatus}</Text></Pressable>
+            {chatGptOffered ? (
+              <MobileSystemRow
+                label={copy.chatGptGoogleDataSwitch}
+                detail={copy.chatGptGoogleDataNotice}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: connectGoogleData }}
+                onPress={() => setConnectGoogleData((on) => !on)}
+                separator={false}
+                testID="ai-access-chatgpt-google-data-connect"
+                trailing={<Switch value={connectGoogleData} onValueChange={setConnectGoogleData} />}
+              />
+            ) : null}
+            {googleDataError ? <Text style={styles.muted} accessibilityRole="alert">{googleDataError}</Text> : null}
+            <Pressable style={styles.secondaryButtonWide} onPress={() => {
+              if (chatGptOffered) void saveGoogleData(connectGoogleData, "chatgpt_connect");
+              void onOpenChatGpt();
+            }}><Text style={styles.secondaryButtonText}>{copy.openSignIn}</Text></Pressable>
+            <Pressable style={styles.primaryButtonWide} onPress={() => {
+              // Only a choice that differs from the stored one is written again.
+              if (chatGptOffered && (connectGoogleData !== googleDataAllowed || !storedChangedAt)) void saveGoogleData(connectGoogleData, "chatgpt_connect");
+              void onCompleteChatGpt();
+            }}><Text style={styles.primaryButtonText}>{copy.checkStatus}</Text></Pressable>
           </View>
         ) : null}
         {claudeConnection ? (
@@ -13007,6 +13075,19 @@ function MobileAiAccessPanel({
           />
           );
         })}
+        {chatGptOffered && truth.providers.chatgpt_account === "connected" ? (
+          <MobileSystemRow
+            label={copy.chatGptGoogleDataSwitch}
+            detail={copy.chatGptGoogleDataNotice}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: googleDataAllowed }}
+            pending={googleDataBusy}
+            error={chatGptConnection ? null : googleDataError}
+            onPress={() => void saveGoogleData(!googleDataAllowed, "ai_access")}
+            testID="ai-access-chatgpt-google-data"
+            trailing={<Switch value={googleDataAllowed} disabled={googleDataBusy} onValueChange={(next) => void saveGoogleData(next, "ai_access")} />}
+          />
+        ) : null}
         {chatGptOffered ? (
           <>
             <MobileSystemRow
