@@ -25,10 +25,35 @@ test("a workspace on a withheld route still sees it", () => {
   assert.deepEqual([...heyChatRouteChoices("included_ai")], ["included_ai"]);
 });
 
-test("both AI screens read the server's list, and the offered ChatGPT row carries the privacy line", () => {
+test("both AI screens read the server's list, and the offered ChatGPT row carries the short line", () => {
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   assert.match(surface, /heyChatRouteChoices\(preference \?\? "included_ai", offeredRoutes\)/);
   assert.match(surface, /filter\(\(\[provider\]\) => heyOfferedChatRoutesFrom\(modelOptions\?\.offeredChatRoutes\)\.includes\(provider\)\)/);
-  assert.match(surface, /chatGptOffered \? copy\.chatGptPrivacyDetail : copy\.chatGptDetail/);
+  assert.match(surface, /chatGptOffered \? copy\.chatGptShortDetail : copy\.chatGptDetail/);
+  assert.match(surface, /\["chatgpt_account", t\.systemPages\.aiAccess\.chatGpt, t\.systemPages\.aiAccess\.chatGptShortDetail\]/);
   assert.doesNotMatch(surface, /\["chatgpt_account", "claude_account", "included_ai"\]/);
+});
+
+// HPD-1426 (Justus, 2026-10-22): the approved notice is long; the row shows a
+// short line and the full text opens behind a details button.
+test("the full approved notice opens behind a details button under the ChatGPT row", () => {
+  const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  const panel = surface.slice(surface.indexOf("function MobileAiAccessPanel("));
+  const details = panel.slice(panel.indexOf("{chatGptOffered ? ("), panel.indexOf("{automationFailureRoute ? ("));
+  assert.match(details, /label=\{copy\.chatGptDetailsButton\}/);
+  assert.match(details, /onPress=\{\(\) => setChatGptDetailsOpen\(\(open\) => !open\)\}/);
+  assert.match(details, /\{chatGptDetailsOpen \? \(/);
+  assert.match(details, /\{copy\.chatGptPrivacyDetail\}/);
+});
+
+test("every locale carries the short line, the button and the approved full text", async () => {
+  const { mobileText } = await import("../src/appI18n");
+  for (const locale of ["en", "de", "fr", "es", "it", "pt-BR", "ja", "ko"] as const) {
+    const copy = mobileText(locale).systemPages.aiAccess;
+    assert.ok(copy.chatGptShortDetail.length > 0 && copy.chatGptShortDetail.length < 60, locale);
+    assert.ok(copy.chatGptDetailsButton.length > 0, locale);
+    assert.ok(copy.chatGptPrivacyDetail.startsWith(copy.chatGptShortDetail.replace(/[.。]$/, "")), locale);
+  }
+  assert.equal(mobileText("de").systemPages.aiAccess.chatGptPrivacyDetail,
+    "Nutzt dein eigenes ChatGPT-Konto. Deine Nachrichten gehen dann an OpenAI, nach den Bedingungen deines ChatGPT-Kontos, und verbrauchen nicht dein Plan-Kontingent. Chats mit Daten aus Gmail, Kalender oder Drive laufen nur mit der enthaltenen KI weiter.");
 });
