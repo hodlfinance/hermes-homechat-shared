@@ -11,13 +11,14 @@ const panel = surface.slice(surface.indexOf("function MobileAiAccessPanel("));
 test("the connect screen shows the switch on by default, before Open sign-in, and saves it there", () => {
   // On for a first connect; a reconnect starts from the stored choice (review round 1).
   assert.match(panel, /const storedGoogleData = modelOptions\?\.chatGptGoogleData\?\.changedAt \? googleDataAllowed : true;/);
-  assert.match(panel, /const \[connectGoogleData, setConnectGoogleData\] = useState\(storedGoogleData\);/);
+  assert.match(panel, /const \[connectGoogleData, setConnectGoogleDataState\] = useState\(storedGoogleData\);/);
   const connect = panel.slice(panel.indexOf("{chatGptConnection ? ("), panel.indexOf("{claudeConnection ? ("));
   assert.ok(connect.indexOf("copy.chatGptGoogleDataSwitch") > 0, "switch on the connect screen");
   assert.ok(connect.indexOf("copy.chatGptGoogleDataSwitch") < connect.indexOf("copy.openSignIn"), "switch before Open sign-in");
   assert.match(connect, /detail=\{copy\.chatGptGoogleDataNotice\}/);
   assert.match(connect, /saveGoogleData\(connectGoogleData, "chatgpt_connect"\)/);
-  // Saved on Open sign-in and again on Check status.
+  // Saved on Open sign-in, and on Check status only when it differs from the stored choice.
+  assert.match(connect, /connectGoogleData !== googleDataAllowed \|\| !storedChangedAt/);
   assert.equal(connect.split('saveGoogleData(connectGoogleData, "chatgpt_connect")').length - 1, 2);
 });
 

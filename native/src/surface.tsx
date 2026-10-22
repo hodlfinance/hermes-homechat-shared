@@ -12893,13 +12893,25 @@ function MobileAiAccessPanel({
   const googleDataAllowed = modelOptions?.chatGptGoogleData?.allowed === true;
   // A reconnect starts from the customer's stored choice; a first connect from on.
   const storedGoogleData = modelOptions?.chatGptGoogleData?.changedAt ? googleDataAllowed : true;
-  const [connectGoogleData, setConnectGoogleData] = useState(storedGoogleData);
+  const [connectGoogleData, setConnectGoogleDataState] = useState(storedGoogleData);
+  const connectTouched = useRef(false);
+  const setConnectGoogleData = (update: boolean | ((on: boolean) => boolean)) => {
+    connectTouched.current = true;
+    setConnectGoogleDataState(update);
+  };
   const connectSessionId = chatGptConnection?.sessionId ?? null;
+  const storedChangedAt = modelOptions?.chatGptGoogleData?.changedAt ?? null;
   useEffect(() => {
-    // Only when a new sign-in box opens; the customer's own toggling stays.
-    if (connectSessionId) setConnectGoogleData(storedGoogleData);
+    // A new sign-in box starts from the stored choice; so does one opened
+    // before the stored choice had loaded, until the customer touches it.
+    connectTouched.current = false;
+    setConnectGoogleDataState(storedGoogleData);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectSessionId]);
+  useEffect(() => {
+    if (!connectTouched.current) setConnectGoogleDataState(storedGoogleData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storedChangedAt]);
   const [googleDataBusy, setGoogleDataBusy] = useState(false);
   const [googleDataError, setGoogleDataError] = useState<string | null>(null);
   const saveGoogleData = async (allowed: boolean, source: "chatgpt_connect" | "ai_access") => {
@@ -12995,7 +13007,8 @@ function MobileAiAccessPanel({
               void onOpenChatGpt();
             }}><Text style={styles.secondaryButtonText}>{copy.openSignIn}</Text></Pressable>
             <Pressable style={styles.primaryButtonWide} onPress={() => {
-              if (chatGptOffered) void saveGoogleData(connectGoogleData, "chatgpt_connect");
+              // Only a choice that differs from the stored one is written again.
+              if (chatGptOffered && (connectGoogleData !== googleDataAllowed || !storedChangedAt)) void saveGoogleData(connectGoogleData, "chatgpt_connect");
               void onCompleteChatGpt();
             }}><Text style={styles.primaryButtonText}>{copy.checkStatus}</Text></Pressable>
           </View>
