@@ -12891,7 +12891,15 @@ function MobileAiAccessPanel({
   // screen before "Open sign-in"; connecting with it on is the consent. Later it
   // is changed here under AI Access. Never decided reads as off.
   const googleDataAllowed = modelOptions?.chatGptGoogleData?.allowed === true;
-  const [connectGoogleData, setConnectGoogleData] = useState(true);
+  // A reconnect starts from the customer's stored choice; a first connect from on.
+  const storedGoogleData = modelOptions?.chatGptGoogleData?.changedAt ? googleDataAllowed : true;
+  const [connectGoogleData, setConnectGoogleData] = useState(storedGoogleData);
+  const connectSessionId = chatGptConnection?.sessionId ?? null;
+  useEffect(() => {
+    // Only when a new sign-in box opens; the customer's own toggling stays.
+    if (connectSessionId) setConnectGoogleData(storedGoogleData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectSessionId]);
   const [googleDataBusy, setGoogleDataBusy] = useState(false);
   const [googleDataError, setGoogleDataError] = useState<string | null>(null);
   const saveGoogleData = async (allowed: boolean, source: "chatgpt_connect" | "ai_access") => {
@@ -12986,7 +12994,10 @@ function MobileAiAccessPanel({
               if (chatGptOffered) void saveGoogleData(connectGoogleData, "chatgpt_connect");
               void onOpenChatGpt();
             }}><Text style={styles.secondaryButtonText}>{copy.openSignIn}</Text></Pressable>
-            <Pressable style={styles.primaryButtonWide} onPress={() => void onCompleteChatGpt()}><Text style={styles.primaryButtonText}>{copy.checkStatus}</Text></Pressable>
+            <Pressable style={styles.primaryButtonWide} onPress={() => {
+              if (chatGptOffered) void saveGoogleData(connectGoogleData, "chatgpt_connect");
+              void onCompleteChatGpt();
+            }}><Text style={styles.primaryButtonText}>{copy.checkStatus}</Text></Pressable>
           </View>
         ) : null}
         {claudeConnection ? (
