@@ -54,7 +54,7 @@ const en: SelfManagedCopy = {
   confirmPoints: [
     "A wrong setting can stop Hey from answering. You fix it yourself over SSH, or with “Restore Hey defaults”.",
     "Usage figures in the app may be inaccurate.",
-    "Your included AI keeps its monthly budget.",
+    "Your included AI keeps its weekly budget.",
     "Gmail, Calendar and Drive keep running through Hey's protected AI route only.",
   ],
   confirmCheckbox: "I understand that I may cause errors and fix them myself over SSH.",
@@ -83,7 +83,7 @@ const de: SelfManagedCopy = {
   confirmPoints: [
     "Eine falsche Einstellung kann Hey am Antworten hindern. Du behebst sie selbst über SSH oder mit „Hey-Standard wiederherstellen“.",
     "Verbrauchsanzeigen können ungenau sein.",
-    "Die enthaltene KI behält ihr Monatsbudget.",
+    "Die enthaltene KI behält ihr Wochenbudget.",
     "Gmail, Kalender und Drive laufen weiter nur über Heys geschützte KI-Route.",
   ],
   confirmCheckbox: "Mir ist klar, dass ich Fehler verursachen kann und sie selbst über SSH behebe.",
@@ -108,7 +108,7 @@ const checkInEn: DailyCheckInCopy = {
   continueAnyway: "Continue anyway",
   notNow: "Not now",
   settingsLine: (n) => `Daily check-in after ${n} messages`,
-  settingsDetail: "Your included AI has one limit: its monthly budget.",
+  settingsDetail: "Your included AI has one limit: its weekly budget.",
 };
 
 const checkInDe: DailyCheckInCopy = {
@@ -117,7 +117,7 @@ const checkInDe: DailyCheckInCopy = {
   continueAnyway: "Trotzdem weiter",
   notNow: "Jetzt nicht",
   settingsLine: (n) => `Tägliche Rückfrage nach ${n} Nachrichten`,
-  settingsDetail: "Die enthaltene KI hat eine Grenze: ihr Monatsbudget.",
+  settingsDetail: "Die enthaltene KI hat eine Grenze: ihr Wochenbudget.",
 };
 
 // The other app languages fall back to English until their copy is reviewed.
