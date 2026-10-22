@@ -120,6 +120,7 @@ import {
   Trash2,
   X,
   UserPlus,
+  Info,
 } from "lucide-react-native";
 import { accountPageCopy, linkedIdentityConfirmation, linkedIdentityLine, type LinkedIdentityView, chatRouteAutomationFollowState, heyChatRouteChoices, heyOfferedChatRoutesFrom, personalAccessPresentation, personalAccessStore } from "../core/index";
 import { createMobileLiveVoiceController, liveVoiceActive, liveVoiceCopy, liveVoiceNotice, liveVoiceStartVisible, type NativeLiveVoiceState } from "./mobile-live-voice";
@@ -9743,7 +9744,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
               <PluginCatalogScreen
                 locale={appLocale}
                 aiAccessConnections={(([
-                  ["chatgpt_account", t.systemPages.aiAccess.chatGpt, t.systemPages.aiAccess.chatGptPrivacyDetail],
+                  // HPD-1426: the short line; the full text opens behind AI Access' details button.
+                  ["chatgpt_account", t.systemPages.aiAccess.chatGpt, t.systemPages.aiAccess.chatGptShortDetail],
                   ["claude_account", t.systemPages.aiAccess.claude, t.systemPages.aiAccess.claudeDetail],
                 ] as const).filter(([provider]) => heyOfferedChatRoutesFrom(modelOptions?.offeredChatRoutes).includes(provider))).map(([provider, label, description]) => ({
                   provider,
@@ -12868,8 +12870,11 @@ function MobileAiAccessPanel({
   const labelFor = (value: ChatRoutePreference) => value === "chatgpt_account" ? copy.chatGpt : value === "claude_account" ? copy.claude : copy.included;
   // Before connecting, an offered ChatGPT row says where messages go, that the
   // plan allowance is not used, and that Google-data chats stay on Included AI.
+  // Justus, 2026-10-22: the row carries a short line; the approved full text
+  // opens behind a details button below it.
+  const [chatGptDetailsOpen, setChatGptDetailsOpen] = useState(false);
   const detailFor = (value: ChatRoutePreference) => value === "chatgpt_account"
-    ? (chatGptOffered ? copy.chatGptPrivacyDetail : copy.chatGptDetail)
+    ? (chatGptOffered ? copy.chatGptShortDetail : copy.chatGptDetail)
     : value === "claude_account" ? copy.claudeDetail : copy.includedDetail;
   // HPD-452 (Justus, 2026-10-17): beside the remaining percent, the next reset as weekday
   // and time in the reader's local time, e.g. "Resets Saturday 8:00 AM".
@@ -13002,6 +13007,22 @@ function MobileAiAccessPanel({
           />
           );
         })}
+        {chatGptOffered ? (
+          <>
+            <MobileSystemRow
+              label={copy.chatGptDetailsButton}
+              icon={<Info size={16} color={palette.ink} />}
+              onPress={() => setChatGptDetailsOpen((open) => !open)}
+              accessibilityState={{ expanded: chatGptDetailsOpen }}
+              testID="ai-access-chatgpt-details"
+            />
+            {chatGptDetailsOpen ? (
+              <View style={styles.systemSurfaceNotice} testID="ai-access-chatgpt-privacy-detail">
+                <Text style={styles.muted}>{copy.chatGptPrivacyDetail}</Text>
+              </View>
+            ) : null}
+          </>
+        ) : null}
         {automationFailureRoute ? (
           <>
             <MobileSystemRow
