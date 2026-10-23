@@ -19,15 +19,17 @@ test("the connect screen carries no switch and saves no choice", () => {
 });
 
 test("AI Access carries the switch once ChatGPT is connected, and the prompt when due", () => {
-  assert.match(panel, /chatGptOffered && truth\.providers\.chatgpt_account === "connected" \? \(/);
   assert.match(panel, /saveGoogleData\(!googleDataAllowed, "ai_access"\)/);
   assert.match(panel, /\{googleDataPrompt \? \(\s*<MobileChatGptGoogleDataPrompt/);
+  // While the prompt shows, the switch row waits (no second control with the same meaning).
+  assert.match(panel, /truth\.providers\.chatgpt_account === "connected" && !googleDataPrompt \? \(/);
   assert.match(panel, /onTurnOn=\{\(\) => void saveGoogleData\(true, "chatgpt_prompt"\)\}/);
   assert.match(surface, /onSetChatGptGoogleData=\{setMobileChatGptGoogleData\}/);
   assert.match(surface, /googleDataPrompt=\{chatGptGoogleDataPromptShown\}/);
 });
 
 test("Home shows the prompt; Turn on stores consent, Not now stores none", () => {
+  assert.doesNotMatch(surface, /chatGptGoogleDataServicesRef/);
   assert.match(surface, /\{chatGptGoogleDataPromptShown && isHomeChatActive \? \(\s*<MobileChatGptGoogleDataPrompt/);
   const later = surface.slice(surface.indexOf("async function dismissMobileChatGptGoogleDataPrompt"), surface.indexOf("async function turnOnMobileChatGptGoogleDataFromPrompt"));
   assert.match(later, /api\.dismissChatGptGoogleDataPrompt\(\{ services \}\)/);
@@ -55,6 +57,8 @@ test("the prompt is due only with ChatGPT and a Google service connected and no 
 
 test("connected Google services come from the Gmail row and the catalog, only when added", () => {
   assert.deepEqual(connectedGoogleServicesFrom({}), []);
+  // The server's list covers Calendar and Drive before Connections was opened (review round 1).
+  assert.deepEqual(connectedGoogleServicesFrom({ consent: { allowed: false, changedAt: null, connectedServices: ["drive", "calendar", "slack"] } }), ["calendar", "drive"]);
   assert.deepEqual(connectedGoogleServicesFrom({ guidedSetup: { connections: [{ id: "gmail", status: "added" }] } }), ["gmail"]);
   assert.deepEqual(connectedGoogleServicesFrom({ guidedSetup: { connections: [{ id: "gmail", status: "setup_incomplete" }] } }), []);
   assert.deepEqual(connectedGoogleServicesFrom({

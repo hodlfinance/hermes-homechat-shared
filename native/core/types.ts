@@ -407,7 +407,7 @@ export interface ModelOptionsView {
    * HPD-1521: never set reads as off; `promptDismissedFor` lists the Google
    * services connected when the customer chose "Not now" on the prompt.
    */
-  chatGptGoogleData?: { allowed: boolean; changedAt: string | null; promptDismissedFor?: string[] | null } | null;
+  chatGptGoogleData?: { allowed: boolean; changedAt: string | null; promptDismissedFor?: string[] | null; connectedServices?: string[] } | null;
   selectedModelId: ModelSlotId;
   selectedSlotId: ModelSlotId;
   defaultSlotId: ModelSlotId;

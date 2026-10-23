@@ -1868,7 +1868,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // HPD-1521: the Home prompt for the ChatGPT Google-data switch.
   const [googleDataPromptBusy, setGoogleDataPromptBusy] = useState(false);
   const [googleDataPromptError, setGoogleDataPromptError] = useState<string | null>(null);
-  const chatGptGoogleDataServicesRef = useRef<readonly ChatGptGoogleService[]>([]);
   const [modelSelectionBusyId, setModelSelectionBusyId] = useState<string | null>(null);
   const [modelSelectionError, setModelSelectionError] = useState<{ modelId: string; message: string } | null>(null);
   const modelSelectionRequestRef = useRef(0);
@@ -4367,8 +4366,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
 
   // HPD-1521: "Not now" on the prompt. Stores no consent, only which Google
   // services were connected, so a newly connected one offers it again.
-  async function dismissMobileChatGptGoogleDataPrompt() {
-    const services = [...chatGptGoogleDataServicesRef.current];
+  async function dismissMobileChatGptGoogleDataPrompt(seen: readonly ChatGptGoogleService[]) {
+    const services = [...seen];
     // Hidden at once; the server keeps it hidden on the next load.
     setModelOptions((current) => current?.chatGptGoogleData
       ? { ...current, chatGptGoogleData: { ...current.chatGptGoogleData, promptDismissedFor: services } }
@@ -8701,8 +8700,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // HPD-1521 (Justus, 2026-10-23): offer the Google-data switch once it
   // matters - own ChatGPT connected and Gmail, Calendar or Drive connected, in
   // either order. Same rule as the web (core/chatgpt-google-data-offer).
-  const chatGptGoogleDataServices = connectedGoogleServicesFrom({ guidedSetup: guidedSetupState, pluginCatalog });
-  chatGptGoogleDataServicesRef.current = chatGptGoogleDataServices;
+  const chatGptGoogleDataServices = connectedGoogleServicesFrom({ consent: modelOptions?.chatGptGoogleData, guidedSetup: guidedSetupState, pluginCatalog });
   const chatGptGoogleDataPromptShown = chatGptGoogleDataPromptVisible({
     chatGptOffered: heyOfferedChatRoutesFrom(modelOptions?.offeredChatRoutes).includes("chatgpt_account"),
     chatGptConnected: aiAccessTruth.providers.chatgpt_account === "connected",
@@ -9183,7 +9181,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           busy={googleDataPromptBusy}
           error={googleDataPromptError}
           onTurnOn={() => void turnOnMobileChatGptGoogleDataFromPrompt()}
-          onLater={() => void dismissMobileChatGptGoogleDataPrompt()}
+          onLater={() => void dismissMobileChatGptGoogleDataPrompt(chatGptGoogleDataServices)}
           testID="home-chatgpt-google-data-prompt"
         />
       ) : null}
@@ -10156,7 +10154,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             onOpenChatGpt={openMobileChatGptOauth}
             onSetChatGptGoogleData={setMobileChatGptGoogleData}
             googleDataPrompt={chatGptGoogleDataPromptShown}
-            onDismissChatGptGoogleDataPrompt={dismissMobileChatGptGoogleDataPrompt}
+            onDismissChatGptGoogleDataPrompt={() => dismissMobileChatGptGoogleDataPrompt(chatGptGoogleDataServices)}
             onOpenClaude={openMobileClaudeOauth}
             onReconnectClaude={reconnectMobileClaudeOauth}
             onCompleteChatGpt={completeChatGptConnection}
@@ -13254,14 +13252,14 @@ function MobileAiAccessPanel({
             testID="ai-access-chatgpt-google-data-prompt"
           />
         ) : null}
-        {chatGptOffered && truth.providers.chatgpt_account === "connected" ? (
+        {chatGptOffered && truth.providers.chatgpt_account === "connected" && !googleDataPrompt ? (
           <MobileSystemRow
             label={copy.chatGptGoogleDataSwitch}
             detail={copy.chatGptGoogleDataNotice}
             accessibilityRole="switch"
             accessibilityState={{ checked: googleDataAllowed }}
             pending={googleDataBusy}
-            error={chatGptConnection || googleDataPrompt ? null : googleDataError}
+            error={chatGptConnection ? null : googleDataError}
             onPress={() => void saveGoogleData(!googleDataAllowed, "ai_access")}
             testID="ai-access-chatgpt-google-data"
             trailing={<Switch value={googleDataAllowed} disabled={googleDataBusy} onValueChange={(next) => void saveGoogleData(next, "ai_access")} />}

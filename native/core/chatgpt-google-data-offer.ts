@@ -17,6 +17,8 @@ export type ChatGptGoogleDataConsentView = {
   changedAt: string | null;
   /** The Google services connected when the customer last chose "Not now". */
   promptDismissedFor?: readonly string[] | null;
+  /** The Google services the server read from the Connections catalog (only while the prompt can be due). */
+  connectedServices?: readonly string[] | null;
 } | null | undefined;
 
 // Plugin catalog ids for the three Google services.
@@ -29,14 +31,19 @@ const catalogIds: Record<string, ChatGptGoogleService> = {
 
 /**
  * The Google services the customer has connected, from what the screen already
- * holds: the guided-setup Gmail row and, once loaded, the plugin catalog.
- * Only "added" counts; a started or broken setup is not a connection.
+ * holds: the server's list in model-options, the guided-setup Gmail row and,
+ * once loaded, the plugin catalog. Only "added" counts; a started or broken
+ * setup is not a connection.
  */
 export function connectedGoogleServicesFrom(input: {
+  consent?: ChatGptGoogleDataConsentView;
   guidedSetup?: { readonly connections?: ReadonlyArray<{ readonly id: string; readonly status: string }> } | null;
   pluginCatalog?: { readonly items?: ReadonlyArray<{ readonly id: string; readonly status: string }> } | null;
 }): ChatGptGoogleService[] {
   const found = new Set<ChatGptGoogleService>();
+  for (const service of input.consent?.connectedServices ?? []) {
+    if ((chatGptGoogleServices as readonly string[]).includes(service)) found.add(service as ChatGptGoogleService);
+  }
   for (const connection of input.guidedSetup?.connections ?? []) {
     if (connection.id === "gmail" && connection.status === "added") found.add("gmail");
   }

@@ -56,5 +56,5 @@ test("every locale carries the short line, the button and the approved full text
   }
   assert.equal(mobileText("de").systemPages.aiAccess.chatGptPrivacyDetail,
     // HPD-1498 (Justus, 2026-10-22): the last sentence now points at the Google-data switch.
-    "Nutzt dein eigenes ChatGPT-Konto. Deine Nachrichten gehen dann an OpenAI, nach den Bedingungen deines ChatGPT-Kontos, und verbrauchen nicht dein Plan-Kontingent. Ob es auch Daten aus Gmail, Kalender und Drive sieht, legst du mit dem Schalter dafür fest.");
+    "Nutzt dein eigenes ChatGPT-Konto. Deine Nachrichten gehen dann an OpenAI, nach den Bedingungen deines ChatGPT-Kontos, und verbrauchen nicht dein Plan-Kontingent. Daten aus Gmail, Kalender und Drive bekommt dein ChatGPT erst, wenn du das einschaltest; ausschalten kannst du es jederzeit unter KI-Zugang. Die enthaltene KI speichert nichts und trainiert mit nichts.");
 });
