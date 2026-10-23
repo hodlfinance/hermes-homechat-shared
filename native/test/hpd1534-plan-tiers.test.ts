@@ -64,12 +64,12 @@ test("with server tiers: tiers_v1, Starter first with 30 days, Pro 7, Max withou
   assert.deepEqual(two.map((plan) => plan.packageId), ["starter_monthly", "personal_monthly"]);
 });
 
-test("an unknown or wrongly mapped package refuses the tier offering", async () => {
+test("an unknown or wrongly mapped package refuses the tier offering (the app then sells Personal as before)", async () => {
   for (const packages of [[...iosPackages, pkg("annual", "x", null)], [pkg("starter_monthly", "wrong.product", month), iosPackages[1]!]]) {
     const { value } = adapter(packages);
     const controller = new MobilePurchasesController(value);
     await controller.bindAccount("acct_1", "key");
-    await assert.rejects(controller.loadPlans("acct_1", { tiers: ["starter", "personal"] }));
+    assert.deepEqual((await controller.loadPlans("acct_1", { tiers: ["starter", "personal"] })).map((plan) => plan.packageId), ["personal_monthly"]);
   }
 });
 
@@ -122,4 +122,22 @@ test("the paywall names the chosen plan and its own trial; the single-plan paywa
   assert.equal(single.offer.eyebrow, "Hey Hermes Personal");
   assert.equal(single.offer.ctaLabel, "Start your free week");
   assert.equal(iosPaywallView({ ...base, locale: "en", plan: personal, entitlementStatus: "active", entitlementPlan: "starter" }).planLabel, "Starter");
+});
+
+test("review of #185: iOS downgrade accepts the plan kept until renewal; a pending completion blocks another change; a broken tier offering falls back to Personal", async () => {
+  const ios = adapter(iosPackages);
+  // Apple keeps Pro active until the renewal and may report it as the bought product.
+  ios.value.purchasePackage = async () => ({ productIdentifier: MOBILE_REVENUECAT_PRODUCTS.personal_monthly, customerInfo: { activeEntitlements: [
+    { identifier: "hey_hermes_access", productIdentifier: MOBILE_REVENUECAT_PRODUCTS.personal_monthly, expirationAt: new Date(Date.now() + 86_400_000).toISOString() }] } });
+  const controller = new MobilePurchasesController(ios.value);
+  await controller.bindAccount("acct_1", "key");
+  await controller.loadPlans("acct_1", { tiers: ["starter", "personal"] });
+  const result = await controller.purchase("acct_1", "starter_monthly", undefined, { currentProductId: MOBILE_REVENUECAT_PRODUCTS.personal_monthly });
+  assert.ok(result.personalPurchaseExpirationAt);
+  const state = { entitlement: { status: "active", plan: "personal", provider: "revenuecat", storeProductId: MOBILE_REVENUECAT_PRODUCTS.personal_monthly } };
+  assert.equal(mobilePlanChangeCanStart(state, controller, "starter", Date.now(), { accountId: "acct_1" }), null);
+  const broken = adapter([pkg("starter_monthly", MOBILE_REVENUECAT_PRODUCTS.starter_monthly, month)], [iosPackages[1]!]);
+  const fallback = new MobilePurchasesController(broken.value);
+  await fallback.bindAccount("acct_1", "key");
+  assert.deepEqual((await fallback.loadPlans("acct_1", { tiers: ["starter", "personal"] })).map((plan) => plan.packageId), ["personal_monthly"]);
 });

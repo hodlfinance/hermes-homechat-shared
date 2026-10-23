@@ -3540,7 +3540,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     const accountId = snapshot?.me.id;
     // HPD-1534: a subscriber of another tier bought in this store changes plan here.
     const targetTier = (Object.keys(MOBILE_TIER_PACKAGES) as MobilePlanTier[]).find((tier) => MOBILE_TIER_PACKAGES[tier] === packageId) ?? "personal";
-    const change = accountId && serverPlanTiers.length > 0 ? mobilePlanChangeCanStart(snapshot.subscription, mobilePurchasesController, targetTier) : null;
+    const change = accountId && serverPlanTiers.length > 0 ? mobilePlanChangeCanStart(snapshot.subscription, mobilePurchasesController, targetTier, Date.now(), mobilePurchaseCompletion) : null;
     if (
       !accountId ||
       (!change && !mobilePersonalPurchaseCanStart(accountId, snapshot.subscription, mobilePurchaseCompletion, Date.now(), mobilePurchasesController.personalProduct)) ||
@@ -8707,7 +8707,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     Date.now(),
     mobilePurchasesController.personalProduct,
   ) || Boolean(selectedMobilePlan && serverPlanTiers.length > 0 &&
-    mobilePlanChangeCanStart(snapshot.subscription, mobilePurchasesController, selectedMobilePlan.plan));
+    mobilePlanChangeCanStart(snapshot.subscription, mobilePurchasesController, selectedMobilePlan.plan, Date.now(), mobilePurchaseCompletion));
   const chatAccess = mobileChatAccessView(snapshot, selectedChatRoutePreference ?? snapshot.chatRoutePreference, workspaceStatusTruth);
   const activeSubthreadHeader = subthreadHeader(subthreadOrigin, tab, appLocale);
   const aiAccessTruth = mobileAiAccessTruthFromSources(

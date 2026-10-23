@@ -522,7 +522,9 @@ const withDays = (template: string, days: number) => days === 7 ? template : tem
 function trialText(copy: IosPaywallCopy, plan: MobilePurchasePlan | null, price: string, tiered = false) {
   // HPD-1534: a tier without a trial (Max, Pro after the switch-on) states the price only.
   if (tiered && plan && plan.trialDays === 0 && plan.trialEligibility !== "unknown") return fill(copy.unavailableTrial, price);
-  const days = tiered && plan ? plan.trialDays || 7 : 7;
+  // A tier with no decided trial but an unconfirmed offer promises no day count.
+  if (tiered && plan && plan.trialDays === 0) return fill(copy.ineligibleTrial, price);
+  const days = tiered && plan ? plan.trialDays : 7;
   switch (plan?.trialEligibility) {
     case "eligible":
       return fill(withDays(copy.eligibleTrial, days), price);
@@ -565,10 +567,11 @@ export function shouldShowIosPaywallOnboarding(input: {
 /** What the Store itself is doing, so the price line never claims progress that stopped. */
 export type IosPaywallStoreState = "loading" | "ready" | "unavailable";
 
-function planLabel(copy: IosPaywallCopy, input: { comped: boolean; entitlementStatus: EntitlementStatus; entitlementPlan?: string }) {
+function planLabel(copy: IosPaywallCopy, input: { comped: boolean; entitlementStatus: EntitlementStatus; entitlementPlan?: string; tiered?: boolean }) {
   if (input.entitlementStatus === "trialing") return copy.planTrialing;
   // HPD-1534: an active Starter or Max subscription names its tier ("Personal" stays as before).
-  if (input.entitlementStatus === "active") return input.entitlementPlan === "starter" ? "Starter" : input.entitlementPlan === "max" ? "Max" : copy.planActive;
+  if (input.entitlementStatus === "active") return input.entitlementPlan === "starter" ? "Starter" : input.entitlementPlan === "max" ? "Max"
+    : input.tiered && input.entitlementPlan === "personal" ? "Pro" : copy.planActive;
   if (input.entitlementStatus === "grace_period") return copy.planGrace;
   if (input.entitlementStatus === "cancelled") return copy.planCancelled;
   // Complimentary access is real access, but it is not a purchased plan and it

@@ -409,7 +409,9 @@ export class MobilePurchasesController {
   loadPlans(accountId: string, input: { tiers?: readonly MobilePlanTier[] } = {}): Promise<MobilePurchasePlan[]> {
     const epoch = this.epoch;
     const tiers = (input.tiers ?? []).filter((tier, index, list) => TIER_ORDER.includes(tier) && list.indexOf(tier) === index);
-    if (tiers.length > 0) return this.loadTierPlans(accountId, epoch, tiers);
+    // Review of #185: a missing or broken tier offering never leaves the paywall empty;
+    // the app then sells Personal from the current offering as before.
+    if (tiers.length > 0) return this.loadTierPlans(accountId, epoch, tiers).catch(() => this.loadPlans(accountId));
     return this.runExclusive(async () => {
       const exactId = await this.assertBoundAccount(accountId, epoch);
       const offerings = await this.adapter.getOfferings();
@@ -573,19 +575,28 @@ export class MobilePurchasesController {
       const target = this.tierProduct(tierOfPackage(packageId));
       const currentTier = this.tierOfProduct(options.currentProductId);
       const targetTier = tierOfPackage(packageId);
-      const change: MobilePlanChange | undefined = this.store === "play_store" && currentTier && currentTier !== targetTier
-        ? { oldProductId: this.tierProductIds[currentTier], direction: TIER_ORDER.indexOf(targetTier) > TIER_ORDER.indexOf(currentTier) ? "upgrade" : "downgrade" }
+      // The direction holds in both stores; only Google Play is told about the change.
+      const direction = currentTier && currentTier !== targetTier
+        ? (TIER_ORDER.indexOf(targetTier) > TIER_ORDER.indexOf(currentTier) ? "upgrade" as const : "downgrade" as const)
+        : null;
+      const change: MobilePlanChange | undefined = this.store === "play_store" && currentTier && direction
+        ? { oldProductId: this.tierProductIds[currentTier], direction }
         : undefined;
 
       const result = await this.adapter.purchasePackage(storePackage, change);
       onStoreTransactionCompleted();
       await this.assertBoundAccount(accountId, epoch);
-      if (!mobileStoreProductMatches(result.productIdentifier, target.id, this.store)) {
+      // A downgrade starts at renewal; the store may report the product the buyer keeps
+      // until then, or none. The active-entitlement check below still decides.
+      const downgrade = direction === "downgrade" && currentTier;
+      const reportedOk = mobileStoreProductMatches(result.productIdentifier, target.id, this.store) ||
+        (downgrade && (!result.productIdentifier || mobileStoreProductMatches(result.productIdentifier, this.tierProductIds[currentTier!], this.store)));
+      if (!reportedOk) {
         throw new Error(`${this.store === "play_store" ? "Google Play" : "The App Store"} returned a different product than the one selected.`);
       }
       // A downgrade starts at renewal: until then the current plan stays the active one.
       const personalPurchaseExpirationAt = mobileCustomerInfoActiveExpirationAt(result.customerInfo, Date.now(),
-        change?.direction === "downgrade" ? [this.tierProduct(currentTier!), target] : [target]);
+        downgrade ? [this.tierProduct(currentTier!), target] : [target]);
       if (!personalPurchaseExpirationAt) {
         throw new Error(`The ${this.storeName} purchase finished without exact active Personal authority. Do not purchase again.`);
       }
@@ -647,7 +658,13 @@ export function mobilePlanChangeCanStart(
   controller: Pick<MobilePurchasesController, "tierOfProduct">,
   target: MobilePlanTier,
   timestamp = Date.now(),
+  /**
+   * Review of #185: a purchase or change finished in this session and not yet in the
+   * server's state (a downgrade stays invisible until the renewal) blocks another one.
+   */
+  purchaseCompletion: { accountId: string } | null = null,
 ): { currentProductId: string } | null {
+  if (purchaseCompletion) return null;
   const entitlement = state.entitlement;
   if (entitlement.provider !== "revenuecat" || !["active", "trialing", "grace_period"].includes(entitlement.status)) return null;
   if (entitlement.expiresAt && Date.parse(entitlement.expiresAt) <= timestamp) return null;
