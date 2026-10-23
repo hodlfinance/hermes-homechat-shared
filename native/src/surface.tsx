@@ -48,10 +48,11 @@ import {
   mobileDrawerSections,
 } from "./mobile-automation-threads";
 import { mobileHostHeaderMenuItems, mobileHostHeaderMoreLabel, mobileHostHeaderThreadKey, mobileHostHeaderThreadOpened, mobileHostHeaderTitle, type MobileHostHeaderMenuItem, type MobileHostHeaderThread } from "./mobile-host-header";
+import { nativeR8HostScreenTarget, type NativeR8ScreenRequest } from "./host-screen-request";
 import { mobileHostSendBlocked, mobileHostThreadLoading, mobileHostThreadOpenFailed, mobileHostThreadTarget, mobileHostThreadTargetKey, mobileMessagePagesEqual, mobileStartupHydrationAllowed, mobileStartupMaySelectConversation, mobileStartupPaintsSnapshotMessages } from "./mobile-host-thread-open";
 import { subscribeKeyboardInsetRelease } from "./mobile-keyboard-inset";
 import { WindowKeyboardAvoidingView } from "./window-keyboard-avoiding-view";
-import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createDelegatedTaskPollLoop, nextDelegatedTasks, type DelegatedTaskPollConditions } from "./delegated-task-poll";
 import {
   AccessibilityInfo,
@@ -1644,6 +1645,11 @@ function diagnosticsText(entries: MobileLogEntry[], snapshot: AppSnapshot | null
   return [...header, "", ...lines].join("\n");
 }
 
+/** HPD-1582: the native view the account page measures to scroll to a section. */
+type MeasurableAnchor = {
+  measureLayout(relativeTo: never, onSuccess: (x: number, y: number) => void, onFail: () => void): void;
+};
+
 type NativeR8SurfaceProps = {
   initialDraft?: string;
   navigationRequest?: {
@@ -1675,6 +1681,13 @@ type NativeR8SurfaceProps = {
    * changes (Hey).
    */
   headerThread?: MobileHostHeaderThread | null;
+  /**
+   * HPD-1582: the host opens one Hermes settings screen directly (HODL's
+   * "Hermes settings" page). Each new requestId opens its screen once the
+   * surface has a session, like the "..." menu would. Without it nothing
+   * changes (Hey).
+   */
+  screenRequest?: NativeR8ScreenRequest | null;
 };
 
 function NativeR8Surface(props: NativeR8SurfaceProps = {}) {
@@ -1685,7 +1698,7 @@ function NativeR8Surface(props: NativeR8SurfaceProps = {}) {
   );
 }
 
-function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest, hostVisible = true, supportReplyEmailFallback = null, headerThread = null }: NativeR8SurfaceProps = {}) {
+function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest, hostVisible = true, supportReplyEmailFallback = null, headerThread = null, screenRequest = null }: NativeR8SurfaceProps = {}) {
   const systemColorScheme = useColorScheme();
   const reduceMotion = useReduceMotion();
   const hostAppLocale = host.presentation?.appLocale;
@@ -8183,6 +8196,69 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     return () => { active = false; };
   }, [token, snapshot?.workspace.id, homeRequest?.requestId]);
 
+  // HPD-1582: the host's own settings page opens one Hermes screen directly.
+  const screenRequestRef = useRef<string | null>(null);
+  const accessHistoryAnchorRef = useRef<MeasurableAnchor | null>(null);
+  const pageScrollRef = useRef<ScrollView | null>(null);
+  const [pendingPageAnchor, setPendingPageAnchor] = useState<"access_history" | null>(null);
+  useEffect(() => {
+    if (!token || !snapshot || !screenRequest || screenRequestRef.current === screenRequest.requestId) return;
+    screenRequestRef.current = screenRequest.requestId;
+    screenRequest.onAccepted?.(screenRequest.requestId);
+    const target = nativeR8HostScreenTarget(screenRequest.screen);
+    if (!target) return;
+    setHostHeaderMenuOpen(false);
+    if (target.kind === "tab") {
+      selectMobileScreen(target.tab);
+      setPendingPageAnchor(target.anchor);
+    } else if (target.kind === "privacy") {
+      selectMobileScreen("chat");
+      setPrivacyWorkspace(snapshot.workspace.id);
+    } else {
+      selectMobileScreen("chat");
+      void openNativeHermesDashboard();
+    }
+  }, [token, snapshot?.workspace.id, screenRequest?.requestId]);
+
+  // The access history sits below the privacy section of the account page;
+  // once the page has laid out, it scrolls there. A page that is not laid out
+  // yet is tried again a few times; one that never measures stays at its top.
+  useEffect(() => {
+    if (!pendingPageAnchor || tab !== "account") return;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let active = true;
+    const tryScroll = () => {
+      if (!active) return;
+      attempts += 1;
+      const retry = () => {
+        if (!active) return;
+        if (attempts < 12) timer = setTimeout(tryScroll, 150);
+        else setPendingPageAnchor(null);
+      };
+      const scroll = pageScrollRef.current as (ScrollView & { getInnerViewRef?: () => unknown; getInnerViewNode?: () => unknown }) | null;
+      const anchor = accessHistoryAnchorRef.current;
+      // getInnerViewRef works on both React Native architectures; the node
+      // number is the old architecture's fallback.
+      const content = scroll?.getInnerViewRef?.() ?? scroll?.getInnerViewNode?.() ?? null;
+      if (!scroll || !anchor || content == null) return retry();
+      try {
+        anchor.measureLayout(content as never, (_x, y) => {
+          if (!active) return;
+          scroll.scrollTo({ y: Math.max(0, y - 12), animated: false });
+          setPendingPageAnchor(null);
+        }, retry);
+      } catch {
+        retry();
+      }
+    };
+    timer = setTimeout(tryScroll, 120);
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [pendingPageAnchor, tab]);
+
   const presentedChatTitle = host.presentation?.chatTitle || mobileScreenTitle(tab, settingsSection, t, appLocale);
   const ChatHeaderSupportIcon = host.presentation?.chatHeaderSupportIcon;
   const presentedAccountLabel = host.presentation?.accountLabel?.trim()
@@ -9916,7 +9992,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           </View>
         </ChatKeyboardAvoidingView>
       ) : (
-        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} keyboardShouldPersistTaps="handled">
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} keyboardShouldPersistTaps="handled" ref={pageScrollRef}>
           {error ? <Notice locale={appLocale} tone="error" text={error} onDismiss={dismissAppError} dismissLabel={t.systemPages.common.dismiss} /> : null}
           {visibleSessionNotice ? <Notice locale={appLocale} tone="info" text={visibleSessionNotice} onDismiss={dismissSessionNotice} dismissLabel={t.systemPages.common.dismiss} /> : null}
 
@@ -10483,6 +10559,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                       />
                     </MobileSystemSection>
                     <AccountSecurityPanel
+                      accessHistoryAnchorRef={accessHistoryAnchorRef}
                       accountCopy={accountPage}
                       adminPublicKey={adminPublicKeyInput}
                       adminPublicKeyLabel={adminPublicKeyLabel}
@@ -14587,6 +14664,7 @@ function AccountRow({
  * together with the way to withdraw it.
  */
 function AccountSecurityPanel({
+  accessHistoryAnchorRef,
   accountCopy,
   adminPublicKey,
   adminPublicKeyLabel,
@@ -14606,6 +14684,8 @@ function AccountSecurityPanel({
   onRunHandover,
   onSaveAdminKey,
 }: {
+  /** HPD-1582: where the account page scrolls for the host's "Access history". */
+  accessHistoryAnchorRef?: RefObject<MeasurableAnchor | null>;
   accountCopy: ReturnType<typeof accountPageCopy>;
   adminPublicKey: string;
   adminPublicKeyLabel: string;
@@ -14696,6 +14776,7 @@ function AccountSecurityPanel({
         ) : null}
       </MobileSystemSection>
 
+      <View ref={accessHistoryAnchorRef as never} collapsable={false}>
       <MobileSystemSection title={accountCopy.accessHistoryTitle}>
         {entries.length ? (
           entries.map((entry) => (
@@ -14718,6 +14799,7 @@ function AccountSecurityPanel({
           </View>
         )}
       </MobileSystemSection>
+      </View>
     </>
   );
 }
