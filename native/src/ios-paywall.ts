@@ -12,8 +12,9 @@ export const IOS_PAYWALL_TRUST_CLAIMS_PUBLISHABLE = false;
 
 export const IOS_PAYWALL_POLICY = {
   ageMinimum: 16,
-  allowedPackageIds: ["personal_monthly"],
-  allowedProductIds: ["app.heyhermes.personal.monthly.v3"],
+  // HPD-1534: Starter and Max only reach the paywall while the server lists the tiers.
+  allowedPackageIds: ["personal_monthly", "starter_monthly", "max_monthly"],
+  allowedProductIds: ["app.heyhermes.personal.monthly.v3", "app.heyhermes.starter.monthly.v1", "app.heyhermes.max.monthly.v1"],
   billingPeriod: "P1M",
   publicPlan: "personal",
 } as const;
@@ -501,16 +502,38 @@ function fill(template: string, price: string) {
   return template.replaceAll("{price}", price);
 }
 
-function trialText(copy: IosPaywallCopy, plan: MobilePurchasePlan | null, price: string) {
+/**
+ * HPD-1534: the plan names and trial button while the tiers are on. Names are the ASO
+ * Workbench's (store-presence apps/hey-hermes-ios/runden/2026-10-23-einstiegsplan/
+ * abo-texte.json, 4554532b); "Hey Hermes Max" is a placeholder until it names Max. The
+ * button for a trial that is not the free week follows the approved start-link wording
+ * (HPD-1529 B1: "30 Tage gratis starten"); the six other languages read English until the
+ * paywall round (HPD-1530).
+ */
+type TierPlan = "starter" | "personal" | "max";
+const tierNames: Record<TierPlan, string> = { starter: "Hey Hermes Starter", personal: "Hey Hermes Pro", max: "Hey Hermes Max" };
+const tierTrialCta: Partial<Record<AppLocale, string>> & { en: string } = { en: "Start {days} days free", de: "{days} Tage gratis starten" };
+export function iosPaywallTierName(plan: TierPlan) { return tierNames[plan]; }
+const tierTrialChip: Partial<Record<AppLocale, string>> & { en: string } = { en: "{days} days free", de: "{days} Tage gratis" };
+/** HPD-1534: the free days on a plan card (as on the web paywall). */
+export function iosPaywallTrialChip(locale: AppLocale, days: number) { return (tierTrialChip[locale] ?? tierTrialChip.en).replace("{days}", String(days)); }
+const withDays = (template: string, days: number) => days === 7 ? template : template.replace(/7/g, String(days));
+
+function trialText(copy: IosPaywallCopy, plan: MobilePurchasePlan | null, price: string, tiered = false) {
+  // HPD-1534: a tier without a trial (Max, Pro after the switch-on) states the price only.
+  if (tiered && plan && plan.trialDays === 0 && plan.trialEligibility !== "unknown") return fill(copy.unavailableTrial, price);
+  // A tier with no decided trial but an unconfirmed offer promises no day count.
+  if (tiered && plan && plan.trialDays === 0) return fill(copy.ineligibleTrial, price);
+  const days = tiered && plan ? plan.trialDays : 7;
   switch (plan?.trialEligibility) {
     case "eligible":
-      return fill(copy.eligibleTrial, price);
+      return fill(withDays(copy.eligibleTrial, days), price);
     case "ineligible":
       return fill(copy.ineligibleTrial, price);
     case "unavailable":
       return fill(copy.unavailableTrial, price);
     default:
-      return copy.unknownTrial;
+      return withDays(copy.unknownTrial, days);
   }
 }
 
@@ -544,9 +567,11 @@ export function shouldShowIosPaywallOnboarding(input: {
 /** What the Store itself is doing, so the price line never claims progress that stopped. */
 export type IosPaywallStoreState = "loading" | "ready" | "unavailable";
 
-function planLabel(copy: IosPaywallCopy, input: { comped: boolean; entitlementStatus: EntitlementStatus }) {
+function planLabel(copy: IosPaywallCopy, input: { comped: boolean; entitlementStatus: EntitlementStatus; entitlementPlan?: string; tiered?: boolean }) {
   if (input.entitlementStatus === "trialing") return copy.planTrialing;
-  if (input.entitlementStatus === "active") return copy.planActive;
+  // HPD-1534: an active Starter or Max subscription names its tier ("Personal" stays as before).
+  if (input.entitlementStatus === "active") return input.entitlementPlan === "starter" ? "Starter" : input.entitlementPlan === "max" ? "Max"
+    : input.tiered && input.entitlementPlan === "personal" ? "Pro" : copy.planActive;
   if (input.entitlementStatus === "grace_period") return copy.planGrace;
   if (input.entitlementStatus === "cancelled") return copy.planCancelled;
   // Complimentary access is real access, but it is not a purchased plan and it
@@ -575,9 +600,21 @@ function offerView(
   price: string,
   storeLabel: string | null,
   copy: IosPaywallCopy,
+  tiered = false,
 ): HeyPaywallOfferView {
-  const offer = heyPaywallOfferCopy(locale);
-  const trial = plan?.trialEligibility === "eligible";
+  const base = heyPaywallOfferCopy(locale);
+  // HPD-1534: with the tiers each plan carries its own trial days (Starter 30), and the
+  // eyebrow names the chosen plan. The single-plan offer stays word for word as before.
+  const days = tiered && plan ? plan.trialDays : 7;
+  const offer: HeyPaywallOfferCopy = tiered && plan ? {
+    ...base,
+    eyebrow: tierNames[plan.plan],
+    trialTitle: withDays(base.trialTitle, days),
+    trialTitleAccent: withDays(base.trialTitleAccent, days),
+    trialCta: days === 7 ? base.trialCta : (tierTrialCta[locale] ?? tierTrialCta.en).replace("{days}", String(days)),
+    trialTerms: withDays(base.trialTerms, days),
+  } : base;
+  const trial = plan?.trialEligibility === "eligible" && (!tiered || days > 0);
   return {
     kind: trial ? "trial" : "subscribe",
     eyebrow: offer.eyebrow,
@@ -607,9 +644,17 @@ export function iosPaywallView(input: {
   runtimeAccess: WorkspaceRuntimeAccess;
   storeState?: IosPaywallStoreState;
   trustClaimsProven?: boolean;
+  /** HPD-1534: the server lists the plan tiers; the paywall offers several plans. */
+  tiered?: boolean;
+  /** HPD-1534: the plan the account holds, for the plan pill. */
+  entitlementPlan?: string;
 }) {
   const copy = copyByLocale[input.locale] ?? en;
-  if (input.plan && input.plan.packageId !== "personal_monthly") {
+  const tiered = input.tiered === true;
+  if (input.plan && !(IOS_PAYWALL_POLICY.allowedPackageIds as readonly string[]).includes(input.plan.packageId)) {
+    throw new Error("The iOS paywall received a non-monthly or unapproved package.");
+  }
+  if (input.plan && !tiered && input.plan.packageId !== "personal_monthly") {
     throw new Error("The iOS paywall received a non-monthly or unapproved package.");
   }
   const price = input.plan?.priceString || copy.monthlyFallbackPrice;
@@ -619,7 +664,7 @@ export function iosPaywallView(input: {
     showOnboarding: shouldShowIosPaywallOnboarding(input),
     heroTitle: copy.heroTitle,
     heroBody: copy.heroBody,
-    planName: copy.planName,
+    planName: tiered && input.plan ? tierNames[input.plan.plan] : copy.planName,
     monthlyAccess: copy.monthlyAccess,
     price,
     planLabel: planLabel(copy, input),
@@ -631,14 +676,14 @@ export function iosPaywallView(input: {
       : input.storeState === "loading"
         ? copy.loadingPrice
         : copy.unavailablePrice,
-    trialText: trialText(copy, input.plan, price),
+    trialText: trialText(copy, input.plan, price, tiered),
     // HPD-1085: the offer. Only an eligibility the Store confirmed may promise
     // the free week; unknown or ineligible shows the plan and its price.
     offer: offerView(input.locale, input.plan, price, input.plan
       ? null
       : input.storeState === "loading"
         ? copy.loadingPrice
-        : copy.unavailablePrice, copy),
+        : copy.unavailablePrice, copy, tiered),
     renewalText: copy.renewal,
     ageText: copy.age,
     accountBoundaryText: copy.accountBoundary,
