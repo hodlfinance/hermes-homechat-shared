@@ -54,7 +54,7 @@ test("the wording is the proposal's, in English and German", () => {
   assert.equal(en.switchLabel, "Manage model and memory myself");
   assert.equal(en.confirmTitle, "Manage model and memory yourself?");
   assert.equal(en.confirmCheckbox, "I understand that I may cause errors and fix them myself over SSH.");
-  assert.equal(en.restore, "Restore Hey defaults");
+  assert.equal(en.restore, "Restore Hey Hermes defaults");
   assert.equal(en.needsSsh, "Needs server access (SSH).");
   assert.equal(selfManagedCopy("de").switchLabel, "Modell und Gedächtnis selbst verwalten");
   assert.equal(selfManagedCopy("fr").switchLabel, en.switchLabel);
@@ -67,7 +67,7 @@ test("the wording is the proposal's, in English and German", () => {
 
 test("recognises the Plane's daily check-in answer and nothing else", () => {
   assert.equal(isDailyCheckInError(new HermesApiClientError("x", { status: 409, code: "daily_check_in" })), true);
-  assert.equal(isDailyCheckInError(new Error("That's 80 messages today. Hey checks in here once a day.")), true);
+  assert.equal(isDailyCheckInError(new Error("That's 80 messages today. Hey Hermes checks in here once a day.")), true);
   assert.equal(isDailyCheckInError(new HermesApiClientError("Conflict", { status: 409, code: "self_managed" })), false);
   assert.equal(isDailyCheckInError(new Error("Hermes could not finish that reply.")), false);
   assert.equal(new HermesApiClientError("x", { status: 409 }).retryable, false);

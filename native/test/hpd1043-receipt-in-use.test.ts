@@ -22,13 +22,13 @@ test("HPD-1043: every app language explains the other Hey account without sendin
     const message = iosReceiptInUseMessage(locale);
     // Restore Purchases fails with the same refusal, so it is never offered.
     assert.ok(!message.includes(iosPaywallCopy(locale).restore), `${locale} does not offer restore`);
-    assert.ok(message.includes("Hey"), `${locale} names Hey`);
+    assert.ok(/Hey[ -]Hermes/u.test(message), `${locale} names Hey Hermes`);
     assert.ok(!/already another active subscriber/i.test(message), locale);
     assert.ok(!seen.has(message), `${locale} is translated`);
     seen.add(message);
   }
-  assert.match(iosReceiptInUseMessage("en"), /another Hey account.*Sign in with the Hey account that bought it, or contact Hey Support/);
-  assert.match(iosReceiptInUseMessage("de"), /anderen Hey-Konto.*Hey-Support/);
+  assert.match(iosReceiptInUseMessage("en"), /another Hey Hermes account.*Sign in with the Hey Hermes account that bought it, or contact Hey Hermes Support/);
+  assert.match(iosReceiptInUseMessage("de"), /anderen Hey-Hermes-Konto.*Hey-Hermes-Support/);
   // French uses "tu", like the rest of the paywall.
   assert.match(iosReceiptInUseMessage("fr"), /Connecte-toi.*contacte/);
   assert.doesNotMatch(iosReceiptInUseMessage("fr"), /\b(vous|Connectez|contactez)\b/);

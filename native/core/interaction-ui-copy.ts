@@ -1,6 +1,6 @@
 import type { AppLocale } from "./types";
 const en = {
-  "Hey suggestion": "Hey suggestion",
+  "Hey suggestion": "Hey Hermes suggestion",
   "Suggestion": "Suggestion",
   "Load earlier messages": "Load earlier messages",
   "Scroll to latest message": "Scroll to latest message",
@@ -139,7 +139,7 @@ const en = {
 };
 const catalog: Record<AppLocale, typeof en> = { en,
 "de": {
-  "Hey suggestion": "Hey-Vorschlag",
+  "Hey suggestion": "Hey-Hermes-Vorschlag",
   "Suggestion": "Vorschlag",
   "Load earlier messages": "Frühere Nachrichten laden",
   "Scroll to latest message": "Zur neuesten Nachricht scrollen",
@@ -277,7 +277,7 @@ const catalog: Record<AppLocale, typeof en> = { en,
 "Attachments can be up to 10 MB in total.": "Anhänge dürfen insgesamt bis zu 10 MB groß sein."
 },
 "fr": {
-  "Hey suggestion": "Suggestion Hey",
+  "Hey suggestion": "Suggestion Hey Hermes",
   "Suggestion": "Suggestion",
   "Load earlier messages": "Charger les messages précédents",
   "Scroll to latest message": "Aller au dernier message",
@@ -415,7 +415,7 @@ const catalog: Record<AppLocale, typeof en> = { en,
 "Attachments can be up to 10 MB in total.": "Les pièces jointes peuvent atteindre 10 Mo au total."
 },
 "es": {
-  "Hey suggestion": "Sugerencia de Hey",
+  "Hey suggestion": "Sugerencia de Hey Hermes",
   "Suggestion": "Sugerencia",
   "Load earlier messages": "Cargar mensajes anteriores",
   "Scroll to latest message": "Ir al último mensaje",
@@ -553,7 +553,7 @@ const catalog: Record<AppLocale, typeof en> = { en,
 "Attachments can be up to 10 MB in total.": "Los archivos adjuntos pueden ocupar hasta 10 MB en total."
 },
 "it": {
-  "Hey suggestion": "Suggerimento Hey",
+  "Hey suggestion": "Suggerimento Hey Hermes",
   "Suggestion": "Suggerimento",
   "Load earlier messages": "Carica messaggi precedenti",
   "Scroll to latest message": "Vai all’ultimo messaggio",
@@ -691,7 +691,7 @@ const catalog: Record<AppLocale, typeof en> = { en,
 "Attachments can be up to 10 MB in total.": "Gli allegati possono raggiungere 10 MB in totale."
 },
 "pt-BR": {
-  "Hey suggestion": "Sugestão do Hey",
+  "Hey suggestion": "Sugestão do Hey Hermes",
   "Suggestion": "Sugestão",
   "Load earlier messages": "Carregar mensagens anteriores",
   "Scroll to latest message": "Ir para a mensagem mais recente",
@@ -829,7 +829,7 @@ const catalog: Record<AppLocale, typeof en> = { en,
 "Attachments can be up to 10 MB in total.": "Os anexos podem ter até 10 MB no total."
 },
 "ja": {
-  "Hey suggestion": "Heyの提案",
+  "Hey suggestion": "Hey Hermesの提案",
   "Suggestion": "提案",
   "Load earlier messages": "以前のメッセージを読み込む",
   "Scroll to latest message": "最新のメッセージに移動",
@@ -967,7 +967,7 @@ const catalog: Record<AppLocale, typeof en> = { en,
 "Attachments can be up to 10 MB in total.": "添付ファイルの合計サイズは10 MBまでです。"
 },
 "ko": {
-  "Hey suggestion": "Hey 제안",
+  "Hey suggestion": "Hey Hermes 제안",
   "Suggestion": "제안",
   "Load earlier messages": "이전 메시지 불러오기",
   "Scroll to latest message": "최신 메시지로 이동",

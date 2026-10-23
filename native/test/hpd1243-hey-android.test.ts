@@ -117,7 +117,7 @@ test("Android wording, English and German, read as sentences", () => {
   assert.equal(heyStoreWording(en.monthlyAccess, "en", "android"), "One monthly Android subscription. No annual plan.");
   assert.equal(heyStoreWording(en.loadingPrice, "en", "android"), "Checking the Google Play price...");
   assert.equal(heyStoreWording(en.receiptInUse, "en", "android"),
-    "This Google account's subscription already belongs to another Hey account. Sign in with the Hey account that bought it, or contact Hey Support.");
+    "This Google account's subscription already belongs to another Hey Hermes account. Sign in with the Hey Hermes account that bought it, or contact Hey Hermes Support.");
   assert.equal(heyStoreWording(en.eligibleTrial, "en", "android"), "Google Play confirms you are eligible: 7 days free, then {price}/month.");
   assert.equal(heyStoreWording(en.renewal, "en", "android"),
     "The subscription renews monthly at Google Play's displayed price until cancelled in Google Play subscriptions.");
@@ -127,7 +127,7 @@ test("Android wording, English and German, read as sentences", () => {
     "7 days free, then {price}/month. Renews automatically each month until you cancel in your Google Play subscriptions at least 24 hours before the period ends.");
   const de = iosPaywallCopy("de");
   assert.equal(heyStoreWording(de.receiptInUse, "de", "android"),
-    "Das Abo dieses Google-Kontos gehört bereits zu einem anderen Hey-Konto. Melde dich mit dem Hey-Konto an, mit dem es gekauft wurde, oder wende dich an den Hey-Support.");
+    "Das Abo dieses Google-Kontos gehört bereits zu einem anderen Hey-Hermes-Konto. Melde dich mit dem Hey-Hermes-Konto an, mit dem es gekauft wurde, oder wende dich an den Hey-Hermes-Support.");
   assert.equal(heyStoreWording(de.renewal, "de", "android"),
     "Das Abo verlängert sich monatlich zum von Google Play angezeigten Preis, bis du es in den Google-Play-Abos kündigst.");
 });
@@ -222,8 +222,8 @@ function playController(overrides: Parameters<typeof playAdapter>[0] = {}, produ
 test("Google Play: RevenueCat is bound to the Hey account before any plan is read or bought", async () => {
   const { controller, calls } = playController({ entitledProduct: "hey_personal" });
   // Nothing is sold to an unbound controller: an anonymous purchase gets access but no server.
-  await assert.rejects(controller.loadPlans("acct_1"), /not bound to the signed-in Hey account/);
-  await assert.rejects(controller.purchase("acct_1", "personal_monthly"), /not bound to the signed-in Hey account/);
+  await assert.rejects(controller.loadPlans("acct_1"), /not bound to the signed-in Hey Hermes account/);
+  await assert.rejects(controller.purchase("acct_1", "personal_monthly"), /not bound to the signed-in Hey Hermes account/);
   assert.equal(calls.length, 0);
   await controller.bindAccount("acct_1", "goog_key");
   assert.equal(calls.join(","), "configure:acct_1", "configured with the Hey account id, never anonymously");
