@@ -40,6 +40,7 @@ test("the surface takes screenRequest and the package exports it", () => {
 
 test("each new request opens its screen once, after the session is there", () => {
   assert.match(effect, /if \(!token \|\| !snapshot \|\| !screenRequest \|\| screenRequestRef\.current === screenRequest\.requestId\) return;/);
+  assert.match(effect, /screenRequest\.onAccepted\?\.\(screenRequest\.requestId\);/);
   assert.match(effect, /selectMobileScreen\(target\.tab\);/);
   assert.match(effect, /setPrivacyWorkspace\(snapshot\.workspace\.id\);/);
   assert.match(effect, /void openNativeHermesDashboard\(\);/);
@@ -51,4 +52,6 @@ test("Access history scrolls the account page to its section", () => {
   assert.match(surface, /accessHistoryAnchorRef=\{accessHistoryAnchorRef\}/);
   assert.match(surface, /<View ref=\{accessHistoryAnchorRef as never\} collapsable=\{false\}>\n\s+<MobileSystemSection title=\{accountCopy\.accessHistoryTitle\}>/);
   assert.match(effect, /anchor\.measureLayout\(content as never/);
+  assert.match(effect, /scroll\?\.getInnerViewRef\?\.\(\) \?\? scroll\?\.getInnerViewNode\?\.\(\)/);
+  assert.match(effect, /if \(attempts < 12\) timer = setTimeout\(tryScroll, 150\);/);
 });

@@ -12,7 +12,15 @@ export type NativeR8HostScreen =
   | "access_history"
   | "dashboard";
 
-export type NativeR8ScreenRequest = { screen: NativeR8HostScreen; requestId: string };
+export type NativeR8ScreenRequest = {
+  screen: NativeR8HostScreen;
+  requestId: string;
+  /**
+   * Called once the surface has taken the request, so the host can clear it
+   * and a remounted surface does not open the screen again.
+   */
+  onAccepted?: ((requestId: string) => void) | null;
+};
 
 /** What the surface does for one requested screen. */
 export type NativeR8HostScreenTarget =

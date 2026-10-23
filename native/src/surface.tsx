@@ -8204,6 +8204,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   useEffect(() => {
     if (!token || !snapshot || !screenRequest || screenRequestRef.current === screenRequest.requestId) return;
     screenRequestRef.current = screenRequest.requestId;
+    screenRequest.onAccepted?.(screenRequest.requestId);
     const target = nativeR8HostScreenTarget(screenRequest.screen);
     if (!target) return;
     setHostHeaderMenuOpen(false);
@@ -8220,22 +8221,42 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }, [token, snapshot?.workspace.id, screenRequest?.requestId]);
 
   // The access history sits below the privacy section of the account page;
-  // once the page has laid out, it scrolls there.
+  // once the page has laid out, it scrolls there. A page that is not laid out
+  // yet is tried again a few times; one that never measures stays at its top.
   useEffect(() => {
     if (!pendingPageAnchor || tab !== "account") return;
-    const timer = setTimeout(() => {
-      setPendingPageAnchor(null);
-      const scroll = pageScrollRef.current as (ScrollView & { getInnerViewNode?: () => number | null }) | null;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let active = true;
+    const tryScroll = () => {
+      if (!active) return;
+      attempts += 1;
+      const retry = () => {
+        if (!active) return;
+        if (attempts < 12) timer = setTimeout(tryScroll, 150);
+        else setPendingPageAnchor(null);
+      };
+      const scroll = pageScrollRef.current as (ScrollView & { getInnerViewRef?: () => unknown; getInnerViewNode?: () => unknown }) | null;
       const anchor = accessHistoryAnchorRef.current;
-      const content = scroll?.getInnerViewNode?.() ?? null;
-      if (!scroll || !anchor || content == null) return;
+      // getInnerViewRef works on both React Native architectures; the node
+      // number is the old architecture's fallback.
+      const content = scroll?.getInnerViewRef?.() ?? scroll?.getInnerViewNode?.() ?? null;
+      if (!scroll || !anchor || content == null) return retry();
       try {
-        anchor.measureLayout(content as never, (_x, y) => scroll.scrollTo({ y: Math.max(0, y - 12), animated: false }), () => undefined);
+        anchor.measureLayout(content as never, (_x, y) => {
+          if (!active) return;
+          scroll.scrollTo({ y: Math.max(0, y - 12), animated: false });
+          setPendingPageAnchor(null);
+        }, retry);
       } catch {
-        // A page that cannot be measured stays at its top.
+        retry();
       }
-    }, 120);
-    return () => clearTimeout(timer);
+    };
+    timer = setTimeout(tryScroll, 120);
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
   }, [pendingPageAnchor, tab]);
 
   const presentedChatTitle = host.presentation?.chatTitle || mobileScreenTitle(tab, settingsSection, t, appLocale);
