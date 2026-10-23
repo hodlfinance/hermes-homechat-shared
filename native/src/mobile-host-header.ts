@@ -51,18 +51,21 @@ export function mobileHostHeaderThreadOpened(requested: MobileHostHeaderThread, 
 }
 
 /**
- * The one title of the header row: the thread's name in the chat (Hermes for
- * the Home chat or while no thread is known yet), the page's name elsewhere.
+ * The one title of the header row: the thread's name in the chat (the host's
+ * Home chat title, else Hermes, for the Home chat or while no thread is known
+ * yet), the page's name elsewhere. HPD-1515: homeTitle is the host's
+ * presentation.homeChatTitle (HODL "Home"); Hey passes none.
  */
 export function mobileHostHeaderTitle(input: {
   tab: string;
   session: { role?: string | null; title?: string | null } | null | undefined;
   productName: string;
   screenTitle: string;
+  homeTitle?: string | null;
 }): string {
   if (input.tab !== "chat") return input.screenTitle;
   const session = input.session;
-  if (!session || session.role === "home") return input.productName;
+  if (!session || session.role === "home") return input.homeTitle?.trim() || input.productName;
   return session.title?.trim() || input.productName;
 }
 
