@@ -25,9 +25,12 @@ function view(locale: (typeof appLocales)[number], p: MobilePurchasePlan | null,
 test("an eligible account sees the free week, its price after the trial and Apple's renewal terms", () => {
   const offer = view("en", plan("eligible")).offer;
   assert.equal(offer.kind, "trial");
-  assert.equal(offer.title, "Try Hey Hermes free for 7 days");
+  // HPD-1265: the plan headline and the billed price lead; the trial follows smaller.
+  assert.equal(offer.title, "An AI that works for you. And belongs to you.");
+  assert.equal(offer.priceLine, "CHF 29.00 / month");
+  assert.equal(offer.priceNote, "7 days free, then billed monthly · cancel anytime");
   assert.equal(offer.ctaLabel, "Start your free week");
-  assert.equal(offer.ctaSubline, "then CHF 29.00 per month · cancel anytime");
+  assert.equal(offer.ctaSubline, null);
   assert.match(offer.termsText, /7 days free, then CHF 29\.00\/month\. Renews automatically/);
   assert.match(offer.termsText, /Guardian consent is required where local law says so\./);
 });
@@ -63,7 +66,7 @@ test("every app language has a complete offer", () => {
     assert.ok(copy.trialTitle.includes(copy.trialTitleAccent), `${locale} trial accent`);
     assert.ok(copy.planTitle.includes(copy.planTitleAccent), `${locale} plan accent`);
     assert.equal(copy.benefits.length, 4, locale);
-    for (const key of ["subscribeCta", "trialThen", "trialTerms", "subscribeTerms"] as const) {
+    for (const key of ["subscribeCta", "trialThen", "trialTerms", "subscribeTerms", "billedPrice"] as const) {
       assert.ok(copy[key].includes("{price}"), `${locale} ${key}`);
     }
     if (locale !== "en") assert.notEqual(copy.trialCta, heyPaywallOfferCopy("en").trialCta, locale);

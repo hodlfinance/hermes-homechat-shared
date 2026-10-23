@@ -11195,17 +11195,20 @@ function IosPaywallOfferPanel({ locale,
         )
       ) : purchaseAvailable ? (
         <>
+          {/* HPD-1265, Apple 3.1.2(c): the billed amount is the largest price, above the button; the trial follows smaller. */}
+          {offer.priceLine ? <Text style={styles.paywallBilledPrice} accessibilityRole="text">{offer.priceLine}</Text> : null}
+          {offer.priceNote ? <Text style={styles.paywallBilledPriceNote}>{offer.priceNote}</Text> : null}
           <Pressable
-            style={[styles.paywallCta, purchaseDisabled && styles.disabledButton]}
+            style={[styles.paywallCta, offer.priceLine ? styles.paywallCtaAfterPrice : null, purchaseDisabled && styles.disabledButton]}
             disabled={purchaseDisabled}
             onPress={() => plan ? void onPurchase(plan.packageId) : undefined}
             accessibilityRole="button"
-            accessibilityLabel={`${offer.ctaLabel}. ${offer.ctaSubline}`}
+            accessibilityLabel={[offer.ctaLabel, offer.priceLine, offer.priceNote, offer.ctaSubline].filter(Boolean).join(". ")}
           >
             {phase === "purchasing" ? <ActivityIndicator color="#ffffff" /> : null}
             <Text style={styles.paywallCtaText}>{offer.ctaLabel}</Text>
           </Pressable>
-          <Text style={styles.paywallCtaSubline}>{offer.ctaSubline}</Text>
+          {offer.ctaSubline ? <Text style={styles.paywallCtaSubline}>{offer.ctaSubline}</Text> : null}
           <Text style={styles.paywallTerms}>{offer.termsText}</Text>
           {view.complimentaryOverlapText ? <Text style={styles.paywallTerms}>{view.complimentaryOverlapText}</Text> : null}
         </>
@@ -16746,6 +16749,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     paddingHorizontal: 16,
+  },
+  // HPD-1265, Apple 3.1.2(c): the billed monthly amount when a trial is
+  // offered. Larger than the button text and the trial note under it.
+  paywallBilledPrice: {
+    marginTop: 22,
+    color: palette.ink,
+    fontSize: 28,
+    lineHeight: 33,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+    textAlign: "center",
+  },
+  paywallBilledPriceNote: {
+    marginTop: 4,
+    color: palette.muted,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  paywallCtaAfterPrice: {
+    marginTop: 14,
   },
   paywallCtaText: {
     color: "#ffffff",
