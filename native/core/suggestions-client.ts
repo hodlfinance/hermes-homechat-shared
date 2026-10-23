@@ -66,7 +66,7 @@ function assertScope(actual: SharedSuggestionScope, expected: SharedSuggestionSc
     actual.accountId !== expected.accountId ||
     actual.workspaceId !== expected.workspaceId
   ) {
-    throw new Error("Suggestion scope does not match the signed-in Hey workspace.");
+    throw new Error("Suggestion scope does not match the signed-in Hey Hermes workspace.");
   }
 }
 

@@ -222,8 +222,8 @@ function playController(overrides: Parameters<typeof playAdapter>[0] = {}, produ
 test("Google Play: RevenueCat is bound to the Hey account before any plan is read or bought", async () => {
   const { controller, calls } = playController({ entitledProduct: "hey_personal" });
   // Nothing is sold to an unbound controller: an anonymous purchase gets access but no server.
-  await assert.rejects(controller.loadPlans("acct_1"), /not bound to the signed-in Hey account/);
-  await assert.rejects(controller.purchase("acct_1", "personal_monthly"), /not bound to the signed-in Hey account/);
+  await assert.rejects(controller.loadPlans("acct_1"), /not bound to the signed-in Hey Hermes account/);
+  await assert.rejects(controller.purchase("acct_1", "personal_monthly"), /not bound to the signed-in Hey Hermes account/);
   assert.equal(calls.length, 0);
   await controller.bindAccount("acct_1", "goog_key");
   assert.equal(calls.join(","), "configure:acct_1", "configured with the Hey account id, never anonymously");

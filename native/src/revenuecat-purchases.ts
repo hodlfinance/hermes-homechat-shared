@@ -175,7 +175,7 @@ export function mobilePurchasePlanLabel(plan: string) {
 
 function exactAccountId(accountId: string) {
   if (!accountId || accountId !== accountId.trim() || accountId.length > 100 || accountId.includes("/")) {
-    throw new Error("The signed-in Hey account ID cannot be used for purchases.");
+    throw new Error("The signed-in Hey Hermes account ID cannot be used for purchases.");
   }
   return accountId;
 }
@@ -228,7 +228,7 @@ export function assertProductLocalSubscriptionState<T extends {
       state.entitlement.revenueCatCustomerId !== undefined &&
       state.entitlement.revenueCatCustomerId !== expectedAccountId)
   ) {
-    throw new Error("The server returned subscription state for a different Hey account.");
+    throw new Error("The server returned subscription state for a different Hey Hermes account.");
   }
   return state;
 }
@@ -390,7 +390,7 @@ export class MobilePurchasesController {
       this.assertEpoch(epoch);
       const confirmedId = await this.adapter.getAppUserID();
       this.assertEpoch(epoch);
-      if (confirmedId !== exactId) throw new Error("RevenueCat did not bind to the signed-in Hey account.");
+      if (confirmedId !== exactId) throw new Error("RevenueCat did not bind to the signed-in Hey Hermes account.");
       this.boundAccountId = exactId;
       const customerInfo = await this.adapter.getCustomerInfo();
       await this.assertBoundAccount(exactId, epoch);
@@ -614,18 +614,18 @@ export class MobilePurchasesController {
   }
 
   private assertEpoch(epoch: number) {
-    if (epoch !== this.epoch) throw new Error("The signed-in Hey account changed during the purchase operation.");
+    if (epoch !== this.epoch) throw new Error("The signed-in Hey Hermes account changed during the purchase operation.");
   }
 
   private async assertBoundAccount(accountId: string, epoch: number) {
     const exactId = exactAccountId(accountId);
     this.assertEpoch(epoch);
     if (this.boundAccountId !== exactId) {
-      throw new Error("Purchases are not bound to the signed-in Hey account.");
+      throw new Error("Purchases are not bound to the signed-in Hey Hermes account.");
     }
     const currentId = await this.adapter.getAppUserID();
     this.assertEpoch(epoch);
-    if (currentId !== exactId) throw new Error("RevenueCat is bound to a different Hey account.");
+    if (currentId !== exactId) throw new Error("RevenueCat is bound to a different Hey Hermes account.");
     return exactId;
   }
 

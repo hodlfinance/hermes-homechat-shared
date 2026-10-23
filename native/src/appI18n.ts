@@ -3812,7 +3812,7 @@ const en: MobileCopy = {
     failedDismiss: "Dismiss",
   },
   firstConversation: {
-    greetingTitle: "Hey Hermes. I just came online.",
+    greetingTitle: "Hey. I just came online.",
     greetingBody: "Apparently I'm Hermes — and this is your private machine. Who are you, and what should I call you?",
     connectionTitle: "Recommended connection",
     connectionBody: "Connect Gmail so Hermes can help with your email.",
@@ -3905,7 +3905,7 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "failedDismiss": "Ausblenden"
 },
     firstConversation: {
-      greetingTitle: "Hey Hermes. Ich bin gerade online gekommen.",
+      greetingTitle: "Hey. Ich bin gerade online gekommen.",
       greetingBody: "Anscheinend bin ich Hermes — und das hier ist deine private Maschine. Wer bist du, und wie soll ich dich nennen?",
       connectionTitle: "Empfohlene Verbindung",
       connectionBody: "Verbinde Gmail, damit Hermes dir mit deinen E-Mails helfen kann.",
