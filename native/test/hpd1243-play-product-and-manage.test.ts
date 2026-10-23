@@ -68,7 +68,7 @@ test("the surface binds, loads and sells nothing on Android until the guard says
   assert.ok(refusal > 0 && refusal < effect.indexOf("void bindMobilePurchasesAccount(accountId)"), "the guard must run before the binding");
   assert.match(effect, /if \(playProductGuard !== "match"\) \{[^}]*mobilePurchasesController\.suspend\(\);\s*setMobilePurchasePlans\(\[\]\);\s*setMobilePurchaseAccountReady\(false\);\s*setMobilePurchasePhase\(playProductGuard === "pending" \? "loading" : "unavailable"\);\s*setMobilePurchaseNotice\(playProductGuard === "pending" \? null : "App Store purchases are not configured in this build\."\);\s*return;\s*\}/);
   // The effect runs again when the Plane's answer arrives.
-  assert.match(effect, /\}, \[snapshot\?\.me\.id, playProductGuard\]\);/);
+  assert.match(effect, /\}, \[snapshot\?\.me\.id, playProductGuard, serverPlanTiersKey\]\);/); // HPD-1534
   // The status is settled by an answer and by a failure alike, and reset with the session.
   assert.match(surface, /setSalesStatus\(null\);\s*setSalesStatusSettled\(false\);\s*if \(!token \|\| host\.session\.mode !== "standalone" \|\| !storePlatform\) return;\s*let cancelled = false;\s*void readHeySalesStatus\(storePlatform, \(options\) => api\.salesStatus\(options\), \{ cancelled: \(\) => cancelled \}\)\.then\(\(status\) => \{\s*if \(cancelled\) return;\s*setSalesStatus\(status\);\s*setSalesStatusSettled\(true\);/);
 });

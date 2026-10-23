@@ -134,7 +134,7 @@ test("Android wording, English and German, read as sentences", () => {
 
 function plan(trialEligibility: MobilePurchasePlan["trialEligibility"]): MobilePurchasePlan {
   return {
-    packageId: "personal_monthly", productId: "hey_personal:monthly", displayName: "Personal",
+    packageId: "personal_monthly", plan: "personal", productId: "hey_personal:monthly", displayName: "Personal", trialDays: trialEligibility === "eligible" ? 7 : 0,
     title: "Hey Hermes Personal", description: "", priceString: "$29.00", trialEligibility,
   };
 }
@@ -293,7 +293,7 @@ test("the App Store controller is unchanged: its product, its eligibility check,
   await controller.bindAccount("acct_1", "appl_key");
   const plans = await controller.loadPlans("acct_1");
   assert.deepEqual(plans, [{
-    packageId: "personal_monthly", productId: "app.heyhermes.personal.monthly.v3", displayName: "Personal",
+    packageId: "personal_monthly", plan: "personal", productId: "app.heyhermes.personal.monthly.v3", displayName: "Personal", trialDays: 7,
     title: "Hey Hermes Personal", description: "", priceString: "$29.00", trialEligibility: "eligible",
   }]);
   assert.ok(fake.calls.includes("checkTrialEligibility:app.heyhermes.personal.monthly.v3"));
@@ -339,7 +339,7 @@ test("the surface reads the switch once and gates store, sign-in and sales statu
   assert.match(surface, /if \(host\.session\.mode === "external" \|\| !storePlatform \|\| !accountId\) \{\s*mobilePurchasesController\.suspend\(\);/);
   assert.equal(surface.match(/ios: storePlatform !== null,/g)?.length, 2);
   // Binding comes before the plans, and the plans before any purchase button.
-  assert.match(surface, /void bindMobilePurchasesAccount\(accountId\)\s*\.then\(\(binding\) => \{[\s\S]*?return mobilePurchasesController\.loadPlans\(accountId\);/);
+  assert.match(surface, /void bindMobilePurchasesAccount\(accountId\)\s*\.then\(\(binding\) => \{[\s\S]*?return mobilePurchasesController\.loadPlans\(accountId, \{ tiers: serverPlanTiers \}\);/); // HPD-1534: tiers only when the server lists them
   // Every sign-in request names the surface from the switch; no literal "ios" is left on that path.
   assert.doesNotMatch(surface, /surface: "ios"/);
   assert.doesNotMatch(surface, /nativeAuthConfig\("ios"\)/);

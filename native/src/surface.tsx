@@ -461,7 +461,11 @@ import {
   assertProductLocalSubscriptionState,
   isMobileReceiptAlreadyInUse,
   mobilePersonalPurchaseCanStart,
+  mobilePlanChangeCanStart,
+  mobileServerPlanTiers,
   mobileSubscriptionAuthorityConfirmed,
+  MOBILE_TIER_PACKAGES,
+  type MobilePlanTier,
   type MobilePurchasePlan,
   type MobileRevenueCatPackageId,
 } from "./revenuecat-purchases";
@@ -473,6 +477,8 @@ import { deviceAppLocale, heySignInCopy, heySignInHeadline } from "./hey-sign-in
 import { MobileGoogleMark } from "./mobile-google-mark";
 import {
   iosPaywallCopy,
+  iosPaywallTierName,
+  iosPaywallTrialChip,
   iosPaywallSalesView,
   iosPaywallWaitlistCopy,
   iosPaywallView,
@@ -2078,6 +2084,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [sessionNotice, setSessionNoticeState] = useState<MobileKeyedNotice | null>(null);
   const [mobilePurchasePhase, setMobilePurchasePhase] = useState<MobilePurchasePhase>("idle");
   const [mobilePurchasePlans, setMobilePurchasePlans] = useState<MobilePurchasePlan[]>([]);
+  // HPD-1534: the plan chosen on the paywall while several are offered; the first (Starter) by default.
+  const [selectedMobilePackage, setSelectedMobilePackage] = useState<MobileRevenueCatPackageId | null>(null);
   const [mobilePurchaseAccountReady, setMobilePurchaseAccountReady] = useState(false);
   const [mobilePurchaseNotice, setMobilePurchaseNotice] = useState<string | null>(null);
   const [mobilePurchaseCompletion, setMobilePurchaseCompletion] = useState<{
@@ -3449,6 +3457,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // catalog accepts. With another id Google would take the payment and the
   // Plane would match no catalog entry. iOS is always "match": this value never
   // changes there, so the effect below runs exactly as it did.
+  const serverPlanTiers = mobileServerPlanTiers(snapshot?.subscription);
+  const serverPlanTiersKey = serverPlanTiers.join(",");
   const playProductGuard = storePlatform === "android"
     ? heyPlayProductGuard({ buildProductId: mobilePurchasesController.personalProduct.id, salesStatusSettled, salesStatus })
     : "match";
@@ -3495,7 +3505,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             ? { accountId, expirationAt: binding.personalPurchaseExpirationAt }
             : null);
         }
-        return mobilePurchasesController.loadPlans(accountId);
+        // HPD-1534: the tiers only while the server lists them (switch on); otherwise Personal as before.
+        return mobilePurchasesController.loadPlans(accountId, { tiers: serverPlanTiers });
       })
       .then((plans) => {
         if (cancelled) return;
@@ -3512,7 +3523,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       cancelled = true;
       mobilePurchasesController.suspend();
     };
-  }, [snapshot?.me.id, playProductGuard]);
+  }, [snapshot?.me.id, playProductGuard, serverPlanTiersKey]);
 
   async function reconcileMobileSubscription(accountId: string) {
     const state = assertProductLocalSubscriptionState(accountId, await api.subscriptionState());
@@ -3527,9 +3538,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
 
   async function purchaseMobilePlan(packageId: MobileRevenueCatPackageId) {
     const accountId = snapshot?.me.id;
+    // HPD-1534: a subscriber of another tier bought in this store changes plan here.
+    const targetTier = (Object.keys(MOBILE_TIER_PACKAGES) as MobilePlanTier[]).find((tier) => MOBILE_TIER_PACKAGES[tier] === packageId) ?? "personal";
+    const change = accountId && serverPlanTiers.length > 0 ? mobilePlanChangeCanStart(snapshot.subscription, mobilePurchasesController, targetTier) : null;
     if (
       !accountId ||
-      !mobilePersonalPurchaseCanStart(accountId, snapshot.subscription, mobilePurchaseCompletion, Date.now(), mobilePurchasesController.personalProduct) ||
+      (!change && !mobilePersonalPurchaseCanStart(accountId, snapshot.subscription, mobilePurchaseCompletion, Date.now(), mobilePurchasesController.personalProduct)) ||
       mobilePurchasePhase === "purchasing" ||
       mobilePurchasePhase === "restoring"
     ) return;
@@ -3538,7 +3552,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     try {
       const purchase = await mobilePurchasesController.purchase(accountId, packageId, () => {
         setMobilePurchaseCompletion({ accountId, expirationAt: null });
-      });
+      }, { currentProductId: change?.currentProductId ?? null });
       setMobilePurchaseCompletion({ accountId, expirationAt: purchase.personalPurchaseExpirationAt });
       try {
         const state = await reconcileMobileSubscription(accountId);
@@ -8642,9 +8656,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const createSupportPassAction = mobileAccountActionRow(accountActionState, { kind: "create_support_pass" });
   const mobilePurchaseBusy = mobilePurchasePhase === "purchasing" || mobilePurchasePhase === "restoring";
   // HPD-1243: on Android the same view names Google Play; on iOS it is the same object.
+  const selectedMobilePlan = mobilePurchasePlans.find((plan) => plan.packageId === selectedMobilePackage) ?? mobilePurchasePlans[0] ?? null;
   const paywall = heyStoreWordedView(iosPaywallView({
     locale: appLocale,
-    plan: mobilePurchasePlans[0] ?? null,
+    plan: selectedMobilePlan,
+    tiered: mobilePurchasePlans.length > 1,
+    entitlementPlan: snapshot.entitlement.plan,
     comped: snapshot.entitlement.comped === true,
     entitlementStatus: snapshot.entitlement.status,
     runtimeAccess: snapshot.subscription.lifecycle.runtimeAccess,
@@ -8689,7 +8706,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     mobilePurchaseCompletion,
     Date.now(),
     mobilePurchasesController.personalProduct,
-  );
+  ) || Boolean(selectedMobilePlan && serverPlanTiers.length > 0 &&
+    mobilePlanChangeCanStart(snapshot.subscription, mobilePurchasesController, selectedMobilePlan.plan));
   const chatAccess = mobileChatAccessView(snapshot, selectedChatRoutePreference ?? snapshot.chatRoutePreference, workspaceStatusTruth);
   const activeSubthreadHeader = subthreadHeader(subthreadOrigin, tab, appLocale);
   const aiAccessTruth = mobileAiAccessTruthFromSources(
@@ -9007,7 +9025,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           <IosPaywallPanel locale={appLocale}
             store={storePlatform ?? "ios"}
             view={paywall}
-            plan={mobilePurchasePlans[0] ?? null}
+            plan={selectedMobilePlan}
+            plans={mobilePurchasePlans}
+            onSelectPlan={setSelectedMobilePackage}
             phase={mobilePurchasePhase}
             accountReady={mobilePurchaseAccountReady}
             purchaseAvailable={mobilePersonalPurchaseAvailable}
@@ -10284,7 +10304,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                           compact
                           view={paywall}
                           personalAccess={personalAccess}
-                          plan={mobilePurchasePlans[0] ?? null}
+                          plan={selectedMobilePlan}
+                          plans={mobilePurchasePlans}
+                          onSelectPlan={setSelectedMobilePackage}
                           phase={mobilePurchasePhase}
                           accountReady={mobilePurchaseAccountReady}
                           purchaseAvailable={mobilePersonalPurchaseAvailable}
@@ -10875,6 +10897,8 @@ function IosPaywallPanel({ locale,
   view,
   personalAccess,
   plan,
+  plans = [],
+  onSelectPlan,
   phase,
   accountReady,
   purchaseAvailable,
@@ -10905,6 +10929,9 @@ function IosPaywallPanel({ locale,
   view: ReturnType<typeof iosPaywallView>;
   personalAccess?: ReturnType<typeof personalAccessPresentation>;
   plan: MobilePurchasePlan | null;
+  /** HPD-1534: every plan offered; a choice appears only with more than one. */
+  plans?: MobilePurchasePlan[];
+  onSelectPlan?: (packageId: MobileRevenueCatPackageId) => void;
   phase: MobilePurchasePhase;
   accountReady: boolean;
   purchaseAvailable: boolean;
@@ -10928,6 +10955,8 @@ function IosPaywallPanel({ locale,
         locale={locale}
         view={view}
         plan={plan}
+        plans={plans}
+        onSelectPlan={onSelectPlan}
         phase={phase}
         accountReady={accountReady}
         purchaseAvailable={purchaseAvailable}
@@ -10992,6 +11021,7 @@ function IosPaywallPanel({ locale,
         </>
       ) : null}
       {phase === "loading" ? <ActivityIndicator color={palette.teal} /> : null}
+      <PaywallPlanChoice locale={locale} plans={plans} selected={plan} disabled={busy} onSelect={onSelectPlan} />
       {sales?.lines.map((line) => (
         <Text key={line} style={styles.paywallDisclosure}>{line}</Text>
       ))}
@@ -11085,6 +11115,37 @@ const paywallIllustrationDark = require("../assets/paywall-ink-key-dark.png");
  * Appearance.setColorScheme from the account preference, so useColorScheme
  * follows that choice.
  */
+/**
+ * HPD-1534: the plans side by side (Starter preselected), each with its store price and,
+ * where the store offers one, its free days. Shown only when more than one plan is offered.
+ */
+function PaywallPlanChoice({ locale, plans, selected, disabled, onSelect }: {
+  locale: AppLocale;
+  plans: MobilePurchasePlan[];
+  selected: MobilePurchasePlan | null;
+  disabled: boolean;
+  onSelect?: (packageId: MobileRevenueCatPackageId) => void;
+}) {
+  if (plans.length < 2 || !onSelect) return null;
+  return (
+    <View style={styles.paywallPlanChoice} accessibilityRole="radiogroup">
+      {plans.map((plan) => {
+        const active = plan.packageId === selected?.packageId;
+        return (
+          <Pressable key={plan.packageId} disabled={disabled} onPress={() => onSelect(plan.packageId)}
+            accessibilityRole="radio" accessibilityState={{ checked: active, disabled }}
+            accessibilityLabel={`${iosPaywallTierName(plan.plan)}, ${plan.priceString}`}
+            style={[styles.paywallPlanOption, active && styles.paywallPlanOptionActive]}>
+            <Text style={styles.paywallPlanOptionName}>{iosPaywallTierName(plan.plan).replace(/^Hey Hermes /, "")}</Text>
+            <Text style={styles.paywallPlanOptionPrice}>{plan.priceString}</Text>
+            {plan.trialDays > 0 ? <Text style={styles.paywallPlanOptionTrial}>{iosPaywallTrialChip(locale, plan.trialDays)}</Text> : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function PaywallArt() {
   // The paywall colours above are dynamic on iOS only, so iOS follows the live
   // scheme; Android follows the scheme its palette was built for at load.
@@ -11105,6 +11166,8 @@ function PaywallArt() {
 function IosPaywallOfferPanel({ locale,
   view,
   plan,
+  plans = [],
+  onSelectPlan,
   phase,
   accountReady,
   purchaseAvailable,
@@ -11125,6 +11188,8 @@ function IosPaywallOfferPanel({ locale,
   locale: AppLocale;
   view: ReturnType<typeof iosPaywallView>;
   plan: MobilePurchasePlan | null;
+  plans?: MobilePurchasePlan[];
+  onSelectPlan?: (packageId: MobileRevenueCatPackageId) => void;
   phase: MobilePurchasePhase;
   accountReady: boolean;
   purchaseAvailable: boolean;
@@ -11176,6 +11241,7 @@ function IosPaywallOfferPanel({ locale,
         ))}
       </View>
       {phase === "loading" ? <ActivityIndicator color={paywallBrandColor} /> : null}
+      <PaywallPlanChoice locale={locale} plans={plans} selected={plan} disabled={busy} onSelect={onSelectPlan} />
       {sales?.lines.map((line) => (
         <Text key={line} style={styles.paywallTerms}>{line}</Text>
       ))}
@@ -16675,6 +16741,13 @@ const styles = StyleSheet.create({
     gap: 0,
     paddingTop: 4,
   },
+  // HPD-1534: the plan choice on the paywall.
+  paywallPlanChoice: { flexDirection: "row", gap: 8, marginTop: 14, marginBottom: 6, alignSelf: "stretch" },
+  paywallPlanOption: { flex: 1, minHeight: 64, borderWidth: 1, borderColor: palette.line, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 10, gap: 2 },
+  paywallPlanOptionActive: { borderWidth: 2, borderColor: paywallBrandColor },
+  paywallPlanOptionName: { fontSize: 15, fontWeight: "700", color: palette.ink },
+  paywallPlanOptionPrice: { fontSize: 14, color: palette.ink },
+  paywallPlanOptionTrial: { fontSize: 12, fontWeight: "700", color: paywallBrandColor },
   paywallArt: {
     height: 168,
     borderRadius: 20,

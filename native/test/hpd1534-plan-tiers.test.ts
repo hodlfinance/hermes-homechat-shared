@@ -1,0 +1,125 @@
+// HPD-1534 (Justus, 2026-10-23): Starter (30 days free), Pro (`personal`) and Max in the
+// app, only while the server lists the tiers. Synthetic store packages only.
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  MOBILE_REVENUECAT_PRODUCTS,
+  MobilePurchasesController,
+  mobilePlanChangeCanStart,
+  mobileServerPlanTiers,
+  type MobilePlanChange,
+  type MobilePurchasesAdapter,
+  type MobileStorePackage,
+} from "../src/revenuecat-purchases";
+import { iosPaywallView } from "../src/ios-paywall";
+
+function pkg(identifier: string, productId: string, intro: MobileStorePackage["product"]["introPrice"], price = "$12.99"): MobileStorePackage {
+  return { identifier, packageType: "CUSTOM", source: { identifier },
+    product: { identifier: productId, title: identifier, description: "", price: 0, priceString: price, currencyCode: "USD", subscriptionPeriod: "P1M", introPrice: intro } };
+}
+const month = { price: 0, period: "P1M", periodUnit: "MONTH", periodNumberOfUnits: 1 };
+const week = { price: 0, period: "P7D", periodUnit: "DAY", periodNumberOfUnits: 7 };
+
+function adapter(packages: MobileStorePackage[], current: MobileStorePackage[] = [packages.find((p) => p.identifier === "personal_monthly")!]) {
+  const purchases: Array<{ id: string; change?: MobilePlanChange }> = [];
+  let productBought = "";
+  const value: MobilePurchasesAdapter = {
+    isConfigured: async () => true, configure: () => undefined, getAppUserID: async () => "acct_1", logIn: async () => undefined,
+    getCustomerInfo: async () => ({ activeEntitlements: [] }),
+    getOfferings: async () => ({ current: { identifier: "default", availablePackages: current }, all: { tiers_v1: { identifier: "tiers_v1", availablePackages: packages } } }),
+    checkTrialEligibility: async (ids) => Object.fromEntries(ids.map((id) => [id, "eligible" as const])),
+    purchasePackage: async (storePackage, change) => {
+      purchases.push({ id: storePackage.identifier, change }); productBought = storePackage.product.identifier;
+      return { productIdentifier: productBought.split(":")[0]!, customerInfo: { activeEntitlements: [{ identifier: "hey_hermes_access", productIdentifier: productBought.split(":")[0]!, expirationAt: new Date(Date.now() + 86_400_000).toISOString() }] } };
+    },
+    restorePurchases: async () => undefined,
+  };
+  return { value, purchases };
+}
+
+const iosPackages = [
+  pkg("starter_monthly", MOBILE_REVENUECAT_PRODUCTS.starter_monthly, month),
+  pkg("personal_monthly", MOBILE_REVENUECAT_PRODUCTS.personal_monthly, week, "$29.00"),
+  pkg("max_monthly", MOBILE_REVENUECAT_PRODUCTS.max_monthly, null, "$79.00"),
+];
+
+test("without server tiers the app sells Personal from the current offering exactly as before", async () => {
+  const { value } = adapter(iosPackages);
+  const controller = new MobilePurchasesController(value);
+  await controller.bindAccount("acct_1", "key");
+  const plans = await controller.loadPlans("acct_1");
+  assert.deepEqual(plans.map((plan) => [plan.packageId, plan.plan, plan.trialDays]), [["personal_monthly", "personal", 7]]);
+  assert.deepEqual(mobileServerPlanTiers({ webBilling: {} }), []);
+  assert.deepEqual(mobileServerPlanTiers(null), []);
+});
+
+test("with server tiers: tiers_v1, Starter first with 30 days, Pro 7, Max without a trial; Max only when listed", async () => {
+  const { value } = adapter(iosPackages);
+  const controller = new MobilePurchasesController(value);
+  await controller.bindAccount("acct_1", "key");
+  const three = await controller.loadPlans("acct_1", { tiers: ["starter", "personal", "max"] });
+  assert.deepEqual(three.map((plan) => [plan.packageId, plan.trialDays, plan.trialEligibility]),
+    [["starter_monthly", 30, "eligible"], ["personal_monthly", 7, "eligible"], ["max_monthly", 0, "unavailable"]]);
+  const two = await controller.loadPlans("acct_1", { tiers: mobileServerPlanTiers({ webBilling: { tiers: [{ plan: "starter" }, { plan: "personal" }] } }) });
+  assert.deepEqual(two.map((plan) => plan.packageId), ["starter_monthly", "personal_monthly"]);
+});
+
+test("an unknown or wrongly mapped package refuses the tier offering", async () => {
+  for (const packages of [[...iosPackages, pkg("annual", "x", null)], [pkg("starter_monthly", "wrong.product", month), iosPackages[1]!]]) {
+    const { value } = adapter(packages);
+    const controller = new MobilePurchasesController(value);
+    await controller.bindAccount("acct_1", "key");
+    await assert.rejects(controller.loadPlans("acct_1", { tiers: ["starter", "personal"] }));
+  }
+});
+
+test("Google Play: Starter -> Pro replaces the old product as an upgrade; Pro -> Starter as a downgrade; App Store passes nothing", async () => {
+  const play = [pkg("starter_monthly", "app.heyhermes.starter:monthly", month), pkg("personal_monthly", "app.heyhermes.personal:monthly", week)];
+  const { value, purchases } = adapter(play);
+  const controller = new MobilePurchasesController(value, { store: "play_store", personalMonthlyProductId: "app.heyhermes.personal:monthly", starterMonthlyProductId: "app.heyhermes.starter:monthly" });
+  await controller.bindAccount("acct_1", "key");
+  await controller.loadPlans("acct_1", { tiers: ["starter", "personal"] });
+  await controller.purchase("acct_1", "personal_monthly", undefined, { currentProductId: "app.heyhermes.starter:monthly" });
+  await controller.purchase("acct_1", "starter_monthly", undefined, { currentProductId: "app.heyhermes.personal:monthly" });
+  assert.deepEqual(purchases.map((entry) => entry.change), [
+    { oldProductId: "app.heyhermes.starter:monthly", direction: "upgrade" },
+    { oldProductId: "app.heyhermes.personal:monthly", direction: "downgrade" },
+  ]);
+  const ios = adapter(iosPackages);
+  const iosController = new MobilePurchasesController(ios.value);
+  await iosController.bindAccount("acct_1", "key");
+  await iosController.loadPlans("acct_1", { tiers: ["starter", "personal"] });
+  await iosController.purchase("acct_1", "personal_monthly", undefined, { currentProductId: MOBILE_REVENUECAT_PRODUCTS.starter_monthly });
+  assert.equal(ios.purchases[0]!.change, undefined);
+});
+
+test("a plan change starts only from a running plan of another tier bought in this store", () => {
+  const controller = new MobilePurchasesController(adapter(iosPackages).value);
+  const state = (plan: string, storeProductId: string | null, status = "active") => ({ entitlement: { status, plan, provider: "revenuecat", storeProductId } });
+  assert.deepEqual(mobilePlanChangeCanStart(state("starter", MOBILE_REVENUECAT_PRODUCTS.starter_monthly, "trialing"), controller, "personal"),
+    { currentProductId: MOBILE_REVENUECAT_PRODUCTS.starter_monthly });
+  assert.equal(mobilePlanChangeCanStart(state("starter", MOBILE_REVENUECAT_PRODUCTS.starter_monthly), controller, "starter"), null);
+  // A web subscription is changed on the web, not here.
+  assert.equal(mobilePlanChangeCanStart(state("starter", "heyhermes_starter_monthly_web"), controller, "personal"), null);
+  assert.equal(mobilePlanChangeCanStart(state("starter", MOBILE_REVENUECAT_PRODUCTS.starter_monthly, "expired"), controller, "personal"), null);
+});
+
+test("the paywall names the chosen plan and its own trial; the single-plan paywall is unchanged", () => {
+  const starter = { packageId: "starter_monthly" as const, plan: "starter" as const, productId: MOBILE_REVENUECAT_PRODUCTS.starter_monthly, displayName: "Starter" as const,
+    trialDays: 30, title: "", description: "", priceString: "$12.99", trialEligibility: "eligible" as const };
+  const max = { ...starter, packageId: "max_monthly" as const, plan: "max" as const, displayName: "Max" as const, trialDays: 0, priceString: "$79.00", trialEligibility: "unavailable" as const };
+  const base = { comped: false, entitlementStatus: "none" as const, runtimeAccess: "enabled" as const, storeState: "ready" as const };
+  const de = iosPaywallView({ ...base, locale: "de", plan: starter, tiered: true });
+  assert.equal(de.offer.eyebrow, "Hey Hermes Starter");
+  assert.equal(de.offer.ctaLabel, "30 Tage gratis starten");
+  assert.match(de.offer.title, /30 Tage gratis/);
+  const en = iosPaywallView({ ...base, locale: "en", plan: max, tiered: true });
+  assert.equal(en.offer.kind, "subscribe");
+  assert.doesNotMatch(`${en.offer.title} ${en.offer.termsText} ${en.trialText}`, /free|7 days/);
+  assert.throws(() => iosPaywallView({ ...base, locale: "en", plan: starter }));
+  const personal = { ...starter, packageId: "personal_monthly" as const, plan: "personal" as const, displayName: "Personal" as const, trialDays: 7, priceString: "$29.00" };
+  const single = iosPaywallView({ ...base, locale: "en", plan: personal });
+  assert.equal(single.offer.eyebrow, "Hey Hermes Personal");
+  assert.equal(single.offer.ctaLabel, "Start your free week");
+  assert.equal(iosPaywallView({ ...base, locale: "en", plan: personal, entitlementStatus: "active", entitlementPlan: "starter" }).planLabel, "Starter");
+});
