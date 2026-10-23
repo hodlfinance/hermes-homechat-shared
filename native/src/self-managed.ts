@@ -48,23 +48,23 @@ const en: SelfManagedCopy = {
   sectionTitle: "Advanced",
   switchLabel: "Manage model and memory myself",
   switchDescription:
-    "Hey stops resetting your model, memory and compression settings. Hermes then runs with whatever its own configuration says, as if you had installed it yourself.",
+    "Hey Hermes stops resetting your model, memory and compression settings. Hermes then runs with whatever its own configuration says, as if you had installed it yourself.",
   confirmTitle: "Manage model and memory yourself?",
-  confirmBody: "From now on, changes you make in the chat or over SSH stay as they are. Hey no longer checks or repairs them.",
+  confirmBody: "From now on, changes you make in the chat or over SSH stay as they are. Hey Hermes no longer checks or repairs them.",
   confirmPoints: [
-    "A wrong setting can stop Hey from answering. You fix it yourself over SSH, or with “Restore Hey defaults”.",
+    "A wrong setting can stop Hey Hermes from answering. You fix it yourself over SSH, or with “Restore Hey Hermes defaults”.",
     "Usage figures in the app may be inaccurate.",
     "Your included AI keeps its weekly budget.",
-    "Gmail, Calendar and Drive keep running through Hey's protected AI route only.",
+    "Gmail, Calendar and Drive keep running through Hey Hermes' protected AI route only.",
   ],
   confirmCheckbox: "I understand that I may cause errors and fix them myself over SSH.",
   confirmCancel: "Cancel",
   confirmTurnOn: "Turn on",
   badge: "Self-managed",
-  bannerText: "You manage model and memory yourself. Hey does not change them.",
-  restore: "Restore Hey defaults",
+  bannerText: "You manage model and memory yourself. Hey Hermes does not change them.",
+  restore: "Restore Hey Hermes defaults",
   restoreConfirm:
-    "Hey sets model, memory and compression back to its defaults before your next message. Your chats stay. Memories saved with another memory service stay there, but Hey will not use them.",
+    "Hey Hermes sets model, memory and compression back to its defaults before your next message. Your chats stay. Memories saved with another memory service stay there, but Hey Hermes will not use them.",
   restoreCancel: "Cancel",
   restoreAction: "Restore",
   needsSsh: "Needs server access (SSH).",
@@ -77,11 +77,11 @@ const de: SelfManagedCopy = {
   sectionTitle: "Erweitert",
   switchLabel: "Modell und Gedächtnis selbst verwalten",
   switchDescription:
-    "Hey setzt Modell, Gedächtnis und Verdichtung nicht mehr zurück. Hermes läuft dann mit seiner eigenen Konfiguration, wie bei einer selbst installierten Version.",
+    "Hey Hermes setzt Modell, Gedächtnis und Verdichtung nicht mehr zurück. Hermes läuft dann mit seiner eigenen Konfiguration, wie bei einer selbst installierten Version.",
   confirmTitle: "Modell und Gedächtnis selbst verwalten?",
-  confirmBody: "Ab jetzt bleiben Änderungen im Chat oder über SSH bestehen. Hey prüft und repariert sie nicht mehr.",
+  confirmBody: "Ab jetzt bleiben Änderungen im Chat oder über SSH bestehen. Hey Hermes prüft und repariert sie nicht mehr.",
   confirmPoints: [
-    "Eine falsche Einstellung kann Hey am Antworten hindern. Du behebst sie selbst über SSH oder mit „Hey-Standard wiederherstellen“.",
+    "Eine falsche Einstellung kann Hey Hermes am Antworten hindern. Du behebst sie selbst über SSH oder mit „Hey-Hermes-Standard wiederherstellen“.",
     "Verbrauchsanzeigen können ungenau sein.",
     "Die enthaltene KI behält ihr Wochenbudget.",
     "Gmail, Kalender und Drive laufen weiter nur über Heys geschützte KI-Route.",
@@ -90,10 +90,10 @@ const de: SelfManagedCopy = {
   confirmCancel: "Abbrechen",
   confirmTurnOn: "Einschalten",
   badge: "Selbst verwaltet",
-  bannerText: "Du verwaltest Modell und Gedächtnis selbst. Hey ändert sie nicht.",
-  restore: "Hey-Standard wiederherstellen",
+  bannerText: "Du verwaltest Modell und Gedächtnis selbst. Hey Hermes ändert sie nicht.",
+  restore: "Hey-Hermes-Standard wiederherstellen",
   restoreConfirm:
-    "Hey setzt Modell, Gedächtnis und Verdichtung vor Deiner nächsten Nachricht auf den Standard zurück. Deine Chats bleiben. Erinnerungen bei einem anderen Gedächtnisdienst bleiben dort, Hey nutzt sie aber nicht.",
+    "Hey Hermes setzt Modell, Gedächtnis und Verdichtung vor Deiner nächsten Nachricht auf den Standard zurück. Deine Chats bleiben. Erinnerungen bei einem anderen Gedächtnisdienst bleiben dort, Hey Hermes nutzt sie aber nicht.",
   restoreCancel: "Abbrechen",
   restoreAction: "Wiederherstellen",
   needsSsh: "Braucht Serverzugang (SSH).",
@@ -104,7 +104,7 @@ const de: SelfManagedCopy = {
 
 const checkInEn: DailyCheckInCopy = {
   title: (n) => `That's ${n} messages today`,
-  body: "Hey checks in here once a day so a stuck task can't quietly run up costs. Your message is ready to send.",
+  body: "Hey Hermes checks in here once a day so a stuck task can't quietly run up costs. Your message is ready to send.",
   continueAnyway: "Continue anyway",
   notNow: "Not now",
   settingsLine: (n) => `Daily check-in after ${n} messages`,
@@ -113,7 +113,7 @@ const checkInEn: DailyCheckInCopy = {
 
 const checkInDe: DailyCheckInCopy = {
   title: (n) => `Das sind heute ${n} Nachrichten`,
-  body: "Hey fragt hier einmal am Tag nach, damit eine festgefahrene Aufgabe nicht unbemerkt Kosten macht. Deine Nachricht ist bereit.",
+  body: "Hey Hermes fragt hier einmal am Tag nach, damit eine festgefahrene Aufgabe nicht unbemerkt Kosten macht. Deine Nachricht ist bereit.",
   continueAnyway: "Trotzdem weiter",
   notNow: "Jetzt nicht",
   settingsLine: (n) => `Tägliche Rückfrage nach ${n} Nachrichten`,

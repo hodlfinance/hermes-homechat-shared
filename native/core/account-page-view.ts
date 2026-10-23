@@ -126,7 +126,7 @@ export function personalAccessView(
 
 const en: AccountPageCopy = {
   linkedAccountsTitle: "Linked accounts",
-  linkedAccountsDetail: "Apple and Google are identities linked to this Hey account. Matching email addresses never link accounts.",
+  linkedAccountsDetail: "Apple and Google are identities linked to this Hey Hermes account. Matching email addresses never link accounts.",
   linkedState: "linked",
   linkedConfirmation: (provider) => `${provider} is now linked to this account.`,
   privacyTitle: "Privacy",
@@ -162,7 +162,7 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
   en,
   de: {
     linkedAccountsTitle: "Verknüpfte Konten",
-    linkedAccountsDetail: "Apple und Google sind Identitäten, die mit diesem Hey-Account verknüpft sind. Übereinstimmende E-Mail-Adressen verknüpfen keine Accounts.",
+    linkedAccountsDetail: "Apple und Google sind Identitäten, die mit diesem Hey-Hermes-Account verknüpft sind. Übereinstimmende E-Mail-Adressen verknüpfen keine Accounts.",
     linkedState: "verknüpft",
     linkedConfirmation: (provider) => `${provider} ist jetzt mit diesem Konto verknüpft.`,
     privacyTitle: "Datenschutz",
@@ -195,7 +195,7 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
   },
   fr: {
     linkedAccountsTitle: "Comptes liés",
-    linkedAccountsDetail: "Apple et Google sont des identités liées à ce compte Hey. Des adresses e-mail identiques ne lient jamais les comptes.",
+    linkedAccountsDetail: "Apple et Google sont des identités liées à ce compte Hey Hermes. Des adresses e-mail identiques ne lient jamais les comptes.",
     linkedState: "lié",
     linkedConfirmation: (provider) => `${provider} est maintenant lié à ce compte.`,
     privacyTitle: "Confidentialité",
@@ -228,7 +228,7 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
   },
   es: {
     linkedAccountsTitle: "Cuentas vinculadas",
-    linkedAccountsDetail: "Apple y Google son identidades vinculadas a esta cuenta de Hey. Las direcciones de correo iguales nunca vinculan cuentas.",
+    linkedAccountsDetail: "Apple y Google son identidades vinculadas a esta cuenta de Hey Hermes. Las direcciones de correo iguales nunca vinculan cuentas.",
     linkedState: "vinculada",
     linkedConfirmation: (provider) => `${provider} ya está vinculada a esta cuenta.`,
     privacyTitle: "Privacidad",
@@ -261,7 +261,7 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
   },
   it: {
     linkedAccountsTitle: "Account collegati",
-    linkedAccountsDetail: "Apple e Google sono identità collegate a questo account Hey. Indirizzi e-mail uguali non collegano mai gli account.",
+    linkedAccountsDetail: "Apple e Google sono identità collegate a questo account Hey Hermes. Indirizzi e-mail uguali non collegano mai gli account.",
     linkedState: "collegato",
     linkedConfirmation: (provider) => `${provider} è ora collegato a questo account.`,
     privacyTitle: "Privacy",
@@ -294,7 +294,7 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
   },
   "pt-BR": {
     linkedAccountsTitle: "Contas vinculadas",
-    linkedAccountsDetail: "Apple e Google são identidades vinculadas a esta conta Hey. Endereços de e-mail iguais nunca vinculam contas.",
+    linkedAccountsDetail: "Apple e Google são identidades vinculadas a esta conta Hey Hermes. Endereços de e-mail iguais nunca vinculam contas.",
     linkedState: "vinculada",
     linkedConfirmation: (provider) => `${provider} agora está vinculada a esta conta.`,
     privacyTitle: "Privacidade",
@@ -327,7 +327,7 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
   },
   ja: {
     linkedAccountsTitle: "連携済みアカウント",
-    linkedAccountsDetail: "Apple と Google は、この Hey アカウントに連携された本人確認情報です。同じメールアドレスだけでアカウントが連携されることはありません。",
+    linkedAccountsDetail: "Apple と Google は、この Hey Hermes アカウントに連携された本人確認情報です。同じメールアドレスだけでアカウントが連携されることはありません。",
     linkedState: "連携済み",
     linkedConfirmation: (provider) => `${provider} をこのアカウントに連携しました。`,
     privacyTitle: "プライバシー",
@@ -360,7 +360,7 @@ const copyByLocale: Record<AppLocale, AccountPageCopy> = {
   },
   ko: {
     linkedAccountsTitle: "연결된 계정",
-    linkedAccountsDetail: "Apple과 Google은 이 Hey 계정에 연결된 신원 정보입니다. 이메일 주소가 같다는 이유만으로 계정이 연결되지는 않습니다.",
+    linkedAccountsDetail: "Apple과 Google은 이 Hey Hermes 계정에 연결된 신원 정보입니다. 이메일 주소가 같다는 이유만으로 계정이 연결되지는 않습니다.",
     linkedState: "연결됨",
     linkedConfirmation: (provider) => `${provider} 계정이 이 계정에 연결되었습니다.`,
     privacyTitle: "개인정보 보호",
