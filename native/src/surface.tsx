@@ -123,7 +123,7 @@ import {
   UserPlus,
   Info,
 } from "lucide-react-native";
-import { accountPageCopy, linkedIdentityConfirmation, linkedIdentityLine, type LinkedIdentityView, chatRouteAutomationFollowState, heyChatRouteChoices, heyOfferedChatRoutesFrom, personalAccessPresentation, personalAccessStore } from "../core/index";
+import { accountPageCopy, linkedIdentityConfirmation, linkedIdentityLine, type LinkedIdentityView, chatRouteAutomationFollowState, heyChatRouteChoices, heyOfferedChatRoutesFrom, personalAccessPresentation, personalAccessStore, chatGptGoogleDataPromptVisible, connectedGoogleServicesFrom, type ChatGptGoogleService } from "../core/index";
 import { createMobileLiveVoiceController, liveVoiceActive, liveVoiceCopy, liveVoiceNotice, liveVoiceStartVisible, type NativeLiveVoiceState } from "./mobile-live-voice";
 import { MobileLiveVoiceBar } from "./mobile-live-voice-bar";
 import type {
@@ -1865,6 +1865,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [adminPublicKeyInput, setAdminPublicKeyInput] = useState("");
   const [adminPublicKeyLabel, setAdminPublicKeyLabel] = useState("");
   const [modelOptions, setModelOptions] = useState<ModelOptionsView | null>(null);
+  // HPD-1521: the Home prompt for the ChatGPT Google-data switch.
+  const [googleDataPromptBusy, setGoogleDataPromptBusy] = useState(false);
+  const [googleDataPromptError, setGoogleDataPromptError] = useState<string | null>(null);
+  const chatGptGoogleDataServicesRef = useRef<readonly ChatGptGoogleService[]>([]);
   const [modelSelectionBusyId, setModelSelectionBusyId] = useState<string | null>(null);
   const [modelSelectionError, setModelSelectionError] = useState<{ modelId: string; message: string } | null>(null);
   const modelSelectionRequestRef = useRef(0);
@@ -4351,14 +4355,33 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }
 
   // HPD-1498: the switch "my ChatGPT may also see Gmail, Calendar and Drive data".
-  async function setMobileChatGptGoogleData(allowed: boolean, source: "chatgpt_connect" | "ai_access") {
+  async function setMobileChatGptGoogleData(allowed: boolean, source: "ai_access" | "chatgpt_prompt") {
     try {
       const saved = await api.setChatGptGoogleData({ allowed, source });
-      setModelOptions((current) => current ? { ...current, chatGptGoogleData: saved } : current);
+      setModelOptions((current) => current ? { ...current, chatGptGoogleData: { ...current.chatGptGoogleData, ...saved } } : current);
       return true;
     } catch {
       return false;
     }
+  }
+
+  // HPD-1521: "Not now" on the prompt. Stores no consent, only which Google
+  // services were connected, so a newly connected one offers it again.
+  async function dismissMobileChatGptGoogleDataPrompt() {
+    const services = [...chatGptGoogleDataServicesRef.current];
+    // Hidden at once; the server keeps it hidden on the next load.
+    setModelOptions((current) => current?.chatGptGoogleData
+      ? { ...current, chatGptGoogleData: { ...current.chatGptGoogleData, promptDismissedFor: services } }
+      : current);
+    await api.dismissChatGptGoogleDataPrompt({ services }).catch(() => undefined);
+  }
+
+  async function turnOnMobileChatGptGoogleDataFromPrompt() {
+    setGoogleDataPromptBusy(true);
+    setGoogleDataPromptError(null);
+    const saved = await setMobileChatGptGoogleData(true, "chatgpt_prompt");
+    setGoogleDataPromptBusy(false);
+    if (!saved) setGoogleDataPromptError(systemPageCopy.aiAccess.chatGptGoogleDataSaveFailed);
   }
 
   async function openMobileClaudeOauth() {
@@ -8675,6 +8698,17 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     chatGptAccountConnectionView(snapshot).ready,
     claudeStatus,
   );
+  // HPD-1521 (Justus, 2026-10-23): offer the Google-data switch once it
+  // matters - own ChatGPT connected and Gmail, Calendar or Drive connected, in
+  // either order. Same rule as the web (core/chatgpt-google-data-offer).
+  const chatGptGoogleDataServices = connectedGoogleServicesFrom({ guidedSetup: guidedSetupState, pluginCatalog });
+  chatGptGoogleDataServicesRef.current = chatGptGoogleDataServices;
+  const chatGptGoogleDataPromptShown = chatGptGoogleDataPromptVisible({
+    chatGptOffered: heyOfferedChatRoutesFrom(modelOptions?.offeredChatRoutes).includes("chatgpt_account"),
+    chatGptConnected: aiAccessTruth.providers.chatgpt_account === "connected",
+    consent: modelOptions?.chatGptGoogleData,
+    connectedServices: chatGptGoogleDataServices,
+  });
   const chatConfigured = chatAccess.ready;
   const chatComposerBusy = busy || queuedFollowUps.some((item) => item.conversationSessionId === activeConversationSessionId && mobileQueuedFollowUpBlocksComposer(item.status));
   const composerController = createHomechatComposerController({
@@ -9141,6 +9175,17 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             </Pressable>
           ) : null}
         </View>
+      ) : null}
+
+      {chatGptGoogleDataPromptShown && isHomeChatActive ? (
+        <MobileChatGptGoogleDataPrompt
+          copy={systemPageCopy.aiAccess}
+          busy={googleDataPromptBusy}
+          error={googleDataPromptError}
+          onTurnOn={() => void turnOnMobileChatGptGoogleDataFromPrompt()}
+          onLater={() => void dismissMobileChatGptGoogleDataPrompt()}
+          testID="home-chatgpt-google-data-prompt"
+        />
       ) : null}
 
       {showGmailRecommendationCard ? (
@@ -10110,6 +10155,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             onAskOther={askAboutOtherAiConnection}
             onOpenChatGpt={openMobileChatGptOauth}
             onSetChatGptGoogleData={setMobileChatGptGoogleData}
+            googleDataPrompt={chatGptGoogleDataPromptShown}
+            onDismissChatGptGoogleDataPrompt={dismissMobileChatGptGoogleDataPrompt}
             onOpenClaude={openMobileClaudeOauth}
             onReconnectClaude={reconnectMobileClaudeOauth}
             onCompleteChatGpt={completeChatGptConnection}
@@ -12933,11 +12980,61 @@ function mobileCuratedModelStatus(
   return labels.join(" · ") || copy.modelAvailable;
 }
 
+/**
+ * HPD-1521 (Justus, 2026-10-23): the short prompt that offers the ChatGPT
+ * Google-data switch once it matters, with the recommendation to turn it on.
+ * "Turn on" stores the consent with its time; "Not now" stores none.
+ */
+function MobileChatGptGoogleDataPrompt({ copy, busy, error, onTurnOn, onLater, testID }: {
+  copy: ReturnType<typeof mobileText>["systemPages"]["aiAccess"];
+  busy: boolean;
+  error: string | null;
+  onTurnOn: () => void;
+  onLater: () => void;
+  testID: string;
+}) {
+  return (
+    <View style={styles.gmailRecommendationCard} testID={testID} accessibilityLabel={copy.chatGptGoogleDataPrompt}>
+      <View style={styles.gmailRecommendationHeading}>
+        <Mail size={18} color={palette.teal} />
+        <View style={styles.flexOne}>
+          <Text style={styles.rowTitle}>{copy.chatGptGoogleDataPrompt}</Text>
+          <Text style={styles.muted}>{copy.chatGptGoogleDataNotice}</Text>
+        </View>
+      </View>
+      {error ? (
+        <Text style={styles.guidedSetupLocalError} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</Text>
+      ) : null}
+      <View style={styles.gmailRecommendationActions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ busy, disabled: busy }}
+          disabled={busy}
+          onPress={onTurnOn}
+          testID={`${testID}-on`}
+          style={({ pressed }) => [styles.gmailRecommendationButton, pressed && styles.systemRowPressed]}
+        >
+          {busy ? <ActivityIndicator size="small" color={palette.teal} /> : <Text style={styles.secondaryButtonText}>{copy.chatGptGoogleDataPromptOn}</Text>}
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={onLater}
+          testID={`${testID}-later`}
+          style={({ pressed }) => [styles.gmailRecommendationButton, pressed && styles.systemRowPressed]}
+        >
+          <Text style={styles.secondaryButtonText}>{copy.chatGptGoogleDataPromptLater}</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function MobileAiAccessPanel({
   locale, statusTruth, modelOptions, modelBusyId, modelError, truth, state, copy, modelCopy, chatGptConnection, claudeConnection, claudeCode, notice,
   automationFailureRoute, automationFailureCopy,
   refreshing, refreshError, onRefresh, onCopyCode,
-  onChoose, onChooseModel, onOpenAutomations, onAskOther, onOpenChatGpt, onSetChatGptGoogleData, onOpenClaude, onReconnectClaude, onCompleteChatGpt, onDismissChatGpt,
+  onChoose, onChooseModel, onOpenAutomations, onAskOther, onOpenChatGpt, onSetChatGptGoogleData, googleDataPrompt, onDismissChatGptGoogleDataPrompt, onOpenClaude, onReconnectClaude, onCompleteChatGpt, onDismissChatGpt,
   onClaudeCodeChange, onCompleteClaude, onDismissClaude,
 }: {
   locale: AppLocale;
@@ -12965,7 +13062,10 @@ function MobileAiAccessPanel({
   onAskOther: () => void;
   onOpenChatGpt: () => void | Promise<void>;
   /** HPD-1498: saves the Google-data switch; resolves false when it was not saved. */
-  onSetChatGptGoogleData: (allowed: boolean, source: "chatgpt_connect" | "ai_access") => Promise<boolean>;
+  onSetChatGptGoogleData: (allowed: boolean, source: "ai_access" | "chatgpt_prompt") => Promise<boolean>;
+  /** HPD-1521: the prompt that offers the switch is due (shared rule in core). */
+  googleDataPrompt: boolean;
+  onDismissChatGptGoogleDataPrompt: () => void | Promise<void>;
   onOpenClaude: () => void | Promise<void>;
   onReconnectClaude: () => void | Promise<void>;
   onCompleteChatGpt: () => void | Promise<void>;
@@ -12996,34 +13096,14 @@ function MobileAiAccessPanel({
   // Justus, 2026-10-22: the row carries a short line; the approved full text
   // opens behind a details button below it.
   const [chatGptDetailsOpen, setChatGptDetailsOpen] = useState(false);
-  // HPD-1498 (Justus, 2026-10-22): one switch, on by default on the connect
-  // screen before "Open sign-in"; connecting with it on is the consent. Later it
-  // is changed here under AI Access. Never decided reads as off.
+  // HPD-1498 / HPD-1521 (Justus, 2026-10-23): the switch starts off (opt-in).
+  // The connect screen carries no switch; once ChatGPT and a Google service are
+  // connected, a prompt offers it (googleDataPrompt) and the switch sits here
+  // under AI Access. Never decided reads as off; a stored choice wins.
   const googleDataAllowed = modelOptions?.chatGptGoogleData?.allowed === true;
-  // A reconnect starts from the customer's stored choice; a first connect from on.
-  const storedGoogleData = modelOptions?.chatGptGoogleData?.changedAt ? googleDataAllowed : true;
-  const [connectGoogleData, setConnectGoogleDataState] = useState(storedGoogleData);
-  const connectTouched = useRef(false);
-  const setConnectGoogleData = (update: boolean | ((on: boolean) => boolean)) => {
-    connectTouched.current = true;
-    setConnectGoogleDataState(update);
-  };
-  const connectSessionId = chatGptConnection?.sessionId ?? null;
-  const storedChangedAt = modelOptions?.chatGptGoogleData?.changedAt ?? null;
-  useEffect(() => {
-    // A new sign-in box starts from the stored choice; so does one opened
-    // before the stored choice had loaded, until the customer touches it.
-    connectTouched.current = false;
-    setConnectGoogleDataState(storedGoogleData);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectSessionId]);
-  useEffect(() => {
-    if (!connectTouched.current) setConnectGoogleDataState(storedGoogleData);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storedChangedAt]);
   const [googleDataBusy, setGoogleDataBusy] = useState(false);
   const [googleDataError, setGoogleDataError] = useState<string | null>(null);
-  const saveGoogleData = async (allowed: boolean, source: "chatgpt_connect" | "ai_access") => {
+  const saveGoogleData = async (allowed: boolean, source: "ai_access" | "chatgpt_prompt") => {
     setGoogleDataBusy(true);
     setGoogleDataError(null);
     const saved = await onSetChatGptGoogleData(allowed, source).catch(() => false);
@@ -13098,28 +13178,8 @@ function MobileAiAccessPanel({
                 <Copy size={16} color={palette.teal} />
               </Pressable>
             </View>
-            {chatGptOffered ? (
-              <MobileSystemRow
-                label={copy.chatGptGoogleDataSwitch}
-                detail={copy.chatGptGoogleDataNotice}
-                accessibilityRole="switch"
-                accessibilityState={{ checked: connectGoogleData }}
-                onPress={() => setConnectGoogleData((on) => !on)}
-                separator={false}
-                testID="ai-access-chatgpt-google-data-connect"
-                trailing={<Switch value={connectGoogleData} onValueChange={setConnectGoogleData} />}
-              />
-            ) : null}
-            {googleDataError ? <Text style={styles.muted} accessibilityRole="alert">{googleDataError}</Text> : null}
-            <Pressable style={styles.secondaryButtonWide} onPress={() => {
-              if (chatGptOffered) void saveGoogleData(connectGoogleData, "chatgpt_connect");
-              void onOpenChatGpt();
-            }}><Text style={styles.secondaryButtonText}>{copy.openSignIn}</Text></Pressable>
-            <Pressable style={styles.primaryButtonWide} onPress={() => {
-              // Only a choice that differs from the stored one is written again.
-              if (chatGptOffered && (connectGoogleData !== googleDataAllowed || !storedChangedAt)) void saveGoogleData(connectGoogleData, "chatgpt_connect");
-              void onCompleteChatGpt();
-            }}><Text style={styles.primaryButtonText}>{copy.checkStatus}</Text></Pressable>
+            <Pressable style={styles.secondaryButtonWide} onPress={() => void onOpenChatGpt()}><Text style={styles.secondaryButtonText}>{copy.openSignIn}</Text></Pressable>
+            <Pressable style={styles.primaryButtonWide} onPress={() => void onCompleteChatGpt()}><Text style={styles.primaryButtonText}>{copy.checkStatus}</Text></Pressable>
           </View>
         ) : null}
         {claudeConnection ? (
@@ -13184,6 +13244,16 @@ function MobileAiAccessPanel({
           />
           );
         })}
+        {googleDataPrompt ? (
+          <MobileChatGptGoogleDataPrompt
+            copy={copy}
+            busy={googleDataBusy}
+            error={googleDataError}
+            onTurnOn={() => void saveGoogleData(true, "chatgpt_prompt")}
+            onLater={() => void onDismissChatGptGoogleDataPrompt()}
+            testID="ai-access-chatgpt-google-data-prompt"
+          />
+        ) : null}
         {chatGptOffered && truth.providers.chatgpt_account === "connected" ? (
           <MobileSystemRow
             label={copy.chatGptGoogleDataSwitch}
@@ -13191,7 +13261,7 @@ function MobileAiAccessPanel({
             accessibilityRole="switch"
             accessibilityState={{ checked: googleDataAllowed }}
             pending={googleDataBusy}
-            error={chatGptConnection ? null : googleDataError}
+            error={chatGptConnection || googleDataPrompt ? null : googleDataError}
             onPress={() => void saveGoogleData(!googleDataAllowed, "ai_access")}
             testID="ai-access-chatgpt-google-data"
             trailing={<Switch value={googleDataAllowed} disabled={googleDataBusy} onValueChange={(next) => void saveGoogleData(next, "ai_access")} />}

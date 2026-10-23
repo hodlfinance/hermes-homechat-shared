@@ -961,8 +961,11 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     setChatRoutePreference: (body: ChatRoutePreferenceRequest) =>
       request<ChatRoutePreferenceResponse>("/workspace/chat-route-preference", { method: "POST", body: JSON.stringify(body) }),
     // HPD-1498: the switch "my ChatGPT may also see Gmail, Calendar and Drive data".
-    setChatGptGoogleData: (body: { allowed: boolean; source: "chatgpt_connect" | "ai_access" }) =>
+    setChatGptGoogleData: (body: { allowed: boolean; source: "chatgpt_connect" | "ai_access" | "chatgpt_prompt" }) =>
       request<{ allowed: boolean; changedAt: string }>("/workspace/chatgpt-google-data", { method: "POST", body: JSON.stringify(body) }),
+    // HPD-1521: "Not now" on the prompt; stores no consent, only which services it saw.
+    dismissChatGptGoogleDataPrompt: (body: { services: string[] }) =>
+      request<{ promptDismissedFor: string[] }>("/workspace/chatgpt-google-data/prompt-dismissed", { method: "POST", body: JSON.stringify(body) }),
     setModelPreference: (modelId: string | null) =>
       request<ModelPreferenceResponse>("/workspace/model-preference", {
         method: "POST",
