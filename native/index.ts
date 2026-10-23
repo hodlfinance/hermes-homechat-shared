@@ -24,3 +24,6 @@ export {
 } from "./ui/page-starter-state";
 export type { PageStarterScope, PageStarterState } from "./ui/page-starter-state";
 export { pageStarterCopy } from "./ui/page-starter-copy";
+// HPD-1582: a host opens one Hermes settings screen directly (Surface prop screenRequest).
+export { NATIVE_R8_HOST_SCREENS, nativeR8HostScreenTarget } from "./src/host-screen-request";
+export type { NativeR8HostScreen, NativeR8ScreenRequest } from "./src/host-screen-request";
