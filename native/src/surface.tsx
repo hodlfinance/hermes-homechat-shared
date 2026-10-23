@@ -48,6 +48,7 @@ import {
   mobileDrawerSections,
 } from "./mobile-automation-threads";
 import { mobileHostHeaderMenuItems, mobileHostHeaderMoreLabel, mobileHostHeaderThreadKey, mobileHostHeaderThreadOpened, mobileHostHeaderTitle, type MobileHostHeaderMenuItem, type MobileHostHeaderThread } from "./mobile-host-header";
+import { mobileHostThreadLoading, mobileHostThreadTarget, mobileHostThreadTargetKey, mobileMessagePagesEqual, mobileStartupHydrationAllowed, mobileStartupMaySelectConversation, mobileStartupPaintsSnapshotMessages } from "./mobile-host-thread-open";
 import { subscribeKeyboardInsetRelease } from "./mobile-keyboard-inset";
 import { WindowKeyboardAvoidingView } from "./window-keyboard-avoiding-view";
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -1921,6 +1922,32 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [chatSessionsOpen, setChatSessionsOpen] = useState(false);
   const [chatSessionsBusy, setChatSessionsBusy] = useState(false);
   const [chatSessionNotice, setChatSessionNotice] = useState<string | null>(null);
+  // HPD-1504: the thread the host opened this chat for (a HODL bot, or Home
+  // from the Bots list). Until it is on screen, or could not be opened, the
+  // startup never selects or paints another thread and the chat shows a
+  // neutral loading state.
+  const hostThreadTarget = mobileHostThreadTarget({
+    navigationConversationId: navigationRequest?.conversationId ?? null,
+    headerThread,
+    hostListsThreads: Boolean(host.presentation?.headerBack),
+  });
+  const hostThreadTargetKey = mobileHostThreadTargetKey(hostThreadTarget);
+  const hostThreadTargetRef = useRef(hostThreadTarget);
+  hostThreadTargetRef.current = hostThreadTarget;
+  const hostThreadSettledKeyRef = useRef<string | null>(null);
+  const [hostThreadSettledKey, setHostThreadSettledKey] = useState<string | null>(null);
+  const settleHostThread = useCallback((key: string | null) => {
+    if (!key) return;
+    hostThreadSettledKeyRef.current = key;
+    setHostThreadSettledKey(key);
+  }, []);
+  const hostThreadLoading = mobileHostThreadLoading(hostThreadTarget, hostThreadSettledKey);
+  const startupMaySelectConversation = () => mobileStartupMaySelectConversation({
+    target: hostThreadTargetRef.current,
+    targetSettled: hostThreadSettledKeyRef.current !== null
+      && hostThreadSettledKeyRef.current === mobileHostThreadTargetKey(hostThreadTargetRef.current),
+    activeConversationId: activeConversationSessionIdRef.current,
+  });
   const [openingDestinationTitle, setOpeningDestinationTitle] = useState<string | null>(null);
   // Sub threads the customer has closed. They stay closed for this session; the
   // server list is unchanged, so nothing is destroyed by putting one away.
@@ -2985,6 +3012,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         refreshGenerationRef.current === refreshGeneration &&
         accountSessionIsCurrent(sessionGeneration, requestToken);
       let criticalSnapshotPublished = false;
+      // HPD-1504: noted before the first request. Noted after the snapshot was
+      // published, a host navigation started by that publish (React's legacy
+      // root renders the next update synchronously and runs the effect first)
+      // could already have counted, and the hydration then put Home back over
+      // the bot thread the host had opened.
+      const selectionVersionAtStart = conversationSelectionVersionRef.current;
       setIsRefreshing(true);
       setRankedTaskState({ phase: "loading" });
       setTaskNotice(null);
@@ -3021,10 +3054,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         // and the chat stayed white with no conversation behind it at all.
         // Having no conversation is the condition worth acting on, not being
         // early in the app's life.
-        if (!activeConversationSessionIdRef.current && snapshotSessionId) {
+        if (!activeConversationSessionIdRef.current && snapshotSessionId && startupMaySelectConversation()) {
           selectActiveConversationSession(snapshotSessionId, "preserve_version");
         }
-        if (wasInitialSnapshot) {
+        // HPD-1504: a host thread paints once, from its own page; the
+        // snapshot's Home messages never stand in for it.
+        if (wasInitialSnapshot && mobileStartupPaintsSnapshotMessages(hostThreadTargetRef.current)) {
           const firstMessages = nextSnapshot.recentMessages;
           if (!hasHydratedReadAloudMessagesRef.current) {
             commitReadAloudState(mobileReadAloudConversationChanged(
@@ -3046,7 +3081,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         setSessionNoticeState((previous) => mobileSessionNoticeAfterSnapshot(previous, chatGptAccountReady));
         setAppError(null);
 
-        const selectionVersionAtStart = conversationSelectionVersionRef.current;
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         if (!refreshIsCurrent()) return;
 
@@ -3116,7 +3150,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
 
         let hydratedSessionId = activeConversationSessionIdRef.current;
         let hydratedMessages = messagesStateRef.current;
-        if (hydrationSelection.applyHydration) {
+        if (hydrationSelection.applyHydration && mobileStartupHydrationAllowed({
+          versionAtRefreshStart: selectionVersionAtStart,
+          currentVersion: conversationSelectionVersionRef.current,
+          maySelect: startupMaySelectConversation(),
+        })) {
           const selectedMessages = hydrationSelection.sessionId
             ? await chatConversationController.refreshMessages(createHomechatPagedState<ChatMessage>(), {
                 conversationId: hydrationSelection.sessionId,
@@ -3132,7 +3170,15 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             homeSessionId: homeConversationSession(nextSessions)?.id ?? null,
             selectionVersionAtStart,
           });
-          if (currentHydrationSelection.applyHydration) {
+          // HPD-1504: the page was fetched for one thread; it is never painted
+          // under another that was selected meanwhile.
+          if (currentHydrationSelection.applyHydration
+            && currentHydrationSelection.sessionId === hydrationSelection.sessionId
+            && mobileStartupHydrationAllowed({
+            versionAtRefreshStart: selectionVersionAtStart,
+            currentVersion: conversationSelectionVersionRef.current,
+            maySelect: startupMaySelectConversation(),
+          })) {
             const previousSessionId = activeConversationSessionIdRef.current;
             hydratedSessionId = currentHydrationSelection.sessionId;
             selectActiveConversationSession(hydratedSessionId, "preserve_version");
@@ -3145,8 +3191,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
               hydratedMessages = activeRunRecovery.queuedFollowUps.reduce(
                 (messages, run) => mobileMessagesWithoutRun(messages, run.id), selectedHydratedMessages,
               );
-              messagesStateRef.current = hydratedMessages;
-              setMessages(hydratedMessages);
+              // HPD-1504: the same page for the same thread is not painted again.
+              if (hydratedSessionId === previousSessionId && mobileMessagePagesEqual(messagesStateRef.current, hydratedMessages)) {
+                hydratedMessages = messagesStateRef.current;
+              } else {
+                messagesStateRef.current = hydratedMessages;
+                setMessages(hydratedMessages);
+              }
               setMessagesNextBefore(selectedMessages?.phase === "ready" ? selectedMessages.cursor : null);
             }
             // A failed message load used to leave the screen blank and say
@@ -3186,7 +3237,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           || snapshotSessionId
           || homeConversationSession(nextSessions)?.id
           || null;
-        if (sessionForRecovery && !hydratedMessages.length) {
+        if (sessionForRecovery && !hydratedMessages.length && startupMaySelectConversation()) {
           if (!activeConversationSessionIdRef.current) {
             selectActiveConversationSession(sessionForRecovery, "preserve_version");
             hydratedSessionId = sessionForRecovery;
@@ -3210,6 +3261,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           }
         }
 
+        // HPD-1504: Home opened from the host's list is on screen now, painted once.
+        if (hostThreadTargetRef.current?.kind === "home") settleHostThread("home");
+
         if (activeRun?.events?.length) {
           const activeRunEvents = activeRun.events;
           setChatEventsByRunId((current) => mergeChatRunEventMaps(current, { [activeRun.id]: activeRunEvents }));
@@ -3220,6 +3274,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         if (
           activeRun &&
           resumingChatRunRef.current !== activeRun.id &&
+          startupMaySelectConversation() &&
           activeConversationSessionIdRef.current === hydratedSessionId &&
           (!activeRun.conversationSessionId || activeRun.conversationSessionId === hydratedSessionId)
         ) {
@@ -3247,6 +3302,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         setClaudeStatus(nextClaudeStatus);
       } catch (err) {
         if (!refreshIsCurrent()) return;
+        if (hostThreadTargetRef.current?.kind === "home") settleHostThread("home");
         setRankedTaskState({ phase: "error" });
         setTaskNotice("load_error");
         const message = displayError(err, "Could not load Hey Hermes.");
@@ -3262,7 +3318,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         if (refreshIsCurrent()) setIsRefreshing(false);
       }
     });
-  }, [api, chatConversationController, commitReadAloudState, hermesApi, homeChatRefreshSingleFlight, logout, recordDiagnostic, selectActiveConversationSession, setAppError, token]);
+  }, [api, chatConversationController, commitReadAloudState, hermesApi, homeChatRefreshSingleFlight, logout, recordDiagnostic, selectActiveConversationSession, setAppError, settleHostThread, token]);
 
   const refreshProductAccess = useCallback(async () => {
     if (!token || !snapshotStateRef.current) return;
@@ -8037,7 +8093,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     if (!token || !snapshot || !navigationRequest || externalNavigationRef.current === navigationRequest.requestId) return;
     externalNavigationRef.current = navigationRequest.requestId;
     let active = true;
+    const requestedThreadKey = mobileHostThreadTargetKey({ kind: "thread", conversationId: navigationRequest.conversationId });
     void loadMobileChatSession(navigationRequest.conversationId, { force: true, preserveDraft: true }).then((accepted) => {
+      // HPD-1504: opened or not, the neutral loading state ends here; a thread
+      // that could not be opened shows its error, never Home in its place.
+      settleHostThread(requestedThreadKey);
       if (active && accepted) navigationRequest.onAccepted?.(navigationRequest.conversationId);
       // HPD-1468: a thread that could not be opened releases the header too.
       if (active && hostHeaderThreadKeyRef.current) setOpenedHostHeaderThreadKey(hostHeaderThreadKeyRef.current);
@@ -8684,7 +8744,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const visibleFailedMessage = failedMessage && !mobileFailedMessageHasCompleted(failedMessage, chatRunStatusesById) && (
     !failedMessage.conversationSessionId || failedMessage.conversationSessionId === activeConversationSessionId
   ) ? failedMessage : null;
-  const visibleMobileMessages = mobileMessagesForFailedRunNotice({
+  // HPD-1504: while the host's thread is loading, no other thread's messages.
+  const visibleMobileMessages = hostThreadLoading ? [] : mobileMessagesForFailedRunNotice({
     events: visibleFailedMessage?.runId ? chatEventsByRunId[visibleFailedMessage.runId] ?? [] : [],
     failedRunId: visibleFailedMessage?.runId,
     messages: pageStarterTranscript(homechatTranscriptMessages(
@@ -9397,7 +9458,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   <Text style={styles.messageActionText}>{staticUiMessage(appLocale, loadingOlderMessages ? "Loading..." : "Earlier messages")}</Text>
                 </Pressable>
               ) : null}
-              {mobileChatEmptyStateVisible({
+              {hostThreadLoading ? (
+                <View style={styles.chatEmptyState} accessibilityLabel="Loading chat" testID="hermes-host-thread-loading">
+                  <ActivityIndicator size="small" color={palette.muted} />
+                </View>
+              ) : null}
+              {!hostThreadLoading && mobileChatEmptyStateVisible({
                 busy,
                 messageCount: visibleMobileMessages.length,
                 pendingAssistantText: Boolean(pendingAssistantText),
