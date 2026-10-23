@@ -404,8 +404,10 @@ export interface ModelOptionsView {
   /**
    * HPD-1498: the switch "my ChatGPT may also see Gmail, Calendar and Drive
    * data" and when the customer last set it. Optional; null when unreadable.
+   * HPD-1521: never set reads as off; `promptDismissedFor` lists the Google
+   * services connected when the customer chose "Not now" on the prompt.
    */
-  chatGptGoogleData?: { allowed: boolean; changedAt: string | null } | null;
+  chatGptGoogleData?: { allowed: boolean; changedAt: string | null; promptDismissedFor?: string[] | null; connectedServices?: string[] } | null;
   selectedModelId: ModelSlotId;
   selectedSlotId: ModelSlotId;
   defaultSlotId: ModelSlotId;

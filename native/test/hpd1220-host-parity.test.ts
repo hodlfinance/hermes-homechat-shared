@@ -110,6 +110,7 @@ const HEY_ONLY_CALLS: Readonly<Record<string, string>> = {
   serverOwnerSshKeys: server,
   // HPD-1498: the switch sits on the ChatGPT route, which Fin is never offered (offered-chat-routes.ts).
   setChatGptGoogleData: "exempt: Fin is never offered the ChatGPT route, so it has no Google-data switch",
+  dismissChatGptGoogleDataPrompt: "exempt: Fin is never offered the ChatGPT route, so it never shows the Google-data prompt",
   startHeyAccountDeletionEmailReauthentication: account,
   takeLapseExportKey: server,
   updateRankedTask: tasks,

@@ -47,3 +47,4 @@ export * from "./steady-line";
 export * from "./managed-model-receipt";
 export * from "./model-comparison";
 export * from "./device-time-zone";
+export * from "./chatgpt-google-data-offer";
