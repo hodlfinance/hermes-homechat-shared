@@ -4,7 +4,9 @@ import test from "node:test";
 
 import { mobileHomeChatHydrationSelection } from "../src/mobile-home-chat-startup.ts";
 import {
+  mobileHostSendBlocked,
   mobileHostThreadLoading,
+  mobileHostThreadOpenFailed,
   mobileHostThreadTarget,
   mobileHostThreadTargetKey,
   mobileMessagePagesEqual,
@@ -44,6 +46,7 @@ function simulateBotOpen(options: { noteVersionAtRefreshStart: boolean; hostRule
     target,
     targetSettled: settledKey !== null && settledKey === mobileHostThreadTargetKey(target),
     activeConversationId: active,
+    hostListsThreads: true,
   });
   const paint = (thread: string) => {
     if (!mobileHostThreadLoading(target, settledKey)) painted.push(thread);
@@ -122,7 +125,9 @@ test("host target: a navigation request names a thread; the Bots list's Home is 
 test("a host thread that could not be opened is never replaced by Home", () => {
   const target: MobileHostThreadTarget = { kind: "thread", conversationId: BOT };
   assert.equal(mobileStartupMaySelectConversation({ target, targetSettled: false, activeConversationId: null }), false);
-  assert.equal(mobileStartupMaySelectConversation({ target, targetSettled: true, activeConversationId: null }), false);
+  assert.equal(mobileStartupMaySelectConversation({ target, targetSettled: true, activeConversationId: null, hostListsThreads: true }), false);
+  // A host without its own thread list keeps the Home fallback after a failed open.
+  assert.equal(mobileStartupMaySelectConversation({ target, targetSettled: true, activeConversationId: null }), true);
   assert.equal(mobileStartupMaySelectConversation({ target, targetSettled: true, activeConversationId: BOT }), true);
   assert.equal(mobileStartupMaySelectConversation({ target: { kind: "home" }, targetSettled: false, activeConversationId: null }), true);
   assert.equal(mobileStartupMaySelectConversation({ target: null, targetSettled: false, activeConversationId: null }), true);
@@ -165,6 +170,10 @@ test("the surface guards snapshot selection, snapshot paint, hydration and recov
   assert.match(refreshBody, /currentHydrationSelection\.sessionId === hydrationSelection\.sessionId/);
 });
 
+test("a failed start settles the loading state", () => {
+  assert.match(refreshBody, /if \(!criticalSnapshotPublished\) settleHostThread\(mobileHostThreadTargetKey\(hostThreadTargetRef\.current\)\);/);
+});
+
 test("the navigation request settles the loading state whether or not the thread opened", () => {
   const effect = surface.slice(surface.indexOf("const externalNavigationRef = useRef<string | null>(null);"), surface.indexOf("const homeRequestRef = useRef<string | null>(null);"));
   assert.ok(effect.indexOf("settleHostThread(requestedThreadKey);") < effect.indexOf("if (active && accepted)"));
@@ -173,5 +182,26 @@ test("the navigation request settles the loading state whether or not the thread
 test("while loading, the transcript shows a neutral indicator and no messages", () => {
   assert.match(surface, /const visibleMobileMessages = hostThreadLoading \? \[\] : mobileMessagesForFailedRunNotice\(\{/);
   assert.match(surface, /testID="hermes-host-thread-loading"/);
-  assert.match(surface, /\{!hostThreadLoading && mobileChatEmptyStateVisible\(\{/);
+  assert.match(surface, /\{!hostThreadLoading && !mobileHostThreadOpenFailed\(\{[\s\S]{0,260}\}\) && mobileChatEmptyStateVisible\(\{/);
+});
+
+test("a message is never sent into Home while the host's thread loads or failed to open", () => {
+  const thread: MobileHostThreadTarget = { kind: "thread", conversationId: BOT };
+  assert.equal(mobileHostSendBlocked({ target: thread, loading: true, hostListsThreads: true, conversationId: null }), true);
+  assert.equal(mobileHostSendBlocked({ target: thread, loading: false, hostListsThreads: true, conversationId: null }), true);
+  assert.equal(mobileHostSendBlocked({ target: thread, loading: false, hostListsThreads: true, conversationId: BOT }), false);
+  assert.equal(mobileHostSendBlocked({ target: { kind: "home" }, loading: true, hostListsThreads: true, conversationId: null }), true);
+  // Hey and the plain Hermes tab: unchanged.
+  assert.equal(mobileHostSendBlocked({ target: thread, loading: true, hostListsThreads: false, conversationId: null }), false);
+  assert.equal(mobileHostSendBlocked({ target: null, loading: false, hostListsThreads: true, conversationId: null }), false);
+  assert.match(surface, /if \(mobileHostSendBlocked\(\{[\s\S]{0,260}\}\)\) return "ignored";/);
+});
+
+test("a host thread that could not be opened says so, with a retry", () => {
+  const thread: MobileHostThreadTarget = { kind: "thread", conversationId: BOT };
+  assert.equal(mobileHostThreadOpenFailed({ target: thread, loading: false, hostListsThreads: true, activeConversationId: null }), true);
+  assert.equal(mobileHostThreadOpenFailed({ target: thread, loading: true, hostListsThreads: true, activeConversationId: null }), false);
+  assert.equal(mobileHostThreadOpenFailed({ target: thread, loading: false, hostListsThreads: true, activeConversationId: BOT }), false);
+  assert.equal(mobileHostThreadOpenFailed({ target: thread, loading: false, hostListsThreads: false, activeConversationId: null }), false);
+  assert.match(surface, /testID="hermes-host-thread-open-failed"/);
 });

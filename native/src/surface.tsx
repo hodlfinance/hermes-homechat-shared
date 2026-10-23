@@ -48,7 +48,7 @@ import {
   mobileDrawerSections,
 } from "./mobile-automation-threads";
 import { mobileHostHeaderMenuItems, mobileHostHeaderMoreLabel, mobileHostHeaderThreadKey, mobileHostHeaderThreadOpened, mobileHostHeaderTitle, type MobileHostHeaderMenuItem, type MobileHostHeaderThread } from "./mobile-host-header";
-import { mobileHostThreadLoading, mobileHostThreadTarget, mobileHostThreadTargetKey, mobileMessagePagesEqual, mobileStartupHydrationAllowed, mobileStartupMaySelectConversation, mobileStartupPaintsSnapshotMessages } from "./mobile-host-thread-open";
+import { mobileHostSendBlocked, mobileHostThreadLoading, mobileHostThreadOpenFailed, mobileHostThreadTarget, mobileHostThreadTargetKey, mobileMessagePagesEqual, mobileStartupHydrationAllowed, mobileStartupMaySelectConversation, mobileStartupPaintsSnapshotMessages } from "./mobile-host-thread-open";
 import { subscribeKeyboardInsetRelease } from "./mobile-keyboard-inset";
 import { WindowKeyboardAvoidingView } from "./window-keyboard-avoiding-view";
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -1942,11 +1942,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     setHostThreadSettledKey(key);
   }, []);
   const hostThreadLoading = mobileHostThreadLoading(hostThreadTarget, hostThreadSettledKey);
+  const hostThreadLoadingRef = useRef(hostThreadLoading);
+  hostThreadLoadingRef.current = hostThreadLoading;
   const startupMaySelectConversation = () => mobileStartupMaySelectConversation({
     target: hostThreadTargetRef.current,
     targetSettled: hostThreadSettledKeyRef.current !== null
       && hostThreadSettledKeyRef.current === mobileHostThreadTargetKey(hostThreadTargetRef.current),
     activeConversationId: activeConversationSessionIdRef.current,
+    hostListsThreads: Boolean(host.presentation?.headerBack),
   });
   const [openingDestinationTitle, setOpeningDestinationTitle] = useState<string | null>(null);
   // Sub threads the customer has closed. They stay closed for this session; the
@@ -3302,7 +3305,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         setClaudeStatus(nextClaudeStatus);
       } catch (err) {
         if (!refreshIsCurrent()) return;
-        if (hostThreadTargetRef.current?.kind === "home") settleHostThread("home");
+        // HPD-1504: a failed start never leaves the neutral loading state up;
+        // the chat's own error and retry show instead.
+        if (!criticalSnapshotPublished) settleHostThread(mobileHostThreadTargetKey(hostThreadTargetRef.current));
+        else if (hostThreadTargetRef.current?.kind === "home") settleHostThread("home");
         setRankedTaskState({ phase: "error" });
         setTaskNotice("load_error");
         const message = displayError(err, "Could not load Hey Hermes.");
@@ -6479,6 +6485,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     const targetConversationSessionId = conversationSessionIdOverride === undefined
       ? activeConversationSessionId
       : conversationSessionIdOverride;
+    // HPD-1504: never into Home while the host's thread is loading or could not be opened.
+    if (mobileHostSendBlocked({
+      target: hostThreadTargetRef.current,
+      loading: hostThreadLoadingRef.current,
+      hostListsThreads: Boolean(host.presentation?.headerBack),
+      conversationId: targetConversationSessionId,
+    })) return "ignored";
     const failedAttempt: MobileFailedMessage = {
       content: message,
       idempotencyKey: idempotencyKey ?? createMobileMessageIdempotencyKey(Crypto.randomUUID),
@@ -8094,7 +8107,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     externalNavigationRef.current = navigationRequest.requestId;
     let active = true;
     const requestedThreadKey = mobileHostThreadTargetKey({ kind: "thread", conversationId: navigationRequest.conversationId });
-    void loadMobileChatSession(navigationRequest.conversationId, { force: true, preserveDraft: true }).then((accepted) => {
+    void loadMobileChatSession(navigationRequest.conversationId, { force: true, preserveDraft: true }).catch(() => false).then((accepted) => {
       // HPD-1504: opened or not, the neutral loading state ends here; a thread
       // that could not be opened shows its error, never Home in its place.
       settleHostThread(requestedThreadKey);
@@ -9463,7 +9476,37 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   <ActivityIndicator size="small" color={palette.muted} />
                 </View>
               ) : null}
-              {!hostThreadLoading && mobileChatEmptyStateVisible({
+              {mobileHostThreadOpenFailed({
+                target: hostThreadTarget,
+                loading: hostThreadLoading,
+                hostListsThreads: Boolean(host.presentation?.headerBack),
+                activeConversationId: activeConversationSessionId,
+              }) && hostThreadTarget?.kind === "thread" ? (
+                <View style={styles.chatEmptyState} testID="hermes-host-thread-open-failed">
+                  <Text style={styles.muted}>{chatSessionNotice || staticUiMessage(appLocale, "Could not open that chat.")}</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={staticUiMessage(appLocale, "Try again")}
+                    onPress={() => {
+                      const conversationId = hostThreadTarget.conversationId;
+                      setHostThreadSettledKey(null);
+                      hostThreadSettledKeyRef.current = null;
+                      void loadMobileChatSession(conversationId, { force: true, preserveDraft: true })
+                        .catch(() => false)
+                        .then(() => settleHostThread(mobileHostThreadTargetKey({ kind: "thread", conversationId })));
+                    }}
+                    style={[styles.messageActionButton, styles.loadOlderMessagesButton]}
+                  >
+                    <Text style={styles.messageActionText}>{staticUiMessage(appLocale, "Try again")}</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+              {!hostThreadLoading && !mobileHostThreadOpenFailed({
+                target: hostThreadTarget,
+                loading: hostThreadLoading,
+                hostListsThreads: Boolean(host.presentation?.headerBack),
+                activeConversationId: activeConversationSessionId,
+              }) && mobileChatEmptyStateVisible({
                 busy,
                 messageCount: visibleMobileMessages.length,
                 pendingAssistantText: Boolean(pendingAssistantText),

@@ -49,17 +49,20 @@ export function mobileHostThreadTargetKey(target: MobileHostThreadTarget | null)
  * Whether the startup refresh may choose the conversation itself (the
  * snapshot's Home, the hydration, the empty-chat recovery). Never while the
  * host's thread is still loading, and never in place of a host thread that
- * could not be opened: an empty chat with its error says the truth, Home in
- * its place does not.
+ * could not be opened in a host that lists the threads: an empty chat with its
+ * error says the truth, Home in its place does not. A host without its own
+ * list (a push into the plain Hermes tab) keeps the old Home fallback.
  */
 export function mobileStartupMaySelectConversation(input: {
   target: MobileHostThreadTarget | null;
   targetSettled: boolean;
   activeConversationId: string | null;
+  /** A host that lists the threads itself (HODL Bots); others keep the Home fallback after a failed open. */
+  hostListsThreads?: boolean;
 }): boolean {
   if (!input.target || input.target.kind === "home") return true;
   if (!input.targetSettled) return false;
-  return input.activeConversationId !== null;
+  return input.activeConversationId !== null || input.hostListsThreads !== true;
 }
 
 /**
@@ -107,4 +110,30 @@ export function mobileMessagePagesEqual<T extends { id?: unknown }>(left: readon
     }
   }
   return true;
+}
+
+/**
+ * HPD-1504: a message typed while the host's thread is loading, or after it
+ * could not be opened, had no conversation and went to Home. In a host that
+ * lists the threads it is not sent; the composer keeps the text.
+ */
+export function mobileHostSendBlocked(input: {
+  target: MobileHostThreadTarget | null;
+  loading: boolean;
+  hostListsThreads: boolean;
+  conversationId: string | null;
+}): boolean {
+  if (!input.target || !input.hostListsThreads) return false;
+  if (input.loading) return true;
+  return input.target.kind === "thread" && input.conversationId === null;
+}
+
+/** The host's thread was asked for, settled, and nothing is open: say so, with a retry. */
+export function mobileHostThreadOpenFailed(input: {
+  target: MobileHostThreadTarget | null;
+  loading: boolean;
+  hostListsThreads: boolean;
+  activeConversationId: string | null;
+}): boolean {
+  return Boolean(input.target && input.target.kind === "thread" && input.hostListsThreads && !input.loading && input.activeConversationId === null);
 }
