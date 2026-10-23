@@ -266,6 +266,13 @@ export type NativeR8Host = {
       accessibilityLabel: string;
       button?: ComponentType<{ onPress: () => void; accessibilityLabel: string }>;
     };
+    /**
+     * HPD-1515 (Justus, 2026-10-23, HODL 10.0.1): with headerBack only. The
+     * header row's name for the Home chat (HODL and LiveQuote: "Home"). Other
+     * threads keep their own titles and every other place keeps productName;
+     * without it the Home chat is named productName as before (Hey).
+     */
+    homeChatTitle?: string;
     sessionFailure?: {
       title: string;
       body: string;

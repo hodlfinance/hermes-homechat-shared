@@ -9042,7 +9042,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             <Text style={[styles.chatHeaderTitle, styles.flexShrinkOne]} numberOfLines={1} accessibilityRole="header">
               {tab === "chat" && pendingHostHeaderThread
                 ? pendingHostHeaderThread.title
-                : mobileHostHeaderTitle({ tab, session: activeChatSession, productName: appCopy.productName, screenTitle: mobileScreenTitle(tab, settingsSection, t, appLocale) })}
+                : mobileHostHeaderTitle({ tab, session: activeChatSession, productName: appCopy.productName, homeTitle: host.presentation?.homeChatTitle, screenTitle: mobileScreenTitle(tab, settingsSection, t, appLocale) })}
             </Text>
           </View>
         ) : (
