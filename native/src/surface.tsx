@@ -463,6 +463,7 @@ import {
   isMobileReceiptAlreadyInUse,
   mobilePersonalPurchaseCanStart,
   mobileOfferedPlans,
+  mobilePlanActiveNotice,
   mobilePlanChangeCanStart,
   mobileServerPlanTiers,
   mobileSubscriptionAuthorityConfirmed,
@@ -3542,7 +3543,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   async function reconcileMobileSubscription(accountId: string) {
     const state = assertProductLocalSubscriptionState(accountId, await api.subscriptionState());
     if (signedInAccountIdRef.current !== accountId) {
-      throw new Error("The signed-in Hey account changed before subscription confirmation.");
+      throw new Error("The signed-in Hey Hermes account changed before subscription confirmation.");
     }
     setSnapshot((current) => current?.me.id === accountId
       ? { ...current, subscription: state, entitlement: state.entitlement }
@@ -3556,7 +3557,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     const targetTier = (Object.keys(MOBILE_TIER_PACKAGES) as MobilePlanTier[]).find((tier) => MOBILE_TIER_PACKAGES[tier] === packageId) ?? "personal";
     const change = accountId && serverPlanTiers.length > 0 ? mobilePlanChangeCanStart(snapshot.subscription, mobilePurchasesController, targetTier, Date.now(), mobilePurchaseCompletion) : null;
     // HPD-1534: only a plan this screen offers may be bought (Starter first, the others as a change).
-    const offered = snapshot ? mobileOfferedPlans(mobilePurchasePlans, snapshot.subscription, mobilePurchasesController, Date.now()) : [];
+    const offered = snapshot ? mobileOfferedPlans(mobilePurchasePlans, snapshot.subscription, mobilePurchasesController, serverPlanTiers.length > 0, Date.now()) : [];
     if (
       !accountId ||
       !offered.some((plan) => plan.packageId === packageId) ||
@@ -3576,7 +3577,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         const confirmed = mobileSubscriptionAuthorityConfirmed(accountId, state);
         setMobilePurchaseNotice(
           confirmed
-            ? "Personal is active for this Hey account."
+            ? mobilePlanActiveNotice(targetTier, serverPlanTiers.length > 0)
             : "The App Store purchase finished. Access will appear after server confirmation.",
         );
       } catch {
@@ -3610,8 +3611,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         const confirmed = mobileSubscriptionAuthorityConfirmed(accountId, state);
         setMobilePurchaseNotice(
           confirmed
-            ? "Your App Store purchase is restored for this Hey account."
-            : "Restore finished. The server found no active App Store access for this Hey account.",
+            ? "Your App Store purchase is restored for this Hey Hermes account."
+            : "Restore finished. The server found no active App Store access for this Hey Hermes account.",
         );
       } catch {
         setMobilePurchaseNotice("Restore finished, but server confirmation is temporarily unavailable.");
@@ -8739,7 +8740,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const mobilePurchaseBusy = mobilePurchasePhase === "purchasing" || mobilePurchasePhase === "restoring";
   // HPD-1243: on Android the same view names Google Play; on iOS it is the same object.
   // HPD-1534: the first purchase offers Starter alone; the other plans only as a change.
-  const offeredMobilePlans = mobileOfferedPlans(mobilePurchasePlans, snapshot.subscription, mobilePurchasesController, Date.now());
+  const offeredMobilePlans = mobileOfferedPlans(mobilePurchasePlans, snapshot.subscription, mobilePurchasesController, serverPlanTiers.length > 0, Date.now());
   const selectedMobilePlan = offeredMobilePlans.find((plan) => plan.packageId === selectedMobilePackage) ?? offeredMobilePlans[0] ?? null;
   const paywall = heyStoreWordedView(iosPaywallView({
     locale: appLocale,
