@@ -674,6 +674,29 @@ export function mobilePlanChangeCanStart(
 }
 
 /**
+ * HPD-1534 (Justus, 2026-10-24: "Der Hauptplan ist ja 12,99 und das ist das Einzige,
+ * was der User sehen soll am Anfang."): the first purchase offers Starter alone. Pro
+ * (and Max) appear only as a change for a running paid plan bought in this store,
+ * the same buyers `mobilePlanChangeCanStart` lets change. Without tiers (one plan)
+ * nothing changes.
+ */
+export function mobileOfferedPlans<T extends { plan: MobilePlanTier }>(
+  plans: readonly T[],
+  state: Parameters<typeof mobilePlanChangeCanStart>[0],
+  controller: Pick<MobilePurchasesController, "tierOfProduct">,
+  timestamp = Date.now(),
+): T[] {
+  if (plans.length < 2) return [...plans];
+  const entitlement = state.entitlement;
+  const holdsStorePlan = entitlement.provider === "revenuecat"
+    && ["active", "trialing", "grace_period"].includes(entitlement.status)
+    && !(entitlement.expiresAt && Date.parse(entitlement.expiresAt) <= timestamp)
+    && controller.tierOfProduct(entitlement.storeProductId) !== null;
+  if (holdsStorePlan) return [...plans];
+  return [plans.find((plan) => plan.plan === "starter") ?? plans[0]!];
+}
+
+/**
  * HPD-1534: the tiers the server lists for this account (`webBilling.tiers` of the
  * subscription state), in order, or none: then the app sells Personal exactly as before.
  * The server sends the list only while HEY_PLAN_TIERS_ENABLED is on and RevenueCat

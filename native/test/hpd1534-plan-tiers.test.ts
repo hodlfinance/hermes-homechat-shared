@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   MOBILE_REVENUECAT_PRODUCTS,
   MobilePurchasesController,
+  mobileOfferedPlans,
   mobilePlanChangeCanStart,
   mobileServerPlanTiers,
   type MobilePlanChange,
@@ -140,4 +141,23 @@ test("review of #185: iOS downgrade accepts the plan kept until renewal; a pendi
   const fallback = new MobilePurchasesController(broken.value);
   await fallback.bindAccount("acct_1", "key");
   assert.deepEqual((await fallback.loadPlans("acct_1", { tiers: ["starter", "personal"] })).map((plan) => plan.packageId), ["personal_monthly"]);
+});
+
+test("Justus 2026-10-24: the first purchase offers Starter alone; Pro and Max only as a change of a running store plan", () => {
+  const controller = new MobilePurchasesController(adapter(iosPackages).value);
+  const plans = [{ plan: "starter" as const, id: "s" }, { plan: "personal" as const, id: "p" }, { plan: "max" as const, id: "m" }];
+  const state = (status: string, storeProductId: string | null, extra: { provider?: string | null; expiresAt?: string | null } = {}) =>
+    ({ entitlement: { status, plan: "starter", provider: "revenuecat", storeProductId, ...extra } });
+  // No plan yet, an expired plan, a web plan, or a grant: Starter alone.
+  assert.deepEqual(mobileOfferedPlans(plans, state("none", null), controller).map((p) => p.id), ["s"]);
+  assert.deepEqual(mobileOfferedPlans(plans, state("expired", MOBILE_REVENUECAT_PRODUCTS.starter_monthly), controller).map((p) => p.id), ["s"]);
+  assert.deepEqual(mobileOfferedPlans(plans, state("active", "heyhermes_starter_monthly_web"), controller).map((p) => p.id), ["s"]);
+  assert.deepEqual(mobileOfferedPlans(plans, state("active", null, { provider: null }), controller).map((p) => p.id), ["s"]);
+  assert.deepEqual(mobileOfferedPlans(plans, state("active", MOBILE_REVENUECAT_PRODUCTS.starter_monthly, { expiresAt: new Date(Date.now() - 1000).toISOString() }), controller).map((p) => p.id), ["s"]);
+  // A running Starter (also in its free month) or Pro bought in this store: every plan, for the change.
+  assert.deepEqual(mobileOfferedPlans(plans, state("trialing", MOBILE_REVENUECAT_PRODUCTS.starter_monthly), controller).map((p) => p.id), ["s", "p", "m"]);
+  assert.deepEqual(mobileOfferedPlans(plans, state("active", MOBILE_REVENUECAT_PRODUCTS.personal_monthly), controller).map((p) => p.id), ["s", "p", "m"]);
+  // Without tiers (Personal alone) nothing changes; a tier list without Starter offers its first plan.
+  assert.deepEqual(mobileOfferedPlans([plans[1]!], state("none", null), controller).map((p) => p.id), ["p"]);
+  assert.deepEqual(mobileOfferedPlans([plans[1]!, plans[2]!], state("none", null), controller).map((p) => p.id), ["p"]);
 });
