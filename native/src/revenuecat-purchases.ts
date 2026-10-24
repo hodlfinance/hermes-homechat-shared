@@ -674,6 +674,32 @@ export function mobilePlanChangeCanStart(
 }
 
 /**
+ * HPD-1534 (Justus, 2026-10-24: "Der Hauptplan ist ja 12,99 und das ist das Einzige,
+ * was der User sehen soll am Anfang."): while the server lists the tiers, the first
+ * purchase offers Starter alone. Pro (and Max) appear only as a change for a running
+ * paid plan bought in this store, the same buyers `mobilePlanChangeCanStart` lets
+ * change. Without Starter in this store (for example the Android Starter product not
+ * configured, or a broken tier offering) a first purchase offers nothing rather than
+ * Pro or Personal. Without the tiers nothing changes.
+ */
+export function mobileOfferedPlans<T extends { plan: MobilePlanTier }>(
+  plans: readonly T[],
+  state: Parameters<typeof mobilePlanChangeCanStart>[0],
+  controller: Pick<MobilePurchasesController, "tierOfProduct">,
+  tiersListed: boolean,
+  timestamp = Date.now(),
+): T[] {
+  if (!tiersListed) return [...plans];
+  const entitlement = state.entitlement;
+  const holdsStorePlan = entitlement.provider === "revenuecat"
+    && ["active", "trialing", "grace_period"].includes(entitlement.status)
+    && !(entitlement.expiresAt && Date.parse(entitlement.expiresAt) <= timestamp)
+    && controller.tierOfProduct(entitlement.storeProductId) !== null;
+  if (holdsStorePlan) return [...plans];
+  return plans.filter((plan) => plan.plan === "starter");
+}
+
+/**
  * HPD-1534: the tiers the server lists for this account (`webBilling.tiers` of the
  * subscription state), in order, or none: then the app sells Personal exactly as before.
  * The server sends the list only while HEY_PLAN_TIERS_ENABLED is on and RevenueCat
@@ -685,4 +711,14 @@ export function mobileServerPlanTiers(state: unknown): MobilePlanTier[] {
   const plans = tiers.map((tier) => (tier && typeof tier === "object" ? (tier as { plan?: unknown }).plan : null));
   return plans.every((plan) => plan === "starter" || plan === "personal" || plan === "max") && plans.includes("personal")
     ? plans as MobilePlanTier[] : [];
+}
+
+/**
+ * HPD-1534: the notice after a confirmed purchase names the plan bought. With the tiers
+ * the `personal` package is sold as Pro; without them it stays "Personal" as before.
+ */
+export function mobilePlanActiveNotice(tier: MobilePlanTier, tiered: boolean) {
+  if (tier === "starter") return "Starter is active for this Hey Hermes account." as const;
+  if (tier === "max") return "Max is active for this Hey Hermes account." as const;
+  return tiered ? "Pro is active for this Hey Hermes account." as const : "Personal is active for this Hey Hermes account." as const;
 }

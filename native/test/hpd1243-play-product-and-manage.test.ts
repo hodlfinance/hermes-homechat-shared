@@ -128,7 +128,7 @@ test("an Android user with an App Store plan reads the existing renewal sentence
     assert.equal(mobileStoreNotice(sentence, locale, "android"), sentence, locale);
     assert.equal(mobileStoreNotice(sentence, locale, "ios"), sentence, locale);
     // ... while every other notice on Android still is, exactly as before.
-    const other = "Restore finished. The server found no active App Store access for this Hey account.";
+    const other = "Restore finished. The server found no active App Store access for this Hey Hermes account.";
     assert.equal(mobileStoreNotice(other, locale, "android"), heyStoreWording(staticUiMessage(locale, other), locale, "android"), locale);
     assert.equal(mobileStoreNotice(other, locale, "ios"), other, locale);
   }

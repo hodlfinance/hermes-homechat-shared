@@ -44,8 +44,8 @@ const purchaseNotices = [
   "App Store plans are unavailable.",
   "The App Store purchase finished. Access will appear after server confirmation.",
   "The App Store purchase finished, but server confirmation is still pending. Do not purchase again.",
-  "Your App Store purchase is restored for this Hey account.",
-  "Restore finished. The server found no active App Store access for this Hey account.",
+  "Your App Store purchase is restored for this Hey Hermes account.",
+  "Restore finished. The server found no active App Store access for this Hey Hermes account.",
   "App Store purchases could not be restored.",
   "Check App Store subscriptions before trying again.",
 ];

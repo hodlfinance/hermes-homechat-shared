@@ -5,6 +5,8 @@ import test from "node:test";
 import {
   MOBILE_REVENUECAT_PRODUCTS,
   MobilePurchasesController,
+  mobileOfferedPlans,
+  mobilePlanActiveNotice,
   mobilePlanChangeCanStart,
   mobileServerPlanTiers,
   type MobilePlanChange,
@@ -12,6 +14,7 @@ import {
   type MobileStorePackage,
 } from "../src/revenuecat-purchases";
 import { iosPaywallView } from "../src/ios-paywall";
+import { authUiCopy } from "../core/auth-ui-copy";
 
 function pkg(identifier: string, productId: string, intro: MobileStorePackage["product"]["introPrice"], price = "$12.99"): MobileStorePackage {
   return { identifier, packageType: "CUSTOM", source: { identifier },
@@ -140,4 +143,42 @@ test("review of #185: iOS downgrade accepts the plan kept until renewal; a pendi
   const fallback = new MobilePurchasesController(broken.value);
   await fallback.bindAccount("acct_1", "key");
   assert.deepEqual((await fallback.loadPlans("acct_1", { tiers: ["starter", "personal"] })).map((plan) => plan.packageId), ["personal_monthly"]);
+});
+
+test("Justus 2026-10-24: the first purchase offers Starter alone; Pro and Max only as a change of a running store plan", () => {
+  const controller = new MobilePurchasesController(adapter(iosPackages).value);
+  const plans = [{ plan: "starter" as const, id: "s" }, { plan: "personal" as const, id: "p" }, { plan: "max" as const, id: "m" }];
+  const state = (status: string, storeProductId: string | null, extra: { provider?: string | null; expiresAt?: string | null } = {}) =>
+    ({ entitlement: { status, plan: "starter", provider: "revenuecat", storeProductId, ...extra } });
+  const offered = (list: typeof plans, s: ReturnType<typeof state>, tiers = true) => mobileOfferedPlans(list, s, controller, tiers).map((p) => p.id);
+  // No plan yet, an expired plan, a web plan, or a grant: Starter alone.
+  assert.deepEqual(offered(plans, state("none", null)), ["s"]);
+  assert.deepEqual(offered(plans, state("expired", MOBILE_REVENUECAT_PRODUCTS.starter_monthly)), ["s"]);
+  assert.deepEqual(offered(plans, state("active", "heyhermes_starter_monthly_web")), ["s"]);
+  assert.deepEqual(offered(plans, state("active", null, { provider: null })), ["s"]);
+  assert.deepEqual(offered(plans, state("active", MOBILE_REVENUECAT_PRODUCTS.starter_monthly, { expiresAt: new Date(Date.now() - 1000).toISOString() })), ["s"]);
+  // A running Starter (also in its free month) or Pro bought in this store: every plan, for the change.
+  assert.deepEqual(offered(plans, state("trialing", MOBILE_REVENUECAT_PRODUCTS.starter_monthly)), ["s", "p", "m"]);
+  assert.deepEqual(offered(plans, state("active", MOBILE_REVENUECAT_PRODUCTS.personal_monthly)), ["s", "p", "m"]);
+  // Review of #189: tiers on but no Starter in this store (Android Starter id unset, broken
+  // tier offering that fell back to Personal): the first purchase offers nothing, never Pro.
+  assert.deepEqual(offered([plans[1]!], state("none", null)), []);
+  assert.deepEqual(offered([plans[1]!, plans[2]!], state("none", null)), []);
+  // Without tiers (Personal alone) nothing changes.
+  assert.deepEqual(offered([plans[1]!], state("none", null), false), ["p"]);
+});
+
+test("review of #189: the purchase notice names the plan bought, and Hey Hermes", () => {
+  assert.equal(mobilePlanActiveNotice("starter", true), "Starter is active for this Hey Hermes account.");
+  assert.equal(mobilePlanActiveNotice("personal", true), "Pro is active for this Hey Hermes account.");
+  assert.equal(mobilePlanActiveNotice("max", true), "Max is active for this Hey Hermes account.");
+  assert.equal(mobilePlanActiveNotice("personal", false), "Personal is active for this Hey Hermes account.");
+  for (const locale of ["en", "de", "fr", "es", "it", "pt-BR", "ja", "ko"] as const) {
+    const copy = authUiCopy(locale) as Record<string, string>;
+    for (const tier of ["starter", "personal", "max"] as const) for (const tiered of [true, false]) {
+      const key = mobilePlanActiveNotice(tier, tiered);
+      assert.ok(copy[key], `${locale}: ${key}`);
+      if (tier === "starter") assert.doesNotMatch(copy[key]!, /Personal|Pro\b/, locale);
+    }
+  }
 });
