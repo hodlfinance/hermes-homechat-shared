@@ -999,6 +999,13 @@ async function clearStoredBoolean(key: string) {
   getLocalStorage()?.removeItem(key);
 }
 
+// HPD-1737: the last access-log head and anchor key fingerprint, in secure storage
+// (web storage only where the platform has no secure store).
+const accessLogHeadStore = {
+  read: (key: string) => readStoredString(key),
+  write: (key: string, value: string) => persistStoredString(key, value),
+};
+
 async function readStoredString(key: string) {
   if (await canUseSecureStore()) {
     try {
@@ -9344,6 +9351,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
 
       {privacyWorkspace === snapshot.workspace.id ? <MobilePrivacySheet
         key={snapshot.workspace.id} client={api} workspaceId={snapshot.workspace.id} locale={appLocale}
+        // HPD-1737: the access log, for the owner and only while the host's switch is on.
+        accessLog={host.policy.accessLogLive && isOwner ? { client: api, headStore: accessLogHeadStore, onOpenSupportAccess: () => selectMobileScreen("support") } : undefined}
         onClose={() => setPrivacyWorkspace(null)} /> : null}
       {hostHeaderBack && hostHeaderMenuOpen ? (
         <MobileHostHeaderMenu

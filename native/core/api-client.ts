@@ -1,3 +1,4 @@
+import type { AccessLogResponse } from "./operator-access-log-view";
 import type {
   SelfManagedView,
   AgentMailbox,
@@ -770,6 +771,14 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     workspaceRuntimeSettings: () => request<WorkspaceRuntimeSettings>("/workspace/runtime-settings"),
     /** The name of the customer's own server, and the few facts that identify it. */
     workspaceServerIdentity: () => request<WorkspaceServerIdentity>("/workspace/server-identity"),
+    /** HPD-1737: the owner's operator access log, newest first (docs/hpd-1737-operator-access-log.md section 4). */
+    workspaceAccessLog: (query: { limit?: number; before?: number } = {}) => {
+      const params = new URLSearchParams();
+      if (query.limit) params.set("limit", String(query.limit));
+      if (query.before) params.set("before", String(query.before));
+      const suffix = params.toString() ? `?${params.toString()}` : "";
+      return request<AccessLogResponse>(`/workspace/access-log${suffix}`);
+    },
     /** HPD-1027 S4: the server Owner's SSH public keys, customer root and server facts. */
     serverOwnerSshKeys: () => request<ServerOwnerSshKeyListing>("/workspace/server/ssh-keys"),
     addServerOwnerSshKey: (body: { publicKey: string; label?: string }) =>

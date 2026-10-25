@@ -291,6 +291,13 @@ export type NativeR8Host = {
      * sales status are on for Android. iOS never reads it.
      */
     heyAndroidLaunchEnabled?: boolean;
+    /**
+     * HPD-1737: "Access to your server" under Privacy. Absent or false: the row
+     * is not shown, as before. Hey Hermes sets it from
+     * EXPO_PUBLIC_HEY_ACCESS_LOG_LIVE once the Control Plane serves
+     * GET /workspace/access-log. Only the workspace owner sees it.
+     */
+    accessLogLive?: boolean;
   };
   transport: NativeR8Transport;
   platform: NativeR8Platform;
