@@ -83,40 +83,23 @@ test("the client maps 404, network errors and invalid bodies to null", async () 
   assert.equal(ok.calls[1]!.body, "{}");
 });
 
-test("the paywall decision: unknown or open purchases, refused waits, invitation purchases", () => {
+test("the paywall always offers the purchase, whatever the sales status says (HPD-1746)", () => {
   assert.equal(iosPaywallSalesDecision(null), "purchase");
   assert.equal(iosPaywallSalesDecision({ ...valid, open: true, reason: "open", mayPurchase: true }), "purchase");
-  assert.equal(iosPaywallSalesDecision(valid), "waitlist");
-  assert.equal(iosPaywallSalesDecision({ ...valid, reason: "capacity_unknown", waitlist: null }), "waitlist");
-  assert.equal(
-    iosPaywallSalesDecision({ ...valid, invitation: { expiresAt: "2026-10-07T10:00:00.000Z" } }),
-    "purchase",
-  );
+  assert.equal(iosPaywallSalesDecision(valid), "purchase");
+  assert.equal(iosPaywallSalesDecision({ ...valid, reason: "capacity_unknown", waitlist: null }), "purchase");
+  assert.equal(iosPaywallSalesDecision({ ...valid, invitation: { expiresAt: "2026-10-07T10:00:00.000Z" } }), "purchase");
 });
 
-test("the paywall sales view words", () => {
+test("the paywall sales view shows no waitlist and no reserved place", () => {
   const formatTime = (iso: string) => `T(${iso})`;
-  assert.deepEqual(iosPaywallSalesView({ locale: "en", status: null, formatTime }).lines, []);
-
-  const notJoined = iosPaywallSalesView({ locale: "en", status: { ...valid, waitlist: null }, formatTime });
-  assert.equal(notJoined.mode, "waitlist");
-  assert.equal(notJoined.joined, false);
-  assert.equal(notJoined.joinLabel, "Join the waitlist");
-
-  const joined = iosPaywallSalesView({ locale: "en", status: valid, formatTime });
-  assert.equal(joined.joined, true);
-  assert.deepEqual(joined.lines, ["You're on the waitlist. We'll email you as soon as a place is free.", "Your position: 4"]);
-
-  const noPosition = iosPaywallSalesView({ locale: "en", status: { ...valid, waitlist: { status: "waiting", position: null } }, formatTime });
-  assert.deepEqual(noPosition.lines, ["You're on the waitlist. We'll email you as soon as a place is free."]);
-
-  const invited = iosPaywallSalesView({
-    locale: "en",
-    status: { ...valid, invitation: { expiresAt: "2026-10-07T10:00:00.000Z" }, waitlist: { status: "invited", position: null } },
-    formatTime,
-  });
-  assert.equal(invited.mode, "purchase");
-  assert.deepEqual(invited.lines, ["A place is reserved for you until T(2026-10-07T10:00:00.000Z)."]);
+  for (const status of [null, valid, { ...valid, waitlist: null },
+    { ...valid, invitation: { expiresAt: "2026-10-07T10:00:00.000Z" }, waitlist: { status: "invited" as const, position: null } }]) {
+    const view = iosPaywallSalesView({ locale: "en", status, formatTime });
+    assert.equal(view.mode, "purchase");
+    assert.equal(view.joined, false);
+    assert.deepEqual(view.lines, []);
+  }
 
   for (const locale of appLocales) {
     const copy = iosPaywallWaitlistCopy(locale);
