@@ -48,3 +48,4 @@ export * from "./managed-model-receipt";
 export * from "./model-comparison";
 export * from "./device-time-zone";
 export * from "./chatgpt-google-data-offer";
+export * from "./trial-offer";

@@ -266,6 +266,8 @@ export function mobilePersonalPurchaseCanStart<T extends {
     storeProductId?: string | null;
   };
   workspaceAccess: { runtimeAccess: string };
+  /** HPD-1715: an operator-started deadline to begin a real trial. */
+  trialOffer?: { deadlineAt: string } | null;
   lastWebhookEvent?: {
     accountId: string | null;
     appUserId: string | null;
@@ -291,7 +293,12 @@ export function mobilePersonalPurchaseCanStart<T extends {
   ) return false;
 
   const entitlement = exactState.entitlement;
-  if (["active", "trialing", "grace_period"].includes(entitlement.status)) return false;
+  // HPD-1715: emergency or press access is a `manual` entitlement; while the operator's
+  // deadline runs the server sends `trialOffer`, and this is the one case where a running
+  // entitlement still lets the buyer start the normal store trial.
+  const trialOfferOpen = entitlement.provider === "manual" && Boolean(exactState.trialOffer?.deadlineAt) &&
+    Date.parse(exactState.trialOffer!.deadlineAt) > timestamp;
+  if (!trialOfferOpen && ["active", "trialing", "grace_period"].includes(entitlement.status)) return false;
 
   const evidence = exactState.lastWebhookEvent;
   const exactSandboxEvidence =
