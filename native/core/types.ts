@@ -1044,6 +1044,8 @@ export interface SubscriptionStateView {
   workspaceAccess: WorkspaceAccessSummary;
   lifecycle: AccountLifecycleState;
   promotionalGrant: PromotionalGrantAccess | null;
+  /** HPD-1715: set while an operator-started deadline lets the account begin a real store trial; absent on older servers. */
+  trialOffer?: { deadlineAt: string } | null;
   lastWebhookEvent: RevenueCatWebhookEvent | null;
 }
 

@@ -1,6 +1,6 @@
 import { isPreinstalledR8Suggestion } from "../policy";
 import { heyActivityStepText, heyActivityVerbText, markdownLinkDestination, modelComparisonPresentation, modelComparisonCopy } from "../core/index";
-import { includedAiResetText } from "../core/index";
+import { includedAiResetText, trialOfferView } from "../core/index";
 import { adminUiCopy, notificationDeliveryNotice } from "../core/admin-ui-copy";
 import { connectionUiMessage, connectionPermissionLines as localizedConnectionPermissionLines } from "../core/connection-ui-copy";
 import { mobileChatCardCopy } from "./chat-card-copy";
@@ -1771,6 +1771,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [paywallAccountOpen, setPaywallAccountOpen] = useState(false);
   // HPD-1106: the deleted-server screen's purchase opens the paywall while the subscription is ended.
   const [deletedPaywallOpen, setDeletedPaywallOpen] = useState(false);
+  // HPD-1715: the paywall opened from the trial-offer banner of an account that still has access.
+  const [trialOfferPaywallOpen, setTrialOfferPaywallOpen] = useState(false);
   const [googleDeletionChallenge, setGoogleDeletionChallenge] = useState<{ expiresAt: string; id: string; nonce: string } | null>(null);
   const [googleDeletionChallengeVersion, setGoogleDeletionChallengeVersion] = useState(0);
   const [input, setInput] = useState(initialDraft);
@@ -9102,6 +9104,49 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     );
   }
 
+  // HPD-1715: an account on emergency or press access, inside the operator's deadline, opens the
+  // normal store purchase from the banner. The purchase screen is the one every buyer sees; Back returns.
+  const trialOffer = productAccessScreen === "home" && storePlatform !== null && !mobilePurchaseCompletion
+    ? trialOfferView(snapshot.subscription, appLocale, (value) => formatSecurityDate(value, appLocale))
+    : null;
+  if (trialOfferPaywallOpen && trialOffer && mobilePersonalPurchaseAvailable) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
+        <ScrollView contentContainerStyle={styles.paywallScreen}>
+          <Pressable style={styles.trialOfferBack} onPress={() => setTrialOfferPaywallOpen(false)} accessibilityRole="button" accessibilityLabel={t.nav.back}>
+            <ChevronLeft size={22} color={palette.brandBlue} />
+            <Text style={styles.trialOfferBackText}>{t.nav.back}</Text>
+          </Pressable>
+          <Text style={styles.trialOfferBannerBody}>{trialOffer.body}</Text>
+          <IosPaywallPanel locale={appLocale}
+            store={storePlatform ?? "ios"}
+            view={paywall}
+            plan={selectedMobilePlan}
+            plans={offeredMobilePlans}
+            onSelectPlan={setSelectedMobilePackage}
+            phase={mobilePurchasePhase}
+            accountReady={mobilePurchaseAccountReady}
+            purchaseAvailable={mobilePersonalPurchaseAvailable}
+            notice={mobilePurchaseNotice}
+            onDismissNotice={() => setMobilePurchaseNotice(null)}
+            onPurchase={purchaseMobilePlan}
+            sales={paywallSales}
+            salesError={paywallSalesError}
+            waitlistJoining={waitlistPhase === "joining"}
+            onJoinWaitlist={joinMobileWaitlist}
+            onRestore={restoreMobilePurchases}
+            onManage={manageMobileSubscription}
+            accountLabel={heyPaywallAccountCopy(appLocale).entry}
+            onOpenAccount={() => setPaywallAccountOpen(true)}
+            signOutLabel={staticUiCopy(appLocale)["Sign out"]}
+            onSignOut={() => void logout()}
+          />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   if (productAccessScreen === "purchase" || (productAccessScreen === "deleted" && deletedPaywallOpen && !hasValidMobileProductAccess(snapshot.entitlement))) {
     return (
       <SafeAreaView style={styles.safe}>
@@ -9262,6 +9307,23 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         )}
         </>)}
       </View>
+
+      {trialOffer ? (
+        <View style={styles.trialOfferBanner} accessibilityRole="summary" accessibilityLabel={trialOffer.title}>
+          <Text style={styles.trialOfferBannerTitle}>{trialOffer.title}</Text>
+          <Text style={styles.trialOfferBannerBody}>{trialOffer.body}</Text>
+          <Pressable
+            style={[styles.trialOfferBannerButton, !mobilePersonalPurchaseAvailable && { opacity: 0.5 }]}
+            disabled={!mobilePersonalPurchaseAvailable}
+            onPress={() => setTrialOfferPaywallOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={trialOffer.cta}
+            testID="trial-offer-start"
+          >
+            <Text style={styles.trialOfferBannerButtonText}>{trialOffer.cta}</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {dashboardOpenState !== "idle" ? (
         <View style={styles.dashboardOpenNotice} accessibilityLiveRegion="polite">
@@ -14884,6 +14946,51 @@ const styles = StyleSheet.create({
   paywallScreen: {
     padding: 18,
     gap: 12,
+  },
+  // HPD-1715: the deadline to start a real trial, above the content of an account that still has access.
+  trialOfferBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 14,
+    gap: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: palette.surface,
+  },
+  trialOfferBannerTitle: {
+    color: palette.ink,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  trialOfferBannerBody: {
+    color: palette.muted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  trialOfferBannerButton: {
+    alignSelf: "flex-start",
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: palette.brandBlue,
+  },
+  trialOfferBannerButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  trialOfferBack: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 44,
+    gap: 4,
+  },
+  trialOfferBackText: {
+    color: palette.brandBlue,
+    fontSize: 16,
   },
   nativeAuthGroup: {
     gap: 8,
