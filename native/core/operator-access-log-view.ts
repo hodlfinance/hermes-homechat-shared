@@ -287,6 +287,8 @@ export type AccessLogCheck =
       fromGenesis: boolean;
       /** A head kept from an earlier visit was compared. */
       knownHeadUsed: boolean;
+      /** This device has checked the chain back to seq 1: now, or before and this run links to that head. */
+      complete: boolean;
       /** "unreadable": the device's storage could not be read, so nothing was compared or kept. */
       memory: "ok" | "unreadable";
       keySha256: string | null;
@@ -328,22 +330,28 @@ export function accessLogHeadStorageKey(workspaceId: string): string {
   return `heyhermes.access-log.head.v1.${workspaceId.replace(/[^A-Za-z0-9._-]/g, "_")}`;
 }
 
-/** What the device keeps per workspace: the last chain head and the anchor key fingerprint first seen. */
+/**
+ * What the device keeps per workspace: the last chain head, the anchor key
+ * fingerprint first seen, and whether this device has ever checked the chain
+ * back to seq 1 (only then can a later visit that links to the head say
+ * "complete").
+ */
 export interface AccessLogDeviceRecord {
   head: AccessLogHead | null;
   keySha256: string | null;
+  fromGenesis: boolean;
 }
 
 export function parseAccessLogRecord(stored: string | null | undefined): AccessLogDeviceRecord {
-  const none = { head: null, keySha256: null };
+  const none = { head: null, keySha256: null, fromGenesis: false };
   if (!stored) return none;
   try {
-    const value = JSON.parse(stored) as { seq?: unknown; entryHash?: unknown; keySha256?: unknown };
+    const value = JSON.parse(stored) as { seq?: unknown; entryHash?: unknown; keySha256?: unknown; fromGenesis?: unknown };
     const head = Number.isInteger(value.seq) && (value.seq as number) > 0 && typeof value.entryHash === "string" && HEX64.test(value.entryHash)
       ? { seq: value.seq as number, entryHash: value.entryHash }
       : null;
     const keySha256 = typeof value.keySha256 === "string" && HEX64.test(value.keySha256) ? value.keySha256 : null;
-    return { head, keySha256 };
+    return { head, keySha256, fromGenesis: head !== null && value.fromGenesis === true };
   } catch {
     // An unreadable record is treated as none; the next good answer replaces it.
     return none;
@@ -351,7 +359,7 @@ export function parseAccessLogRecord(stored: string | null | undefined): AccessL
 }
 
 export function serializeAccessLogRecord(record: AccessLogDeviceRecord): string {
-  return JSON.stringify({ ...(record.head ?? {}), ...(record.keySha256 ? { keySha256: record.keySha256 } : {}) });
+  return JSON.stringify({ ...(record.head ?? {}), ...(record.keySha256 ? { keySha256: record.keySha256 } : {}), ...(record.fromGenesis ? { fromGenesis: true } : {}) });
 }
 
 /** The anchor key fingerprint of an answer: the Plane's field, else the newest anchor's own. */
@@ -384,6 +392,8 @@ export function verifyAccessLog(input: {
   exhausted?: boolean;
   /** The server's hostSessionGroups for the loaded pages, compared with the device's own. */
   serverGroups?: readonly AccessLogHostSessionGroup[];
+  /** The kept head was checked back to seq 1 on an earlier visit. */
+  knownFromGenesis?: boolean;
 }): AccessLogCheck {
   const { workspaceId, head, knownHead } = input;
   const knownHeadUsed = knownHead !== null;
@@ -393,7 +403,7 @@ export function verifyAccessLog(input: {
   if (!head) {
     if (ascending.length) return { state: "failed", reason: "head_mismatch", seq: ascending[ascending.length - 1]!.seq };
     if (knownHead) return { state: "failed", reason: "rolled_back", seq: knownHead.seq };
-    return { state: "verified", anchored: false, head: null, reachedKnownHead: true, fromGenesis: true, knownHeadUsed, memory: "ok", keySha256 };
+    return { state: "verified", anchored: false, head: null, reachedKnownHead: true, fromGenesis: true, knownHeadUsed, complete: true, memory: "ok", keySha256 };
   }
   const newest = ascending[ascending.length - 1];
   if (!newest || newest.seq !== head.seq || newest.entryHash !== head.entryHash) return { state: "failed", reason: "head_mismatch", seq: head.seq };
@@ -445,7 +455,9 @@ export function verifyAccessLog(input: {
     if (typeof anchor.late === "boolean" && anchor.late !== accessLogAnchoredLate(entry)) return { state: "failed", reason: "server_mismatch", seq: entry.seq };
   }
   if (input.serverGroups && !sameGroups(input.serverGroups, accessLogHostSessionGroups(ascending))) return { state: "failed", reason: "server_mismatch", seq: null };
-  return { state: "verified", anchored: newest.anchor !== "pending", head, reachedKnownHead, fromGenesis: oldest.seq === 1, knownHeadUsed, memory: "ok", keySha256 };
+  const fromGenesis = oldest.seq === 1;
+  const complete = fromGenesis || (knownHeadUsed && reachedKnownHead && input.knownFromGenesis === true);
+  return { state: "verified", anchored: newest.anchor !== "pending", head, reachedKnownHead, fromGenesis, knownHeadUsed, complete, memory: "ok", keySha256 };
 }
 
 // ---------------------------------------------------------------------------
@@ -474,16 +486,19 @@ export interface LoadedAccessLog {
  */
 export async function loadAccessLog(
   client: AccessLogClient,
-  input: { knownHead: AccessLogHead | null; now: number; maxPages?: number },
+  input: { knownHead: AccessLogHead | null; now: number; maxPages?: number; knownFromGenesis?: boolean },
 ): Promise<LoadedAccessLog> {
   const first = await client.workspaceAccessLog({ limit: 200 });
   const entries = [...first.entries];
   const groups = [...(first.hostSessionGroups ?? [])];
   const windowStart = input.now - ACCESS_LOG_STATUS_DAYS * 86_400_000;
-  const target = input.knownHead ? input.knownHead.seq + 1 : 1;
+  // Back to the kept head only once this device has checked back to seq 1; else to seq 1.
+  const target = input.knownHead && input.knownFromGenesis ? input.knownHead.seq + 1 : 1;
   const maxPages = input.maxPages ?? 20;
   let before = first.nextBefore;
   let pages = 1;
+  const newestFirst = (a: AccessLogEntry, b: AccessLogEntry) => b.seq - a.seq;
+  entries.sort(newestFirst);
   while (before) {
     const oldest = entries[entries.length - 1];
     const coversWindow = !oldest || Date.parse(oldest.occurredAt) < windowStart;
@@ -499,6 +514,7 @@ export async function loadAccessLog(
     if (next.workspaceId !== first.workspaceId) break;
     const limit = before;
     entries.push(...next.entries.filter((entry) => entry.seq < limit));
+    entries.sort(newestFirst);
     groups.push(...(next.hostSessionGroups ?? []));
     before = next.nextBefore;
   }
@@ -540,25 +556,25 @@ export async function loadAndCheckAccessLog(
   options: { maxPages?: number } = {},
 ): Promise<{ log: LoadedAccessLog; check: AccessLogCheck }> {
   const key = accessLogHeadStorageKey(workspaceId);
-  let known: AccessLogDeviceRecord = { head: null, keySha256: null };
+  let known: AccessLogDeviceRecord = { head: null, keySha256: null, fromGenesis: false };
   let memory: "ok" | "unreadable" = "ok";
   try {
     known = parseAccessLogRecord(store ? await store.read(key) : null);
   } catch {
     memory = "unreadable";
   }
-  const log = await loadAccessLog(client, { knownHead: known.head, now, maxPages: options.maxPages });
+  const log = await loadAccessLog(client, { knownHead: known.head, now, maxPages: options.maxPages, knownFromGenesis: known.fromGenesis });
   const verified: AccessLogCheck = log.workspaceId === workspaceId
     ? verifyAccessLog({
         workspaceId, head: log.head, entries: log.entries, knownHead: known.head, knownKeySha256: known.keySha256,
-        keySha256: accessLogKeySha256(log), exhausted: log.exhausted, serverGroups: log.hostSessionGroups,
+        keySha256: accessLogKeySha256(log), exhausted: log.exhausted, serverGroups: log.hostSessionGroups, knownFromGenesis: known.fromGenesis,
       })
     : { state: "failed", reason: "wrong_workspace", seq: null };
   const check: AccessLogCheck = verified.state === "verified" ? { ...verified, memory } : verified;
   // The key fingerprint is kept from its first use; a changed key is a failed check and is never stored.
   if (check.state === "verified" && check.memory === "ok" && check.reachedKnownHead && (check.head || check.keySha256) && store) {
     try {
-      await store.write(key, serializeAccessLogRecord({ head: check.head ?? known.head, keySha256: known.keySha256 ?? check.keySha256 }));
+      await store.write(key, serializeAccessLogRecord({ head: check.head ?? known.head, keySha256: known.keySha256 ?? check.keySha256, fromGenesis: check.complete }));
     } catch {
       // Storage unavailable: the check still ran; the next visit compares against nothing.
     }
@@ -628,7 +644,7 @@ export function accessLogView(log: LoadedAccessLog, check: AccessLogCheck, local
   const windowStart = now - ACCESS_LOG_STATUS_DAYS * 86_400_000;
   const accessCount = log.entries.filter((entry) => entry.actorKind !== "automated_maintenance" && Date.parse(entry.occurredAt) >= windowStart).length;
   const status = accessCount === 0 ? copy.statusNone : accessCount === 1 ? copy.statusOne : fill(copy.statusMany, { count: accessCount });
-  const complete = check.state === "verified" && (check.fromGenesis || (check.knownHeadUsed && check.reachedKnownHead));
+  const complete = check.state === "verified" && check.complete;
   const checkLine: AccessLogCheckLine = check.state === "failed"
     ? { tone: "warning", text: check.reason === "key_changed" ? copy.checkKeyChanged : copy.checkFailed }
     : check.memory === "unreadable"
@@ -678,7 +694,8 @@ export function accessLogView(log: LoadedAccessLog, check: AccessLogCheck, local
 }
 
 // ---------------------------------------------------------------------------
-// Copy. Company: HODL Media. Product: always "Hey Hermes". German uses "Du".
+// Copy. Company: HODL Media. Product: always "Hey Hermes". German says "du" in
+// lower case mid-sentence, as the rest of the app does.
 
 type AccessLogActions = {
   "fcadm.guest-agent-program": string;
