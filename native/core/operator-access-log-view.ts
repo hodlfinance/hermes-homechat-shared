@@ -9,9 +9,11 @@ import type { AppLocale } from "./types";
  * The device recomputes the hash chain from the answer of
  * GET /workspace/access-log with the same canonical JSON and SHA-256 as
  * apps/api/src/operator-access-log.ts, keeps the last head it saw per
- * workspace, and warns when a later answer does not extend it. "Publicly
- * anchored" is shown only from the anchor fields the server returns, after the
- * Merkle path in them recomputes to their root. Checking the Rekor entry itself
+ * workspace, and warns when a later answer does not extend it. "Also stored
+ * in a public register" is shown only from the anchor fields the server
+ * returns, after the Merkle path in them recomputes to their root. Host-login
+ * groups and "recorded late" are worked out here from the checked entries;
+ * the server's own values are only compared. Checking the Rekor entry itself
  * is left to verify.mjs. Contract: docs/hpd-1737-operator-access-log.md.
  *
  * Pure code only (no node:crypto, no Web Crypto): it runs the same in a
@@ -270,11 +272,55 @@ export type AccessLogFailure =
   | "anchor_mismatch"
   | "rolled_back"
   | "rewritten"
-  | "key_changed";
+  | "key_changed"
+  /** The server's host-login groups or late flags differ from what the entries say. */
+  | "server_mismatch";
 
 export type AccessLogCheck =
-  | { state: "verified"; anchored: boolean; head: AccessLogHead | null; reachedKnownHead: boolean; keySha256: string | null }
+  | {
+      state: "verified";
+      anchored: boolean;
+      head: AccessLogHead | null;
+      /** False only when the page limit stopped loading before the head this device kept. */
+      reachedKnownHead: boolean;
+      /** The checked run starts at seq 1 (or the log is empty). */
+      fromGenesis: boolean;
+      /** A head kept from an earlier visit was compared. */
+      knownHeadUsed: boolean;
+      /** "unreadable": the device's storage could not be read, so nothing was compared or kept. */
+      memory: "ok" | "unreadable";
+      keySha256: string | null;
+    }
   | { state: "failed"; reason: AccessLogFailure; seq: number | null };
+
+/** Late, as the Plane defines it: Rekor integrated the anchor more than 15 minutes after the entry was recorded. */
+export const ACCESS_LOG_LATE_SECONDS = 15 * 60;
+
+export function accessLogAnchoredLate(entry: Pick<AccessLogEntry, "recordedAt" | "anchor">): boolean {
+  if (entry.anchor === "pending" || typeof entry.anchor.integratedTime !== "number") return false;
+  return entry.anchor.integratedTime - Math.floor(Date.parse(entry.recordedAt) / 1000) > ACCESS_LOG_LATE_SECONDS;
+}
+
+/** Host logins per actor and UTC hour of recordedAt, the same grouping as the Plane's hostSessionGroups. */
+export function accessLogHostSessionGroups(entries: readonly AccessLogEntry[]): AccessLogHostSessionGroup[] {
+  const groups = new Map<string, AccessLogHostSessionGroup>();
+  for (const entry of entries) {
+    if (entry.actorKind !== "host_session") continue;
+    const hour = `${entry.recordedAt.slice(0, 13)}:00:00Z`;
+    const key = `${entry.actor}\u0000${hour}`;
+    const group = groups.get(key);
+    if (group) groups.set(key, { ...group, count: group.count + 1, firstSeq: Math.min(group.firstSeq, entry.seq), lastSeq: Math.max(group.lastSeq, entry.seq) });
+    else groups.set(key, { actor: entry.actor, hour, count: 1, firstSeq: entry.seq, lastSeq: entry.seq });
+  }
+  return [...groups.values()].sort((a, b) => b.lastSeq - a.lastSeq);
+}
+
+function sameGroups(a: readonly AccessLogHostSessionGroup[], b: readonly AccessLogHostSessionGroup[]): boolean {
+  const key = (group: AccessLogHostSessionGroup) => `${group.actor}\u0000${group.hour}\u0000${group.count}\u0000${group.firstSeq}\u0000${group.lastSeq}`;
+  const left = a.map(key).sort();
+  const right = b.map(key).sort();
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
 
 const HEX64 = /^[0-9a-f]{64}$/;
 
@@ -320,9 +366,7 @@ export function accessLogKeySha256(log: { anchorKeySha256?: string | null; entri
   return null;
 }
 
-export function accessLogEntryLate(entry: AccessLogEntry): boolean {
-  return entry.anchor !== "pending" && entry.anchor.late === true;
-}
+
 
 /**
  * `entries` is the newest-first run of one workspace as loaded (the first page
@@ -336,15 +380,20 @@ export function verifyAccessLog(input: {
   /** The anchor key fingerprint this device stored on first use, and the one in this answer. */
   knownKeySha256?: string | null;
   keySha256?: string | null;
+  /** The server said there is nothing older than the loaded run (nextBefore null). */
+  exhausted?: boolean;
+  /** The server's hostSessionGroups for the loaded pages, compared with the device's own. */
+  serverGroups?: readonly AccessLogHostSessionGroup[];
 }): AccessLogCheck {
   const { workspaceId, head, knownHead } = input;
+  const knownHeadUsed = knownHead !== null;
   const keySha256 = input.keySha256 ?? null;
   if (input.knownKeySha256 && keySha256 && input.knownKeySha256 !== keySha256) return { state: "failed", reason: "key_changed", seq: null };
   const ascending = [...input.entries].sort((a, b) => a.seq - b.seq);
   if (!head) {
     if (ascending.length) return { state: "failed", reason: "head_mismatch", seq: ascending[ascending.length - 1]!.seq };
     if (knownHead) return { state: "failed", reason: "rolled_back", seq: knownHead.seq };
-    return { state: "verified", anchored: false, head: null, reachedKnownHead: true, keySha256 };
+    return { state: "verified", anchored: false, head: null, reachedKnownHead: true, fromGenesis: true, knownHeadUsed, memory: "ok", keySha256 };
   }
   const newest = ascending[ascending.length - 1];
   if (!newest || newest.seq !== head.seq || newest.entryHash !== head.entryHash) return { state: "failed", reason: "head_mismatch", seq: head.seq };
@@ -371,13 +420,20 @@ export function verifyAccessLog(input: {
       if (seen !== knownHead.entryHash) return { state: "failed", reason: "rewritten", seq: knownHead.seq };
     } else if (knownHead.seq === oldest.seq - 1) {
       if (oldest.prevHash !== knownHead.entryHash) return { state: "failed", reason: "rewritten", seq: knownHead.seq };
+    } else if (input.exhausted) {
+      // The server says there is nothing older, yet the run does not reach what this device saw.
+      return { state: "failed", reason: "gap", seq: knownHead.seq };
     } else {
       reachedKnownHead = false;
     }
   }
+  // "Nothing older" while the run does not start at seq 1 is a gap too.
+  if (input.exhausted && oldest.seq > 1) return { state: "failed", reason: "gap", seq: oldest.seq - 1 };
   for (const entry of ascending) {
     const anchor = entry.anchor;
     if (anchor === "pending") continue;
+    // An anchor over a later head than the one served: entries were cut, anchors kept.
+    if (anchor.headSeq > head.seq) return { state: "failed", reason: "rolled_back", seq: anchor.headSeq };
     const anchoredHash = bySeq.get(anchor.headSeq);
     if (anchor.headSeq < entry.seq || (anchoredHash !== undefined && anchoredHash !== anchor.headHash)) {
       return { state: "failed", reason: "anchor_mismatch", seq: entry.seq };
@@ -386,8 +442,10 @@ export function verifyAccessLog(input: {
     if (root !== anchor.merkleRoot || (anchor.payload?.merkleRoot !== undefined && anchor.payload.merkleRoot !== anchor.merkleRoot)) {
       return { state: "failed", reason: "anchor_mismatch", seq: entry.seq };
     }
+    if (typeof anchor.late === "boolean" && anchor.late !== accessLogAnchoredLate(entry)) return { state: "failed", reason: "server_mismatch", seq: entry.seq };
   }
-  return { state: "verified", anchored: newest.anchor !== "pending", head, reachedKnownHead, keySha256 };
+  if (input.serverGroups && !sameGroups(input.serverGroups, accessLogHostSessionGroups(ascending))) return { state: "failed", reason: "server_mismatch", seq: null };
+  return { state: "verified", anchored: newest.anchor !== "pending", head, reachedKnownHead, fromGenesis: oldest.seq === 1, knownHeadUsed, memory: "ok", keySha256 };
 }
 
 // ---------------------------------------------------------------------------
@@ -401,9 +459,19 @@ export interface LoadedAccessLog {
   verifyScriptUrl: string;
   anchorKeySha256: string | null;
   entries: AccessLogEntry[];
+  /** The server's groups, merged over the loaded pages; shown only after they match the device's own. */
   hostSessionGroups: AccessLogHostSessionGroup[];
+  /** The server said there is nothing older than the loaded run. */
+  exhausted: boolean;
+  /** The loaded run reaches back past the 30-day status window (or to the start). */
+  coversWindow: boolean;
 }
 
+/**
+ * Loads newest first. A first visit (nothing kept) loads back to seq 1; a
+ * later visit loads back to the head it kept. Either way also the 30-day
+ * window. Bounded by `maxPages`; an older page that fails ends loading.
+ */
 export async function loadAccessLog(
   client: AccessLogClient,
   input: { knownHead: AccessLogHead | null; now: number; maxPages?: number },
@@ -412,18 +480,29 @@ export async function loadAccessLog(
   const entries = [...first.entries];
   const groups = [...(first.hostSessionGroups ?? [])];
   const windowStart = input.now - ACCESS_LOG_STATUS_DAYS * 86_400_000;
+  const target = input.knownHead ? input.knownHead.seq + 1 : 1;
+  const maxPages = input.maxPages ?? 20;
   let before = first.nextBefore;
-  for (let page = 1; before && page < (input.maxPages ?? 20); page += 1) {
+  let pages = 1;
+  while (before) {
     const oldest = entries[entries.length - 1];
     const coversWindow = !oldest || Date.parse(oldest.occurredAt) < windowStart;
-    const coversKnownHead = !input.knownHead || (oldest !== undefined && oldest.seq <= input.knownHead.seq + 1);
-    if (coversWindow && coversKnownHead) break;
-    const next = await client.workspaceAccessLog({ limit: 500, before });
+    const coversTarget = oldest !== undefined && oldest.seq <= target;
+    if ((coversWindow && coversTarget) || pages >= maxPages) break;
+    let next: AccessLogResponse;
+    try {
+      next = await client.workspaceAccessLog({ limit: 500, before });
+    } catch {
+      break;
+    }
+    pages += 1;
     if (next.workspaceId !== first.workspaceId) break;
-    entries.push(...next.entries.filter((entry) => entry.seq < before!));
+    const limit = before;
+    entries.push(...next.entries.filter((entry) => entry.seq < limit));
     groups.push(...(next.hostSessionGroups ?? []));
     before = next.nextBefore;
   }
+  const oldestLoaded = entries[entries.length - 1];
   return {
     workspaceId: first.workspaceId,
     head: first.head,
@@ -432,6 +511,8 @@ export async function loadAccessLog(
     anchorKeySha256: first.anchorKeySha256 ?? null,
     entries: entries.sort((a, b) => b.seq - a.seq),
     hostSessionGroups: mergeHostSessionGroups(groups),
+    exhausted: before === null,
+    coversWindow: before === null || !oldestLoaded || Date.parse(oldestLoaded.occurredAt) < windowStart,
   };
 }
 
@@ -447,28 +528,35 @@ function mergeHostSessionGroups(groups: readonly AccessLogHostSessionGroup[]): A
 }
 
 /**
- * Loads, checks, and keeps the new head only when the check passed. A failed
- * check never overwrites the head the device saw before.
+ * Loads, checks, and keeps the new head only when the check passed and
+ * reached the head kept before. A failed or partial check never overwrites
+ * it; a storage read error compares nothing and writes nothing.
  */
 export async function loadAndCheckAccessLog(
   client: AccessLogClient,
   store: AccessLogHeadStore | null,
   workspaceId: string,
   now: number,
+  options: { maxPages?: number } = {},
 ): Promise<{ log: LoadedAccessLog; check: AccessLogCheck }> {
   const key = accessLogHeadStorageKey(workspaceId);
   let known: AccessLogDeviceRecord = { head: null, keySha256: null };
+  let memory: "ok" | "unreadable" = "ok";
   try {
     known = parseAccessLogRecord(store ? await store.read(key) : null);
   } catch {
-    known = { head: null, keySha256: null };
+    memory = "unreadable";
   }
-  const log = await loadAccessLog(client, { knownHead: known.head, now });
-  const check: AccessLogCheck = log.workspaceId === workspaceId
-    ? verifyAccessLog({ workspaceId, head: log.head, entries: log.entries, knownHead: known.head, knownKeySha256: known.keySha256, keySha256: accessLogKeySha256(log) })
+  const log = await loadAccessLog(client, { knownHead: known.head, now, maxPages: options.maxPages });
+  const verified: AccessLogCheck = log.workspaceId === workspaceId
+    ? verifyAccessLog({
+        workspaceId, head: log.head, entries: log.entries, knownHead: known.head, knownKeySha256: known.keySha256,
+        keySha256: accessLogKeySha256(log), exhausted: log.exhausted, serverGroups: log.hostSessionGroups,
+      })
     : { state: "failed", reason: "wrong_workspace", seq: null };
+  const check: AccessLogCheck = verified.state === "verified" ? { ...verified, memory } : verified;
   // The key fingerprint is kept from its first use; a changed key is a failed check and is never stored.
-  if (check.state === "verified" && (check.head || check.keySha256) && store) {
+  if (check.state === "verified" && check.memory === "ok" && check.reachedKnownHead && (check.head || check.keySha256) && store) {
     try {
       await store.write(key, serializeAccessLogRecord({ head: check.head ?? known.head, keySha256: known.keySha256 ?? check.keySha256 }));
     } catch {
@@ -540,15 +628,20 @@ export function accessLogView(log: LoadedAccessLog, check: AccessLogCheck, local
   const windowStart = now - ACCESS_LOG_STATUS_DAYS * 86_400_000;
   const accessCount = log.entries.filter((entry) => entry.actorKind !== "automated_maintenance" && Date.parse(entry.occurredAt) >= windowStart).length;
   const status = accessCount === 0 ? copy.statusNone : accessCount === 1 ? copy.statusOne : fill(copy.statusMany, { count: accessCount });
+  const complete = check.state === "verified" && (check.fromGenesis || (check.knownHeadUsed && check.reachedKnownHead));
   const checkLine: AccessLogCheckLine = check.state === "failed"
     ? { tone: "warning", text: check.reason === "key_changed" ? copy.checkKeyChanged : copy.checkFailed }
-    : !check.reachedKnownHead
-      ? { tone: "pending", text: copy.checkPartial }
-      : !check.head
-        ? { tone: "ok", text: copy.checkEmpty }
-        : check.anchored
-          ? { tone: "ok", text: copy.checkOk }
-          : { tone: "pending", text: copy.checkPending };
+    : check.memory === "unreadable"
+      ? { tone: "pending", text: copy.checkNoMemory }
+      : !check.reachedKnownHead
+        ? { tone: "pending", text: copy.checkPartial }
+        : !complete
+          ? { tone: "pending", text: log.coversWindow ? copy.checkWindow : copy.checkPartial }
+          : !check.head
+            ? { tone: "ok", text: copy.checkEmpty }
+            : check.anchored
+              ? { tone: "ok", text: copy.checkOk }
+              : { tone: "pending", text: copy.checkPending };
   const people = log.entries
     .filter((entry) => entry.actorKind === "human_operator" || entry.actorKind === "support_grant")
     .map((entry) => ({
@@ -558,10 +651,11 @@ export function accessLogView(log: LoadedAccessLog, check: AccessLogCheck, local
       what: accessLogActionText(entry.action, locale),
       why: entry.reason,
       seq: entry.seq,
-      late: accessLogEntryLate(entry),
+      late: accessLogAnchoredLate(entry),
     }));
   const bySeq = new Map(log.entries.map((entry) => [entry.seq, entry]));
-  const hostGroups = log.hostSessionGroups.map((group) => ({
+  // Worked out from the checked entries; the server's groups were only compared.
+  const hostGroups = accessLogHostSessionGroups(log.entries).map((group) => ({
     key: `host:${group.actor}:${group.hour}`,
     when: formatWhen(group.hour, locale),
     text: fill(group.count === 1 ? copy.hostGroupOne : copy.hostGroupMany, { count: group.count, actor: group.actor }),
@@ -577,7 +671,7 @@ export function accessLogView(log: LoadedAccessLog, check: AccessLogCheck, local
       ? {
           count: automated.length,
           summary: fill(automated.length === 1 ? copy.maintenanceOne : copy.maintenanceMany, { count: automated.length }),
-          rows: automated.map((entry) => ({ key: `entry:${entry.seq}`, when: formatWhen(entry.occurredAt, locale), what: accessLogActionText(entry.action, locale), late: accessLogEntryLate(entry) })),
+          rows: automated.map((entry) => ({ key: `entry:${entry.seq}`, when: formatWhen(entry.occurredAt, locale), what: accessLogActionText(entry.action, locale), late: accessLogAnchoredLate(entry) })),
         }
       : null,
   };
@@ -617,6 +711,8 @@ export type AccessLogCopy = {
   checkPartial: string;
   checkFailed: string;
   checkKeyChanged: string;
+  checkWindow: string;
+  checkNoMemory: string;
   recordedLate: string;
   peopleTitle: string;
   peopleNone: string;
@@ -653,13 +749,15 @@ const en: AccessLogCopy = {
   statusNone: "No access by HODL Media in the last 30 days",
   statusOne: "1 access by HODL Media in the last 30 days — see below",
   statusMany: "{count} accesses by HODL Media in the last 30 days — see below",
-  checkOk: "Checked: the record is complete and publicly anchored",
-  checkPending: "Checked: the record is complete. It is being publicly anchored.",
+  checkOk: "Checked: the record is complete and also stored in a public register we don't run",
+  checkPending: "Checked: the record is complete. It will shortly also be stored in a public register we don't run.",
   checkEmpty: "Checked: the record is complete",
   checkPartial: "Checked: the newest part of the record is complete. Older parts could not be loaded right now.",
   checkFailed: "Warning: this record could not be confirmed. It does not match its checksums or what this device saw before. Please contact support.",
   checkKeyChanged: "Warning: the key that signs this record has changed since this device first saw it. Please contact support before you trust this record.",
-  recordedLate: "Recorded late",
+  checkWindow: "Checked for the last 30 days: complete for that time. Older entries could not be loaded right now.",
+  checkNoMemory: "Checked, but this device could not read what it saw on your last visit, so changes since then could not be compared.",
+  recordedLate: "Recorded late, so check it more closely",
   peopleTitle: "People and support",
   peopleNone: "No one from HODL Media accessed your server.",
   whoOperator: "HODL Media team member ({actor})",
@@ -697,9 +795,9 @@ const en: AccessLogCopy = {
 };
 
 const de: AccessLogCopy = {
-  title: "Zugriffe auf Deinen Server",
-  entryLabel: "Zugriffe auf Deinen Server",
-  entryHint: "Jedes Mal, wenn HODL Media Deinen Server berührt hat",
+  title: "Zugriffe auf deinen Server",
+  entryLabel: "Zugriffe auf deinen Server",
+  entryHint: "Jedes Mal, wenn HODL Media deinen Server berührt hat",
   close: "Schließen",
   loading: "Protokoll wird geladen…",
   loadFailed: "Das Protokoll konnte nicht geladen werden. Bitte versuche es später noch einmal.",
@@ -707,21 +805,23 @@ const de: AccessLogCopy = {
   statusNone: "Kein Zugriff durch HODL Media in den letzten 30 Tagen",
   statusOne: "1 Zugriff durch HODL Media in den letzten 30 Tagen – siehe unten",
   statusMany: "{count} Zugriffe durch HODL Media in den letzten 30 Tagen – siehe unten",
-  checkOk: "Geprüft: Das Protokoll ist vollständig und öffentlich verankert",
-  checkPending: "Geprüft: Das Protokoll ist vollständig. Es wird gerade öffentlich verankert.",
+  checkOk: "Geprüft: Das Protokoll ist vollständig und liegt zusätzlich in einem öffentlichen Register, das wir nicht betreiben",
+  checkPending: "Geprüft: Das Protokoll ist vollständig. Es kommt in Kürze zusätzlich in ein öffentliches Register, das wir nicht betreiben.",
   checkEmpty: "Geprüft: Das Protokoll ist vollständig",
   checkPartial: "Geprüft: Der neueste Teil des Protokolls ist vollständig. Ältere Teile ließen sich gerade nicht laden.",
-  checkFailed: "Achtung: Dieses Protokoll ließ sich nicht bestätigen. Es passt nicht zu seinen Prüfsummen oder zu dem, was dieses Gerät vorher gesehen hat. Bitte wende Dich an den Support.",
-  checkKeyChanged: "Achtung: Der Schlüssel, der dieses Protokoll signiert, hat sich geändert, seit dieses Gerät es zum ersten Mal gesehen hat. Bitte wende Dich an den Support, bevor Du diesem Protokoll vertraust.",
-  recordedLate: "Verspätet erfasst",
+  checkFailed: "Achtung: Dieses Protokoll ließ sich nicht bestätigen. Es passt nicht zu seinen Prüfsummen oder zu dem, was dieses Gerät vorher gesehen hat. Bitte wende dich an den Support.",
+  checkKeyChanged: "Achtung: Der Schlüssel, der dieses Protokoll signiert, hat sich geändert, seit dieses Gerät es zum ersten Mal gesehen hat. Bitte wende dich an den Support, bevor du diesem Protokoll vertraust.",
+  checkWindow: "Für die letzten 30 Tage geprüft: für diese Zeit vollständig. Ältere Einträge ließen sich gerade nicht laden.",
+  checkNoMemory: "Geprüft, aber dieses Gerät konnte nicht lesen, was es bei deinem letzten Besuch gesehen hat. Änderungen seitdem ließen sich deshalb nicht vergleichen.",
+  recordedLate: "Verspätet erfasst, schau ihn dir deshalb genauer an",
   peopleTitle: "Personen und Support",
-  peopleNone: "Niemand von HODL Media hat auf Deinen Server zugegriffen.",
+  peopleNone: "Niemand von HODL Media hat auf deinen Server zugegriffen.",
   whoOperator: "Mitarbeiter von HODL Media ({actor})",
-  whoSupport: "Support, mit Deiner Freigabe",
+  whoSupport: "Support, mit deiner Freigabe",
   whoLabel: "Wer",
   whatLabel: "Was",
   whyLabel: "Warum",
-  hostTitle: "Administrator-Anmeldungen auf dem Rechner, auf dem Dein Server läuft",
+  hostTitle: "Administrator-Anmeldungen auf dem Rechner, auf dem dein Server läuft",
   hostGroupOne: "1 Anmeldung von {actor}",
   hostGroupMany: "{count} Anmeldungen von {actor}",
   maintenanceOne: "Automatische Wartung: 1-mal",
@@ -729,24 +829,24 @@ const de: AccessLogCopy = {
   showDetails: "Anzeigen",
   hideDetails: "Ausblenden",
   actions: {
-    "fcadm.guest-agent-program": "Ein Wartungsprogramm auf Deinem Server ausgeführt",
-    "fcadm.guest-logs": "Das technische Protokoll Deines Servers gelesen",
-    "fcadm.guest-secret-scan": "Die Dateien Deines Servers auf zurückgebliebene Mitarbeiterschlüssel geprüft",
-    "fcadm.guest-scan-remove": "Eine Datei von Deinem Server entfernt",
-    "fcadm.guest-backup": "Eine verschlüsselte Sicherung Deines Servers erstellt",
-    "fcadm.guest-export": "Deinen privaten Speicher geöffnet, um Deine Dateien zu kopieren",
+    "fcadm.guest-agent-program": "Ein Wartungsprogramm auf deinem Server ausgeführt",
+    "fcadm.guest-logs": "Das technische Protokoll deines Servers gelesen",
+    "fcadm.guest-secret-scan": "Die Dateien deines Servers auf zurückgebliebene Mitarbeiterschlüssel geprüft",
+    "fcadm.guest-scan-remove": "Eine Datei von deinem Server entfernt",
+    "fcadm.guest-backup": "Eine verschlüsselte Sicherung deines Servers erstellt",
+    "fcadm.guest-export": "Deinen privaten Speicher geöffnet, um deine Dateien zu kopieren",
     "fcadm.guest-export-full": "Deinen ganzen Server kopiert",
     "fcadm.guest-test-state-export": "Den Speicher eines Testservers geöffnet",
     "fcadm.guest-restore": "Deinen Server aus einer Sicherung wiederhergestellt",
     "ssh.session-open": "Als Administrator angemeldet",
-    "support.grant-diagnostics": "Die von Dir erlaubte Zustandsprüfung ausgeführt",
+    "support.grant-diagnostics": "Die von dir erlaubte Zustandsprüfung ausgeführt",
   },
   actionOther: "Anderer Zugriff",
   verifyTitle: "Selbst prüfen",
-  verifyBody: "Jeder Eintrag ist über eine Prüfsumme mit dem vorherigen verbunden. Kein Eintrag lässt sich deshalb ändern oder entfernen, ohne dass es auffällt. Ein Fingerabdruck des Protokolls wird regelmäßig im öffentlichen Transparenzprotokoll von Sigstore veröffentlicht, wo ihn niemand – auch HODL Media nicht – nachträglich ändern kann. Diese App prüft die Prüfsummen jedes Mal, wenn Du diese Seite öffnest. Mit dem kostenlosen Programm verify.mjs und Node.js kannst Du das Protokoll und seinen öffentlichen Fingerabdruck auf Deinem eigenen Computer prüfen.",
+  verifyBody: "Jeder Eintrag ist über eine Prüfsumme mit dem vorherigen verbunden. Kein Eintrag lässt sich deshalb ändern oder entfernen, ohne dass es auffällt. Ein Fingerabdruck des Protokolls wird regelmäßig im öffentlichen Transparenzprotokoll von Sigstore veröffentlicht, wo ihn niemand – auch HODL Media nicht – nachträglich ändern kann. Diese App prüft die Prüfsummen jedes Mal, wenn du diese Seite öffnest. Mit dem kostenlosen Programm verify.mjs und Node.js kannst du das Protokoll und seinen öffentlichen Fingerabdruck auf deinem eigenen Computer prüfen.",
   verifyLink: "verify.mjs herunterladen",
   supportTitle: "Supportzugriff",
-  supportBody: "Der Support kann Deinen Server nur mit einem zeitlich begrenzten Code ansehen, den Du erstellst.",
+  supportBody: "Der Support kann deinen Server nur mit einem zeitlich begrenzten Code ansehen, den du erstellst.",
   supportLink: "Supportzugriff geben",
 };
 
@@ -761,13 +861,15 @@ const fr: AccessLogCopy = {
   statusNone: "Aucun accès par HODL Media au cours des 30 derniers jours",
   statusOne: "1 accès par HODL Media au cours des 30 derniers jours — voir ci-dessous",
   statusMany: "{count} accès par HODL Media au cours des 30 derniers jours — voir ci-dessous",
-  checkOk: "Vérifié : le registre est complet et ancré publiquement",
-  checkPending: "Vérifié : le registre est complet. Son ancrage public est en cours.",
+  checkOk: "Vérifié : le registre est complet et figure aussi dans un registre public que nous ne gérons pas",
+  checkPending: "Vérifié : le registre est complet. Il figurera bientôt aussi dans un registre public que nous ne gérons pas.",
   checkEmpty: "Vérifié : le registre est complet",
   checkPartial: "Vérifié : la partie la plus récente du registre est complète. Les parties plus anciennes n’ont pas pu être chargées pour le moment.",
   checkFailed: "Attention : ce registre n’a pas pu être confirmé. Il ne correspond pas à ses sommes de contrôle ou à ce que cet appareil a vu auparavant. Veuillez contacter le support.",
   checkKeyChanged: "Attention : la clé qui signe ce registre a changé depuis que cet appareil l’a vu pour la première fois. Contactez le support avant de vous fier à ce registre.",
-  recordedLate: "Enregistré en retard",
+  checkWindow: "Vérifié pour les 30 derniers jours : complet pour cette période. Les entrées plus anciennes n’ont pas pu être chargées pour le moment.",
+  checkNoMemory: "Vérifié, mais cet appareil n’a pas pu lire ce qu’il avait vu lors de votre dernière visite : les changements depuis n’ont pas pu être comparés.",
+  recordedLate: "Enregistré en retard, examinez-le donc de plus près",
   peopleTitle: "Personnes et support",
   peopleNone: "Personne de HODL Media n’a accédé à votre serveur.",
   whoOperator: "Membre de l’équipe HODL Media ({actor})",
@@ -815,13 +917,15 @@ const es: AccessLogCopy = {
   statusNone: "Ningún acceso de HODL Media en los últimos 30 días",
   statusOne: "1 acceso de HODL Media en los últimos 30 días — ver abajo",
   statusMany: "{count} accesos de HODL Media en los últimos 30 días — ver abajo",
-  checkOk: "Comprobado: el registro está completo y anclado públicamente",
-  checkPending: "Comprobado: el registro está completo. Se está anclando públicamente.",
+  checkOk: "Comprobado: el registro está completo y además guardado en un registro público que no gestionamos nosotros",
+  checkPending: "Comprobado: el registro está completo. En breve se guardará también en un registro público que no gestionamos nosotros.",
   checkEmpty: "Comprobado: el registro está completo",
   checkPartial: "Comprobado: la parte más reciente del registro está completa. Las partes anteriores no se pudieron cargar ahora.",
   checkFailed: "Atención: no se pudo confirmar este registro. No coincide con sus sumas de verificación o con lo que este dispositivo vio antes. Contacta con soporte.",
   checkKeyChanged: "Atención: la clave que firma este registro ha cambiado desde que este dispositivo lo vio por primera vez. Contacta con soporte antes de fiarte de este registro.",
-  recordedLate: "Registrado con retraso",
+  checkWindow: "Comprobado para los últimos 30 días: completo para ese periodo. Las entradas anteriores no se pudieron cargar ahora.",
+  checkNoMemory: "Comprobado, pero este dispositivo no pudo leer lo que vio en tu última visita, así que no se pudieron comparar los cambios desde entonces.",
+  recordedLate: "Registrado con retraso, revísalo con más atención",
   peopleTitle: "Personas y soporte",
   peopleNone: "Nadie de HODL Media accedió a tu servidor.",
   whoOperator: "Miembro del equipo de HODL Media ({actor})",
@@ -869,13 +973,15 @@ const it: AccessLogCopy = {
   statusNone: "Nessun accesso da parte di HODL Media negli ultimi 30 giorni",
   statusOne: "1 accesso da parte di HODL Media negli ultimi 30 giorni — vedi sotto",
   statusMany: "{count} accessi da parte di HODL Media negli ultimi 30 giorni — vedi sotto",
-  checkOk: "Verificato: il registro è completo e ancorato pubblicamente",
-  checkPending: "Verificato: il registro è completo. L’ancoraggio pubblico è in corso.",
+  checkOk: "Verificato: il registro è completo ed è conservato anche in un registro pubblico che non gestiamo noi",
+  checkPending: "Verificato: il registro è completo. A breve sarà conservato anche in un registro pubblico che non gestiamo noi.",
   checkEmpty: "Verificato: il registro è completo",
   checkPartial: "Verificato: la parte più recente del registro è completa. Le parti più vecchie non si sono potute caricare ora.",
   checkFailed: "Attenzione: non è stato possibile confermare questo registro. Non corrisponde alle sue somme di controllo o a ciò che questo dispositivo ha visto prima. Contatta l’assistenza.",
   checkKeyChanged: "Attenzione: la chiave che firma questo registro è cambiata da quando questo dispositivo lo ha visto la prima volta. Contatta l’assistenza prima di fidarti di questo registro.",
-  recordedLate: "Registrato in ritardo",
+  checkWindow: "Verificato per gli ultimi 30 giorni: completo per quel periodo. Le voci più vecchie non si sono potute caricare ora.",
+  checkNoMemory: "Verificato, ma questo dispositivo non ha potuto leggere ciò che aveva visto alla tua ultima visita, quindi i cambiamenti da allora non sono stati confrontati.",
+  recordedLate: "Registrato in ritardo, quindi controllalo con più attenzione",
   peopleTitle: "Persone e assistenza",
   peopleNone: "Nessuno di HODL Media ha avuto accesso al tuo server.",
   whoOperator: "Membro del team HODL Media ({actor})",
@@ -923,13 +1029,15 @@ const ptBR: AccessLogCopy = {
   statusNone: "Nenhum acesso da HODL Media nos últimos 30 dias",
   statusOne: "1 acesso da HODL Media nos últimos 30 dias — veja abaixo",
   statusMany: "{count} acessos da HODL Media nos últimos 30 dias — veja abaixo",
-  checkOk: "Verificado: o registro está completo e ancorado publicamente",
-  checkPending: "Verificado: o registro está completo. Ele está sendo ancorado publicamente.",
+  checkOk: "Verificado: o registro está completo e também guardado em um registro público que não é nosso",
+  checkPending: "Verificado: o registro está completo. Em breve ele também será guardado em um registro público que não é nosso.",
   checkEmpty: "Verificado: o registro está completo",
   checkPartial: "Verificado: a parte mais recente do registro está completa. As partes mais antigas não puderam ser carregadas agora.",
   checkFailed: "Atenção: não foi possível confirmar este registro. Ele não corresponde às suas somas de verificação ou ao que este dispositivo viu antes. Entre em contato com o suporte.",
   checkKeyChanged: "Atenção: a chave que assina este registro mudou desde que este dispositivo o viu pela primeira vez. Entre em contato com o suporte antes de confiar neste registro.",
-  recordedLate: "Registrado com atraso",
+  checkWindow: "Verificado para os últimos 30 dias: completo nesse período. As entradas mais antigas não puderam ser carregadas agora.",
+  checkNoMemory: "Verificado, mas este dispositivo não conseguiu ler o que viu na sua última visita, então as mudanças desde então não puderam ser comparadas.",
+  recordedLate: "Registrado com atraso, então confira com mais atenção",
   peopleTitle: "Pessoas e suporte",
   peopleNone: "Ninguém da HODL Media acessou o seu servidor.",
   whoOperator: "Membro da equipe HODL Media ({actor})",
@@ -977,13 +1085,15 @@ const ja: AccessLogCopy = {
   statusNone: "過去30日間、HODL Mediaによるアクセスはありません",
   statusOne: "過去30日間にHODL Mediaによるアクセスが1件あります — 下記をご覧ください",
   statusMany: "過去30日間にHODL Mediaによるアクセスが{count}件あります — 下記をご覧ください",
-  checkOk: "確認済み：記録は完全で、公開の場に固定されています",
-  checkPending: "確認済み：記録は完全です。現在、公開の場への固定を行っています。",
+  checkOk: "確認済み：記録は完全で、当社が運営していない公開の台帳にも保存されています",
+  checkPending: "確認済み：記録は完全です。まもなく、当社が運営していない公開の台帳にも保存されます。",
   checkEmpty: "確認済み：記録は完全です",
   checkPartial: "確認済み：記録の最新部分は完全です。古い部分は現在読み込めませんでした。",
   checkFailed: "警告：この記録を確認できませんでした。チェックサム、またはこの端末が以前に見た内容と一致しません。サポートにご連絡ください。",
   checkKeyChanged: "警告：この記録に署名する鍵が、この端末で最初に確認したときから変わっています。この記録を信頼する前にサポートにご連絡ください。",
-  recordedLate: "遅れて記録",
+  checkWindow: "過去30日分を確認済み：この期間は完全です。それより古い記録は現在読み込めませんでした。",
+  checkNoMemory: "確認しましたが、この端末は前回の確認内容を読み取れなかったため、それ以降の変更を比較できませんでした。",
+  recordedLate: "遅れて記録されたため、念入りに確認してください",
   peopleTitle: "担当者とサポート",
   peopleNone: "HODL Mediaの担当者によるサーバーへのアクセスはありません。",
   whoOperator: "HODL Mediaのスタッフ（{actor}）",
@@ -1031,13 +1141,15 @@ const ko: AccessLogCopy = {
   statusNone: "최근 30일 동안 HODL Media의 접근이 없습니다",
   statusOne: "최근 30일 동안 HODL Media의 접근 1건 — 아래를 확인하세요",
   statusMany: "최근 30일 동안 HODL Media의 접근 {count}건 — 아래를 확인하세요",
-  checkOk: "확인됨: 기록이 완전하며 공개적으로 고정되어 있습니다",
-  checkPending: "확인됨: 기록이 완전합니다. 공개 고정이 진행 중입니다.",
+  checkOk: "확인됨: 기록이 완전하며 저희가 운영하지 않는 공개 등록부에도 저장되어 있습니다",
+  checkPending: "확인됨: 기록이 완전합니다. 곧 저희가 운영하지 않는 공개 등록부에도 저장됩니다.",
   checkEmpty: "확인됨: 기록이 완전합니다",
   checkPartial: "확인됨: 기록의 최신 부분은 완전합니다. 이전 부분은 지금 불러올 수 없었습니다.",
   checkFailed: "주의: 이 기록을 확인할 수 없습니다. 체크섬 또는 이 기기가 이전에 본 내용과 일치하지 않습니다. 지원팀에 문의해 주세요.",
   checkKeyChanged: "주의: 이 기록에 서명하는 키가 이 기기에서 처음 확인한 이후 바뀌었습니다. 이 기록을 믿기 전에 지원팀에 문의해 주세요.",
-  recordedLate: "늦게 기록됨",
+  checkWindow: "최근 30일 확인됨: 해당 기간은 완전합니다. 이전 기록은 지금 불러올 수 없었습니다.",
+  checkNoMemory: "확인했지만 이 기기가 지난 방문 때 본 내용을 읽지 못해 그 이후의 변경을 비교할 수 없었습니다.",
+  recordedLate: "늦게 기록되었으니 더 자세히 확인하세요",
   peopleTitle: "직원 및 지원팀",
   peopleNone: "HODL Media 직원이 서버에 접근한 적이 없습니다.",
   whoOperator: "HODL Media 직원 ({actor})",

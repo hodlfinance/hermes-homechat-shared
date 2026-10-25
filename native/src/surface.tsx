@@ -1000,10 +1000,12 @@ async function clearStoredBoolean(key: string) {
 }
 
 // HPD-1737: the last access-log head and anchor key fingerprint, in secure storage
-// (web storage only where the platform has no secure store).
+// (web storage only where the platform has no secure store). Strict, as in
+// HPD-606: a read error must not look like a first visit, or the next write
+// would replace the reference the check compares against.
 const accessLogHeadStore = {
-  read: (key: string) => readStoredString(key),
-  write: (key: string, value: string) => persistStoredString(key, value),
+  read: (key: string) => readStoredStringStrict(key),
+  write: (key: string, value: string) => persistStoredStringStrict(key, value),
 };
 
 async function readStoredString(key: string) {
