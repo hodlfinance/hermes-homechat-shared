@@ -8777,7 +8777,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const pendingAccessCopy = mobilePendingAccessCopy(appLocale, mobilePendingAccessVariant(workspaceStatusTruth), {
     email: readyEmailPromised,
     reason: workspaceStatusTruthCapacityRefusal(workspaceStatusTruth)?.reason ?? null,
-    waitlistPosition: salesStatus?.waitlist?.status === "waiting" ? salesStatus.waitlist.position : null,
+    // HPD-1746: a buyer without a place is not on a waitlist, so no position is shown.
+    waitlistPosition: null,
   });
   const paywallSales = iosPaywallSalesView({
     locale: appLocale,

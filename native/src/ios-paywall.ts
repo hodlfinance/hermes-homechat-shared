@@ -806,14 +806,15 @@ export function iosPaywallWaitlistCopy(locale: AppLocale): IosPaywallWaitlistCop
 }
 
 /**
- * HPD-1063 decision: purchase unless the server explicitly refuses. Null
- * (unknown) and mayPurchase=true keep the purchase; an invitation always
- * allows the purchase.
+ * HPD-1746 (Justus, 2026-10-25): buying is always possible, also when no place is
+ * free. A buyer without a place pays, is queued by payment time and is told when
+ * the server is ready; that is not a waitlist. The paywall therefore always
+ * offers the purchase, whatever the sales status says (an old Plane may still
+ * answer mayPurchase=false). The waitlist button and its texts stay in the
+ * catalog but are no longer reached.
  */
-export function iosPaywallSalesDecision(status: HeyHermesSalesStatus | null): "purchase" | "waitlist" {
-  if (!status) return "purchase";
-  if (status.invitation) return "purchase";
-  return status.mayPurchase ? "purchase" : "waitlist";
+export function iosPaywallSalesDecision(_status: HeyHermesSalesStatus | null): "purchase" | "waitlist" {
+  return "purchase";
 }
 
 export type IosPaywallSalesView = {
@@ -832,16 +833,6 @@ export function iosPaywallSalesView(input: {
 }): IosPaywallSalesView {
   const copy = iosPaywallWaitlistCopy(input.locale);
   const mode = iosPaywallSalesDecision(input.status);
-  const lines: string[] = [];
-  const status = input.status;
-  if (status?.invitation) {
-    lines.push(copy.invitationReserved.replace("{time}", input.formatTime(status.invitation.expiresAt)));
-  }
-  const joined = mode === "waitlist" && status?.waitlist?.status === "waiting";
-  if (mode === "waitlist") {
-    lines.push(joined ? copy.waitlistJoined : copy.waitlistIntro);
-    const position = status?.waitlist?.position;
-    if (joined && typeof position === "number") lines.push(copy.waitlistPosition.replace("{position}", String(position)));
-  }
-  return { mode, joined, joinLabel: copy.joinWaitlist, joiningLabel: copy.joiningWaitlist, lines };
+  // No line about a reserved place or a waitlist: nobody who has not paid holds a place (HPD-1746).
+  return { mode, joined: false, joinLabel: copy.joinWaitlist, joiningLabel: copy.joiningWaitlist, lines: [] };
 }
