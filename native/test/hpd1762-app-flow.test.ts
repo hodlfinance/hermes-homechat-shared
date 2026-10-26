@@ -112,3 +112,11 @@ test("returning users (mockups 14, 15, 17, 18): login words, check-your-email, l
   assert.doesNotMatch(flowBlock, /#9184d9|#d2cefd|#7c3aed|purple|violet/i);
   assert.match(flowBlock, /<HeyAuthScreen|function HeyAuthScreen/);
 });
+
+test("the sentence 'You can use it right here in the app.' is gone in every language (Justus 2026-10-26)", () => {
+  for (const locale of ["en", "de", "fr"] as const) assert.doesNotMatch(JSON.stringify(heyAppFlowCopy(locale)), /right here in the app|direkt hier in der App/i);
+  const source = readFileSync(new URL("../src/hey-app-flow.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /right here in the app|direkt hier in der App/i);
+  const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  assert.match(surface, /onOpenAccount && accountLabel[\s\S]*?flow\.footerLink/);
+});

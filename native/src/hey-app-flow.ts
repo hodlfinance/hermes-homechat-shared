@@ -32,7 +32,7 @@ const en: HeyAppFlowCopy = {
   valueLine: "Your own AI agent on your own private server. Text it or talk to it, like a friend.",
   welcome: {
     intro: "Hey Hermes is your own AI agent that learns how you work and what matters to you.",
-    talk: "Text it or talk to it, like a friend. You can use it right here in the app. It uses its own computer like you do.",
+    talk: "Text it or talk to it, like a friend. It uses its own computer like you do.",
     examples: ["It ", ["prioritizes your to-dos", "reserves a table for Friday", "books your next flight", "spots deals", "builds you little apps"]],
     runs: "It runs on your own private server. You can switch its AI model anytime.",
     price: "30 days free, then {price} a month.",
@@ -120,7 +120,7 @@ const de: HeyAppFlowCopy = {
   valueLine: "Dein eigener KI-Agent auf Deinem eigenen privaten Server. Schreib ihm oder sprich mit ihm, wie mit einem Freund.",
   welcome: {
     intro: "Hey Hermes ist Dein eigener KI-Agent, der lernt, wie Du arbeitest und was Dir wichtig ist.",
-    talk: "Schreib ihm oder sprich mit ihm, wie mit einem Freund. Du kannst ihn direkt hier in der App nutzen. Er benutzt seinen eigenen Computer, so wie Du.",
+    talk: "Schreib ihm oder sprich mit ihm, wie mit einem Freund. Er benutzt seinen eigenen Computer, so wie Du.",
     examples: ["Er ", ["priorisiert Deine To-dos", "reserviert einen Tisch für Freitag", "bucht einen Flug nach Lissabon", "findet Angebote", "baut Dir kleine Apps"]],
     runs: "Er läuft auf Deinem privaten Server in Europa. Du kannst sein KI-Modell jederzeit wechseln.",
     price: "30 Tage gratis, danach {price} im Monat.",

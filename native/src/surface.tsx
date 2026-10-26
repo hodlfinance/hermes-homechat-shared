@@ -8547,14 +8547,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     const canSubmitLogin = Boolean(email.trim() && (loginPassword || accessCode.trim())) && !busy;
     const flowLogin = heyAppFlowCopy(appLocale).login;
     // HPD-1762: the 1.1 login words for the store builds (mockup 14): "Send login link", "New to Hey Hermes? Get started".
-    const signInCopy = storePlatform
+    const signInCopy = storePlatform && host.session.mode === "standalone"
       ? { ...heySignInCopy(appLocale), ...(authEntryMode === "sign_in" ? { sendLink: flowLogin.sendLink } : {}), newHere: flowLogin.newHere, createLink: flowLogin.getStarted }
       : heySignInCopy(appLocale);
     const flowCopy = heyAppFlowCopy(appLocale);
     // HPD-1762: the sign-up headline of the 1.1 screens (store builds only); sign-in keeps its text.
-    const signInHeadline = storePlatform && authEntryMode === "create_account"
+    const signInHeadline = storePlatform && host.session.mode === "standalone" && authEntryMode === "create_account"
       ? { title: flowCopy.signUp.title, titleAccent: "", body: flowCopy.valueLine }
-      : storePlatform
+      : storePlatform && host.session.mode === "standalone"
         ? { title: flowLogin.title, titleAccent: "", body: flowLogin.body }
         : heySignInHeadline(appLocale, authEntryMode);
     const signInTitleAccentAt = signInHeadline.titleAccent ? signInHeadline.title.indexOf(signInHeadline.titleAccent) : -1;
@@ -8613,7 +8613,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           googleBlocked={googleButtonBlocked("login")}
           errorNode={error ? <Notice locale={appLocale} tone="error" text={error} onDismiss={dismissAppError} /> : null}
           onSwitch={() => { setSignInWithPassword(false); setAuthEntryMode(authEntryMode === "sign_in" ? "create_account" : "sign_in"); }}
-          onPassword={() => { if (!email.trim() && emailSignupEmail.trim()) setEmail(emailSignupEmail.trim()); setSignInWithPassword(true); }}
+          onPassword={() => { if (!email.trim() && emailSignupEmail.trim()) setEmail(emailSignupEmail.trim()); setAuthEntryMode("sign_in"); setSignInWithPassword(true); }}
         />
       );
     }
@@ -11964,6 +11964,14 @@ function HeySinglePurchasePanel({ account, locale, store, view, plan, phase, acc
             </Pressable>
           </Fragment>
         ))}
+        {onOpenAccount && accountLabel ? (
+          <>
+            <Text style={flow.footerDot}>{"\u00b7"}</Text>
+            <Pressable onPress={onOpenAccount} accessibilityRole="button" accessibilityLabel={accountLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+              <Text style={flow.footerLink}>{accountLabel}</Text>
+            </Pressable>
+          </>
+        ) : null}
       </View>
       <Text style={flow.smallCentered}>{view.ageText} {view.accountBoundaryText}</Text>
     </HeyFlowFrame>
