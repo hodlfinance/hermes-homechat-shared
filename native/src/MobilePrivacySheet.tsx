@@ -1,30 +1,50 @@
 import { useState } from "react";
 import { Linking, Modal, Pressable, ScrollView, Text, View } from "react-native";
-import { ChevronDown, ChevronRight, ExternalLink, X } from "lucide-react-native";
+import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, History, X } from "lucide-react-native";
 import type { AppLocale } from "../core/index";
 import { HEY_LEGAL_LINKS } from "../core/legal";
 import { workspacePrivacyCopy, workspacePrivacyHasServer, workspacePrivacyRows } from "../ui/workspace-privacy-copy";
 import { useWorkspacePrivacyIdentity, type PrivacyIdentityClient } from "../ui/workspace-privacy-identity";
 import { useMobilePalette } from "./mobile-palette-context";
-export function MobilePrivacySheet({ client, workspaceId, locale, onClose }: { client: PrivacyIdentityClient; workspaceId: string; locale: AppLocale; onClose: () => void }) {
+import { accessLogCopy } from "../core/operator-access-log-view";
+import { MobileAccessLogPanel, type MobileAccessLogEntry } from "./MobileAccessLog";
+/** HPD-1737: `accessLog` is passed only while the host's switch is on and the viewer owns the workspace. */
+export function MobilePrivacySheet({ client, workspaceId, locale, onClose, accessLog }: { client: PrivacyIdentityClient; workspaceId: string; locale: AppLocale; onClose: () => void; accessLog?: MobileAccessLogEntry }) {
   const palette = useMobilePalette();
   const identity = useWorkspacePrivacyIdentity(client, workspaceId);
   const [expanded, setExpanded] = useState(false);
+  const [showAccessLog, setShowAccessLog] = useState(false);
+  const logCopy = accessLogCopy(locale);
   const server = workspacePrivacyHasServer(identity, workspaceId) ? identity : null;
   const copy = workspacePrivacyCopy(locale, server?.hostingKind ?? "unconfirmed");
   const rows = workspacePrivacyRows(server, copy);
   return <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
     <View style={{ flex: 1, backgroundColor: palette.pageBg }} accessibilityViewIsModal>
       <View style={{ padding: 24, paddingBottom: 8, flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <Text accessibilityRole="header" style={{ flex: 1, color: palette.ink, fontSize: 24, lineHeight: 30, fontWeight: "600" }}>{copy.title}</Text>
+        {showAccessLog ? <Pressable onPress={() => setShowAccessLog(false)} accessibilityRole="button" accessibilityLabel={copy.title}
+          style={{ minHeight: 44, minWidth: 44, alignItems: "center", justifyContent: "center" }}>
+          <ChevronLeft size={24} color={palette.ink} accessible={false} />
+        </Pressable> : null}
+        <Text accessibilityRole="header" style={{ flex: 1, color: palette.ink, fontSize: 24, lineHeight: 30, fontWeight: "600" }}>{showAccessLog ? logCopy.title : copy.title}</Text>
         <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={copy.close}
           style={{ minHeight: 44, minWidth: 44, alignItems: "center", justifyContent: "center" }}>
           <X size={22} color={palette.ink} accessible={false} />
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 8, gap: 16 }}>
+        {showAccessLog && accessLog ? <MobileAccessLogPanel entry={{ ...accessLog, onOpenSupportAccess: () => { onClose(); accessLog.onOpenSupportAccess(); } }}
+          workspaceId={workspaceId} locale={locale} /> : <>
         <Text style={{ color: palette.text, fontSize: 17, lineHeight: 25 }}>{copy.body}</Text>
         <Text style={{ color: palette.secondary, fontSize: 14, lineHeight: 20 }}>{copy.support}</Text>
+        {accessLog ? <Pressable onPress={() => setShowAccessLog(true)} accessibilityRole="button" accessibilityHint={logCopy.entryHint}
+          style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <History size={20} color={palette.teal} accessible={false} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: palette.teal, fontSize: 17 }}>{logCopy.entryLabel}</Text>
+            <Text style={{ color: palette.muted, fontSize: 14 }}>{logCopy.entryHint}</Text>
+          </View>
+          <ChevronRight size={20} color={palette.teal} accessible={false} />
+        </Pressable> : null}
         <Pressable onPress={() => setExpanded(!expanded)} accessibilityRole="button" accessibilityState={{ expanded }} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12 }}>
           <Text style={{ flex: 1, color: palette.teal, fontSize: 17 }}>{copy.details}</Text>
           {expanded ? <ChevronDown size={20} color={palette.teal} accessible={false} /> : <ChevronRight size={20} color={palette.teal} accessible={false} />}
@@ -36,6 +56,7 @@ export function MobilePrivacySheet({ client, workspaceId, locale, onClose }: { c
           <Text style={{ flex: 1, color: palette.teal, fontSize: 17 }}>{copy.policy}</Text>
           <ExternalLink size={20} color={palette.teal} accessible={false} />
         </Pressable>
+        </>}
       </ScrollView>
     </View>
   </Modal>;
