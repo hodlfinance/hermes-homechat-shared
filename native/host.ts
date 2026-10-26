@@ -195,6 +195,12 @@ export type NativeR8AssistantAvatarProps = {
 export type NativeCardsPort = {
   randomBytes(length: number): Uint8Array;
   scanText?: () => Promise<string[] | null>;
+  /**
+   * Keeps the fingerprint of the server key this device first saw, in the
+   * device's secure store. The card form and the payment approval refuse a key
+   * that differs; Settings > Cards shows it. Hey Hermes passes it.
+   */
+  keyPin?: { read: () => Promise<string | null>; write: (fingerprint: string) => Promise<void> };
 };
 
 export type NativeR8Host = {

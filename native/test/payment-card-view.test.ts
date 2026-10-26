@@ -91,8 +91,31 @@ test("the amount follows the currency's own minor units and a payment without a 
 test("only a host that passes a cards port gets the card surface; policy never lists the card routes", async () => {
   const { readFileSync } = await import("node:fs");
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
-  assert.ok(surface.includes("host.cards && token && activeConversationSessionId"));
-  assert.ok(surface.includes("host.cards && snapshot"));
+  assert.ok(surface.includes("host.cards && snapshot?.capabilities?.paymentCards === true ? host.cards : undefined"));
+  assert.ok(surface.includes("cardsPort && token && activeConversationSessionId"));
+  assert.ok(surface.includes("cardsPort && snapshot"));
+  assert.ok(!surface.includes("port={host.cards}"));
   const policy = readFileSync(new URL("../policy.ts", import.meta.url), "utf8");
   assert.ok(!policy.includes("/cards"), "HODL and LiveQuote keep no card routes");
+});
+
+test("the key stored at the first entry is kept and a different key is refused (app)", async () => {
+  const { checkGuestKey } = await import("../core/payment-card-view");
+  const first = await guest(), swapped = await guest();
+  let stored: string | null = null;
+  const pin = { read: async () => stored, write: async (value: string) => { stored = value; } };
+  const input = { number: "4242 4242 4242 4242", expiry: "12/28", cvc: "123", name: "Max Muster" };
+  assert.equal((await checkGuestKey(first.guestKey, pin)).status, "unpinned");
+  assert.ok((await sealCardEntry(base({ guestKey: first.guestKey }), input, today, undefined, pin)).ok);
+  assert.match(stored ?? "", /^[0-9A-F]{4}( [0-9A-F]{4}){4}$/u);
+  assert.deepEqual(await sealCardEntry(base({ guestKey: swapped.guestKey }), input, today, undefined, pin), { ok: false, errors: {}, reason: "guest_key_changed" });
+  const payment = base({ id: "cpay_aaaaaaaaaaaaaaaa", kind: "payment", guestKey: swapped.guestKey,
+    card: { id: "card_aaaaaaaaaaaaaaaa", brand: "visa", last4: "1234", expMonth: 8, expYear: 2028, isDefault: true, createdAt: "" } });
+  assert.deepEqual(await sealPaymentCvc(payment, "123", undefined, pin), { ok: false, keyChanged: true });
+  assert.ok((await sealPaymentCvc({ ...payment, guestKey: first.guestKey }, "123", undefined, pin)).ok);
+});
+
+test("the fingerprint is the same value the web client computes (fixed vector shared with hey-hermes)", async () => {
+  const { guestCardKeyFingerprint } = await import("../core/payment-card");
+  assert.equal(guestCardKeyFingerprint({ kty: "EC", crv: "P-256", x: "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU", y: "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0" }), "A0A2 32C2 F194 A535 53CB");
 });

@@ -84,6 +84,7 @@ const HEY_ONLY_CALLS: Readonly<Record<string, string>> = {
   completeCardRequest: "exempt: HPD-1722 card requests exist only in Hey Hermes (host option cards)",
   deletePaymentCard: "exempt: HPD-1722 cards exist only in Hey Hermes (host option cards)",
   paymentCards: "exempt: HPD-1722 cards exist only in Hey Hermes (host option cards)",
+  paymentCardGuestKey: "exempt: HPD-1722 cards exist only in Hey Hermes (host option cards)",
   pendingCardRequests: "exempt: HPD-1722 card requests exist only in Hey Hermes (host option cards)",
   setDefaultPaymentCard: "exempt: HPD-1722 cards exist only in Hey Hermes (host option cards)",
   confirmHeyAccountDeletion: account,

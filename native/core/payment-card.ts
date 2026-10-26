@@ -11,6 +11,7 @@
  * Nothing in this file touches the network or storage. It is used by the web
  * form (seal), the guest (open) and the control plane (shape checks only).
  */
+import { sha256 } from "@noble/hashes/sha256";
 
 export type CardBrand =
   | "visa"
@@ -249,6 +250,21 @@ export function guestCardPublicKeyFrom(value: unknown): GuestCardPublicKey {
   return publicJwkFrom(value);
 }
 
+/**
+ * The fingerprint of a guest key: SHA-256 over its fixed JWK form, the first
+ * ten bytes as five groups of four hex characters. Settings > Cards shows it,
+ * and the card form refuses a key that differs from the one stored at the first
+ * entry, so a control plane cannot swap in its own key. Pure JS (@noble) so it
+ * also runs in React Native, which has no WebCrypto; the web client computes the
+ * same value with WebCrypto (fixed vector in both test suites).
+ */
+export function guestCardKeyFingerprint(key: GuestCardPublicKey): string {
+  const checked = publicJwkFrom(key);
+  const canonical = JSON.stringify({ crv: checked.crv, kty: checked.kty, x: checked.x, y: checked.y });
+  const hex = Array.from(sha256(encoder.encode(canonical)).slice(0, 10), (byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
+  return hex.match(/.{4}/gu)!.join(" ");
+}
+
 async function deriveAesKey(privateKey: CryptoKey, peerPublic: CryptoKey, context: string, usage: "encrypt" | "decrypt") {
   const crypto = webCrypto();
   const shared = await crypto.subtle.deriveBits({ name: "ECDH", public: peerPublic }, privateKey, 256);
@@ -402,10 +418,18 @@ const sharedSuffixes = new Set([
   "azurewebsites.net", "cloudfront.net", "appspot.com", "blogspot.com", "myshopify.com", "wixsite.com", "weebly.com",
   "wordpress.com", "squarespace.com", "onrender.com", "fly.dev", "railway.app", "repl.co", "glitch.me", "ngrok.io", "ngrok-free.app",
   "s3.amazonaws.com", "amazonaws.com", "cloudflare.net", "trycloudflare.com", "framer.app", "bubbleapps.io", "webflow.io",
+  "netlify.com", "gitbook.io", "notion.site", "carrd.co", "000webhostapp.com", "surge.sh", "now.sh", "deno.dev", "pythonanywhere.com",
+  "ondigitalocean.app", "run.app", "cloudapp.net", "azurestaticapps.net", "elasticbeanstalk.com", "blob.core.windows.net", "r2.dev",
+  "supabase.co", "godaddysites.com", "mystrikingly.com", "square.site", "wixstudio.io", "tumblr.com", "myftp.org", "duckdns.org",
+  "no-ip.org", "dyndns.org",
 ]);
+const secondLevelLabels = new Set(["co", "com", "org", "net", "gov", "edu", "ac", "or", "ne", "go"]);
 
+/** Mirrors CARD_SHARED_SUFFIXES in the browser broker (ohlhaver/hermes-agent tools/isolated_browser_service.py). */
 export function isSharedHostingSuffix(host: string): boolean {
-  return sharedSuffixes.has(host.toLowerCase());
+  const name = host.toLowerCase();
+  const labels = name.split(".");
+  return sharedSuffixes.has(name) || (labels.length === 2 && secondLevelLabels.has(labels[0]!) && labels[1]!.length === 2);
 }
 
 export function merchantHostFrom(value: unknown): string {

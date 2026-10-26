@@ -11,6 +11,7 @@ import {
   sealCardEntry,
   sealPaymentCvc,
   type CardScanFields,
+  type GuestKeyPin,
   type Sealer,
 } from "../core/payment-card-view";
 
@@ -23,11 +24,13 @@ import {
  */
 export type CardScanAction = () => Promise<CardScanFields | null>;
 
-export function CardEntryForm({ locale = "en", request, busy, sealer, onScan, onSave, onCancel }: {
+export function CardEntryForm({ locale = "en", request, busy, sealer, keyPin, onScan, onSave, onCancel }: {
   locale?: AppLocale;
   request: CardRequest;
   busy: boolean;
   sealer: Sealer;
+  /** Where this device keeps the fingerprint of the server key it first saw; a different key is refused. */
+  keyPin?: GuestKeyPin;
   /** Absent when the host cannot scan; the form then has no scan button. */
   onScan?: CardScanAction;
   onSave: (body: { envelope: CardEnvelope }) => Promise<void>;
@@ -73,10 +76,10 @@ export function CardEntryForm({ locale = "en", request, busy, sealer, onScan, on
     submitting.current = true;
     setFailure(null);
     try {
-      const sealed = await sealCardEntry(request, { number, expiry, cvc, name, billingAddress: { line1, postalCode, city, country } }, new Date(), sealer);
+      const sealed = await sealCardEntry(request, { number, expiry, cvc, name, billingAddress: { line1, postalCode, city, country } }, new Date(), sealer, keyPin);
       if (!sealed.ok) {
         setErrors(sealed.errors);
-        if (sealed.reason) setFailure(copy.guestMissing);
+        if (sealed.reason) setFailure(sealed.reason === "guest_key_changed" ? copy.guestKeyChanged : copy.guestMissing);
         return;
       }
       setErrors({});
@@ -169,11 +172,12 @@ function Field({ label, error, children }: { label: string; error: string | null
   );
 }
 
-export function CardPaymentApproval({ locale = "en", request, busy, sealer, onApprove, onDecline }: {
+export function CardPaymentApproval({ locale = "en", request, busy, sealer, keyPin, onApprove, onDecline }: {
   locale?: AppLocale;
   request: CardRequest;
   busy: boolean;
   sealer: Sealer;
+  keyPin?: GuestKeyPin;
   onApprove: (body: { envelope: CardEnvelope }) => Promise<void>;
   onDecline: () => Promise<void>;
 }) {
@@ -185,8 +189,8 @@ export function CardPaymentApproval({ locale = "en", request, busy, sealer, onAp
     if (busy || submitting.current) return;
     submitting.current = true;
     try {
-      const sealed = await sealPaymentCvc(request, cvc, sealer);
-      if (!sealed.ok) { setFailure(copy.cvcInvalid); return; }
+      const sealed = await sealPaymentCvc(request, cvc, sealer, keyPin);
+      if (!sealed.ok) { setFailure(sealed.keyChanged ? copy.guestKeyChanged : copy.cvcInvalid); return; }
       setFailure(null);
       await onApprove(sealed.body);
       setCvc("");

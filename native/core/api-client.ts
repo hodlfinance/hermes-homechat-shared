@@ -1,5 +1,5 @@
 import { cardRequestFrom, cardRequestListFrom, paymentCardFrom, paymentCardListFrom } from "./payment-card-view";
-import type { CardEnvelope } from "./payment-card";
+import { guestCardPublicKeyFrom, type CardEnvelope } from "./payment-card";
 import type {
   SelfManagedView,
   AgentMailbox,
@@ -952,6 +952,8 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
       }).then(secureSecretEntryRequestFrom),
     // HPD-1722: the customer's own payment cards. Only sealed envelopes go up; only metadata comes down.
     paymentCards: () => request<unknown>("/cards").then(paymentCardListFrom),
+    paymentCardGuestKey: () => request<unknown>("/cards/guest-key").then((answer) =>
+      guestCardPublicKeyFrom((answer as { guestKey?: unknown } | null)?.guestKey)),
     pendingCardRequests: (conversationSessionId: string) =>
       request<unknown>(`/cards/requests/pending?${new URLSearchParams({ conversationSessionId }).toString()}`).then(cardRequestListFrom),
     cardRequest: (requestId: string) =>

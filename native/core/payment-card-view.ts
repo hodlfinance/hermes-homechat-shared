@@ -14,6 +14,7 @@ import {
   cardPaymentIdPattern,
   cardRequestIdPattern,
   formatAmount,
+  guestCardKeyFingerprint,
   guestCardPublicKeyFrom,
   cvcLength,
   luhnValid,
@@ -55,6 +56,12 @@ const en = {
   scanNote: "The photo is read on this device and is never sent anywhere. Check the fields before saving.",
   scanFailed: "The card could not be read. Type it in instead.",
   guestMissing: "Your Hey Hermes server cannot keep cards yet. It gets this with its next update.",
+  guestKeyChanged: "The key of your Hey Hermes server is not the one your cards were first saved with. Nothing was sent. Do not enter a card; check this in Settings > Cards.",
+  keyTitle: "Server key",
+  keyNote: "Your cards are encrypted for this key on your own server. It is saved on this device when you first add a card, and the form refuses a different one.",
+  keyUnknown: "Not saved on this device yet. It is saved when you add a card.",
+  keyChanged: "This key differs from the one saved on this device. Only trust it if you set up a new server yourself.",
+  keyTrust: "Trust this key",
   failed: "The card could not be saved. Try again.",
   saved: "Card saved.",
   approveTitle: "Approve payment",
@@ -102,6 +109,12 @@ const de: typeof en = {
   scanNote: "Das Foto wird auf diesem Gerät gelesen und nirgendwohin gesendet. Prüfe die Felder vor dem Speichern.",
   scanFailed: "Die Karte konnte nicht gelesen werden. Gib sie stattdessen ein.",
   guestMissing: "Dein Hey-Hermes-Server kann noch keine Karten verwahren. Er bekommt das mit seinem nächsten Update.",
+  guestKeyChanged: "Der Schlüssel Deines Hey-Hermes-Servers ist nicht der, mit dem Deine Karten zuerst gespeichert wurden. Es wurde nichts gesendet. Gib keine Karte ein; prüfe das unter Einstellungen > Karten.",
+  keyTitle: "Server-Schlüssel",
+  keyNote: "Deine Karten werden für diesen Schlüssel auf Deinem eigenen Server verschlüsselt. Er wird auf diesem Gerät gespeichert, wenn Du zum ersten Mal eine Karte hinzufügst, und das Formular lehnt einen anderen ab.",
+  keyUnknown: "Noch nicht auf diesem Gerät gespeichert. Das passiert beim Hinzufügen einer Karte.",
+  keyChanged: "Dieser Schlüssel weicht von dem ab, der auf diesem Gerät gespeichert ist. Vertraue ihm nur, wenn Du selbst einen neuen Server eingerichtet hast.",
+  keyTrust: "Diesem Schlüssel vertrauen",
   failed: "Die Karte konnte nicht gespeichert werden. Versuch es noch einmal.",
   saved: "Karte gespeichert.",
   approveTitle: "Zahlung freigeben",
@@ -242,29 +255,57 @@ export function isCardRunEvent(event: unknown): boolean {
 // ---------------------------------------------------------------------------
 // Sealing on the device.
 
-/** Where WebCrypto is missing (React Native), the app passes the pure-JS sealer from payment-card-js.ts. */
-export type Sealer = (payload: unknown, guestPublicKey: GuestCardPublicKey, context: string) => Promise<CardEnvelope>;
+
+/** Where a device keeps the fingerprint of the guest key it first saw. Web: local storage. App: the secure store. */
+export type GuestKeyPin = Readonly<{ read: () => string | null | Promise<string | null>; write: (fingerprint: string) => void | Promise<void> }>;
+
+export type GuestKeyCheck =
+  | { status: "unpinned"; fingerprint: string }
+  | { status: "match"; fingerprint: string }
+  | { status: "changed"; fingerprint: string; pinned: string };
+
+/** Compares the key a request carries with the one stored on this device. Stores nothing. */
+export async function checkGuestKey(key: GuestCardPublicKey, pin: GuestKeyPin): Promise<GuestKeyCheck> {
+  const fingerprint = guestCardKeyFingerprint(key);
+  const pinned = await pin.read();
+  if (!pinned) return { status: "unpinned", fingerprint };
+  return pinned === fingerprint ? { status: "match", fingerprint } : { status: "changed", fingerprint, pinned };
+}
 
 export type CardEntrySealResult =
   | { ok: true; body: { envelope: CardEnvelope } }
   | { ok: false; errors: CardFormErrors; reason?: undefined }
-  | { ok: false; errors: CardFormErrors; reason: "guest_key_missing" };
+  | { ok: false; errors: CardFormErrors; reason: "guest_key_missing" | "guest_key_changed" };
 
-/** Validates the form and seals the card to the guest key. The result holds no readable card. */
-export async function sealCardEntry(request: CardRequest, input: CardFormInput, today = new Date(), sealer: Sealer = sealCardEnvelope): Promise<CardEntrySealResult> {
+/** Where WebCrypto is missing (React Native), the app passes the pure-JS sealer from payment-card-js.ts. */
+export type Sealer = (payload: unknown, guestPublicKey: GuestCardPublicKey, context: string) => Promise<CardEnvelope>;
+
+/**
+ * Validates the form and seals the card to the guest key. The result holds no readable card.
+ * With a `pin`, a key that differs from the one stored at the first entry is refused before
+ * anything is sealed; the first key is stored once the card is sealed.
+ */
+export async function sealCardEntry(request: CardRequest, input: CardFormInput, today = new Date(), sealer: Sealer = sealCardEnvelope, pin?: GuestKeyPin): Promise<CardEntrySealResult> {
   if (request.kind !== "entry" || !request.guestKey) return { ok: false, errors: {}, reason: "guest_key_missing" };
   const checked = validateCardForm(input, { today });
   if (!checked.ok) return { ok: false, errors: checked.errors };
+  const key = pin ? await checkGuestKey(request.guestKey, pin) : null;
+  if (key?.status === "changed") return { ok: false, errors: {}, reason: "guest_key_changed" };
   const envelope = await sealer(checked.card, request.guestKey, `card-entry:${request.id}`);
+  if (pin && key?.status === "unpinned") await pin.write(key.fingerprint);
   return { ok: true, body: { envelope } };
 }
 
-/** Seals this payment's CVC to the guest key. Used for this one approval only. */
-export async function sealPaymentCvc(request: CardRequest, cvc: string, sealer: Sealer = sealCardEnvelope): Promise<{ ok: true; body: { envelope: CardEnvelope } } | { ok: false }> {
+/** Seals this payment's CVC to the guest key. Used for this one approval only. A changed key is refused (`keyChanged`). */
+export async function sealPaymentCvc(request: CardRequest, cvc: string, sealer: Sealer = sealCardEnvelope, pin?: GuestKeyPin): Promise<{ ok: true; body: { envelope: CardEnvelope } } | { ok: false; keyChanged?: true }> {
   const brand = request.card?.brand ?? "unknown";
   const text = cvc.trim();
   if (request.kind !== "payment" || !request.guestKey || !/^\d+$/u.test(text) || text.length !== cvcLength(brand)) return { ok: false };
-  return { ok: true, body: { envelope: await sealer({ cvc: text }, request.guestKey, `card-cvc:${request.id}`) } };
+  const key = pin ? await checkGuestKey(request.guestKey, pin) : null;
+  if (key?.status === "changed") return { ok: false, keyChanged: true };
+  const envelope = await sealer({ cvc: text }, request.guestKey, `card-cvc:${request.id}`);
+  if (pin && key?.status === "unpinned") await pin.write(key.fingerprint);
+  return { ok: true, body: { envelope } };
 }
 
 // ---------------------------------------------------------------------------
