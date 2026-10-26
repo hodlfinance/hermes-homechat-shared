@@ -11759,7 +11759,8 @@ const flow = StyleSheet.create({
   footStrong: { color: flowInk, fontWeight: "600" },
   orRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 20, marginBottom: 8 },
   orRule: { flex: 1, height: 1, backgroundColor: flowLine },
-  hl: { backgroundColor: flowScheme("#e3eafb", "#1f2a4a") },
+  // Variant A (Justus): the examples carry a thin underline in a soft grey-blue; the text colour is unchanged.
+  hl: { textDecorationLine: "underline", textDecorationColor: flowScheme("#c5cfe6", "#2c3650") },
   codeRow: { height: 50, borderRadius: 25, borderWidth: 1, borderColor: flowLine, flexDirection: "row", alignItems: "center", paddingLeft: 20, paddingRight: 6 },
   codeInput: { flex: 1, color: flowInk, fontSize: 17, paddingVertical: 0 },
   codeRedeem: { height: 38, borderRadius: 19, paddingHorizontal: 16, backgroundColor: flowInk, alignItems: "center", justifyContent: "center" },
