@@ -599,7 +599,15 @@ export type HeyHermesSalesStatus = {
    * none configured or is too old to say. Only the Android paywall reads it.
    */
   playStorePersonalProductId: string | null;
+  /**
+   * HPD-1762: the app waitlist state while the server switch HEY_ENTRY_GATE_APP is "invite"; null when it is off
+   * (everyone can buy) or the account is not gated. Never carries a position number: the server decides who is next.
+   */
+  appWaitlist: { state: HeyHermesAppWaitlistState } | null;
 };
+
+export type HeyHermesAppWaitlistState = "waiting" | "released" | "taken";
+const appWaitlistStates: readonly string[] = ["waiting", "released", "taken"];
 
 const salesStatusReasons: readonly string[] = ["open", "waitlist", "capacity_unknown"];
 const waitlistStatuses: readonly string[] = ["waiting", "invited", "expired", "purchased"];
@@ -647,6 +655,10 @@ export function parseHeyHermesSalesStatus(value: unknown): HeyHermesSalesStatus 
     // whole status: the iPhone paywall and the waitlist do not depend on it.
     playStorePersonalProductId: typeof value.playStorePersonalProductId === "string" && value.playStorePersonalProductId.trim()
       ? value.playStorePersonalProductId
+      : null,
+    // HPD-1762: an absent or unknown state is "not gated"; the purchase stays offered.
+    appWaitlist: isPlainRecord(value.appWaitlist) && typeof value.appWaitlist.state === "string" && appWaitlistStates.includes(value.appWaitlist.state)
+      ? { state: value.appWaitlist.state as HeyHermesAppWaitlistState }
       : null,
   };
 }

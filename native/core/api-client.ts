@@ -749,6 +749,23 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
         return null;
       }
     },
+    // HPD-1762: the app joins the waitlist when the sales status says it is gated; the answer is the new sales status.
+    joinAppWaitlist: async (): Promise<HeyHermesSalesStatus | null> => {
+      try {
+        return parseHeyHermesSalesStatus(await request<unknown>("/billing/app-waitlist", { method: "POST", body: "{}" }));
+      } catch {
+        return null;
+      }
+    },
+    // HPD-1762: an invitation code (typed, or from a /i/<code> link). Any failure reads as "unknown".
+    redeemInviteCode: async (code: string): Promise<{ status: string }> => {
+      try {
+        const answer = await request<{ status?: unknown }>("/me/invite/redeem", { method: "POST", body: JSON.stringify({ code }) });
+        return { status: typeof answer?.status === "string" ? answer.status : "unknown" };
+      } catch {
+        return { status: "error" };
+      }
+    },
     revenueCatCheckout: (body: BillingCheckoutRequest) =>
       request<BillingCheckoutResponse>("/billing/revenuecat/checkout", { method: "POST", body: JSON.stringify(body) }),
     planChangePreview: (body: BillingPlanChangePreviewRequest) =>

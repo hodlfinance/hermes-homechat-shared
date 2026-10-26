@@ -83,6 +83,8 @@ const HEY_ONLY_CALLS: Readonly<Record<string, string>> = {
   heyAccountDeletionReauthenticationMethods: account,
   heyLinkedIdentities: account,
   joinWaitlist: pro,
+  joinAppWaitlist: pro,
+  redeemInviteCode: pro,
   lapseExport: server,
   mobilePushStatus: push,
   prepareHeyAccountDeletion: account,

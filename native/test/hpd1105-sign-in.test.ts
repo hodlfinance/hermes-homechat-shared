@@ -56,7 +56,7 @@ test("HPD-1105: Apple and Google share one look; the switch is one quiet line", 
 test("HPD-1085/HPD-1090: paywall, offer and preparing screens use the transparent dark dragon in dark mode", () => {
   const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   assert.match(source, /function PaywallArt\(\)[\s\S]*?Platform\.OS === "ios" \? scheme === "dark" : androidStartsDark[\s\S]*?paywallIllustrationDark : paywallIllustration/);
-  assert.equal(source.match(/<PaywallArt \/>/g)?.length, 3);
+  assert.equal(source.match(/<PaywallArt \/>/g)?.length, 4); // HPD-1762: the 1.1 screens share it through HeyFlowFrame
   assert.doesNotMatch(source, /<View style=\{styles\.paywallArt\}>/);
 });
 
@@ -74,7 +74,7 @@ test("HPD-1105 v2 (B1): sign-in keeps the ink dragon, dark mode uses the filled 
   assert.match(screen, /\[styles\.authBenefit, styles\.authCentered\]/);
   assert.match(source, /authCentered: \{\s*textAlign: "center"/);
   // The paywall, offer, preparing and deleted screens share one component.
-  assert.equal(source.match(/<PaywallArt \/>/g)?.length, 3);
+  assert.equal(source.match(/<PaywallArt \/>/g)?.length, 4); // HPD-1762: the 1.1 screens share it through HeyFlowFrame
 });
 
 test("HPD-1105 v2 (B1): the dark dragon is the filled drawing, transparent around the figure", () => {

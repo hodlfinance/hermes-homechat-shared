@@ -33,7 +33,7 @@ const status: HeyHermesSalesStatus = {
   invitation: null,
   waitlist: null,
   checkedAt: "2026-10-13T22:00:00.000Z",
-  playStorePersonalProductId: PRODUCT,
+  playStorePersonalProductId: PRODUCT, appWaitlist: null,
 };
 
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -353,7 +353,8 @@ test("the surface reads through the one function, and only Android can start a s
   assert.equal(surface.split("api.salesStatus(").length - 1, 1);
 
   // The round moves in one place, behind the predicate.
-  assert.equal(surface.split("setSalesStatusReadRound(").length - 1, 1);
+  // HPD-1762: a second place, deliberately: an accepted invitation code reads the status again (the gate is gone).
+  assert.equal(surface.split("setSalesStatusReadRound(").length - 1, 2);
   assert.match(surface, /if \(heySalesStatusRereadOnOpen\(\{ store: storePlatform, opened, settled: salesStatusSettled, status: salesStatus \}\)\) \{\s*setSalesStatusReadRound\(\(round\) => round \+ 1\);\s*\}/);
   // "In view" is decided by the one function, from the same values the render uses.
   assert.match(surface, /const salesPaywallInView = heySalesPaywallInView\(\{\s*store: storePlatform,\s*appInFront,\s*accountPanelOpen: paywallAccountOpen,\s*screen: productAccessScreenNow,\s*deletedPaywallOpen,\s*hasAccess: snapshot \? hasValidMobileProductAccess\(snapshot\.entitlement\) : false,\s*accountScreenOpen,\s*\}\);/);

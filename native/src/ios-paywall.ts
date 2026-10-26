@@ -58,7 +58,7 @@ export type IosPaywallCopy = {
 const en: IosPaywallCopy = {
   heroTitle: "Give it a direction. It sets the goals and runs.",
   heroBody: "Hey Hermes turns your intent into work across your private workspace.",
-  planName: "Hey Hermes Personal",
+  planName: "Hey Hermes Pro",
   monthlyAccess: "One monthly iPhone subscription. No annual plan.",
   monthlyFallbackPrice: "USD 29/month",
   purchase: "Continue for {price}/month",
@@ -79,7 +79,7 @@ const en: IosPaywallCopy = {
   manageError: "App Store subscription management could not be opened.",
   privacy: "Privacy Policy",
   terms: "Terms of Service",
-  planActive: "Personal",
+  planActive: "Pro",
   planTrialing: "Trial",
   planGrace: "Payment retry",
   planCancelled: "Ends at period end",
@@ -93,7 +93,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
   de: {
     heroTitle: "Gib eine Richtung vor. Er setzt die Ziele und legt los.",
     heroBody: "Hey Hermes verwandelt deine Absicht in Arbeit in deinem privaten Workspace.",
-    planName: "Hey Hermes Personal",
+    planName: "Hey Hermes Pro",
     monthlyAccess: "Ein monatliches iPhone-Abo. Kein Jahresabo.",
     monthlyFallbackPrice: "USD 29/Monat",
     purchase: "Weiter für {price}/Monat",
@@ -114,7 +114,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
     manageError: "Die App-Store-Abonnementverwaltung konnte nicht geöffnet werden.",
     privacy: "Datenschutzerklärung",
     terms: "Nutzungsbedingungen",
-    planActive: "Personal",
+    planActive: "Pro",
     planTrialing: "Testphase",
     planGrace: "Zahlung wird wiederholt",
     planCancelled: "Endet zum Laufzeitende",
@@ -125,7 +125,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
   fr: {
     heroTitle: "Donne-lui une direction. Il fixe les objectifs et avance.",
     heroBody: "Hey Hermes transforme ton intention en travail dans ton espace privé.",
-    planName: "Hey Hermes Personal",
+    planName: "Hey Hermes Pro",
     monthlyAccess: "Un seul abonnement iPhone mensuel. Aucun forfait annuel.",
     monthlyFallbackPrice: "29 USD/mois",
     purchase: "Continuer pour {price}/mois",
@@ -146,7 +146,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
     manageError: "La gestion des abonnements App Store n'a pas pu être ouverte.",
     privacy: "Politique de confidentialité",
     terms: "Conditions d'utilisation",
-    planActive: "Personal",
+    planActive: "Pro",
     planTrialing: "Essai",
     planGrace: "Nouvelle tentative de paiement",
     planCancelled: "Se termine à la fin de la période",
@@ -157,7 +157,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
   es: {
     heroTitle: "Dale una dirección. Fija los objetivos y se pone en marcha.",
     heroBody: "Hey Hermes convierte tu intención en trabajo dentro de tu espacio privado.",
-    planName: "Hey Hermes Personal",
+    planName: "Hey Hermes Pro",
     monthlyAccess: "Una única suscripción mensual para iPhone. Sin plan anual.",
     monthlyFallbackPrice: "29 USD/mes",
     purchase: "Continuar por {price}/mes",
@@ -178,7 +178,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
     manageError: "No se pudo abrir la gestión de suscripciones del App Store.",
     privacy: "Política de privacidad",
     terms: "Términos del servicio",
-    planActive: "Personal",
+    planActive: "Pro",
     planTrialing: "Prueba",
     planGrace: "Reintento de pago",
     planCancelled: "Termina al final del periodo",
@@ -189,7 +189,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
   it: {
     heroTitle: "Dagli una direzione. Fissa gli obiettivi e parte.",
     heroBody: "Hey Hermes trasforma il tuo intento in lavoro nel tuo spazio privato.",
-    planName: "Hey Hermes Personal",
+    planName: "Hey Hermes Pro",
     monthlyAccess: "Un solo abbonamento mensile per iPhone. Nessun piano annuale.",
     monthlyFallbackPrice: "29 USD/mese",
     purchase: "Continua a {price}/mese",
@@ -210,7 +210,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
     manageError: "Impossibile aprire la gestione degli abbonamenti App Store.",
     privacy: "Informativa sulla privacy",
     terms: "Termini di servizio",
-    planActive: "Personal",
+    planActive: "Pro",
     planTrialing: "Prova",
     planGrace: "Nuovo tentativo di pagamento",
     planCancelled: "Termina a fine periodo",
@@ -221,7 +221,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
   "pt-BR": {
     heroTitle: "Dê uma direção. Ele define as metas e executa.",
     heroBody: "Hey Hermes transforma sua intenção em trabalho no seu espaço privado.",
-    planName: "Hey Hermes Personal",
+    planName: "Hey Hermes Pro",
     monthlyAccess: "Uma única assinatura mensal para iPhone. Sem plano anual.",
     monthlyFallbackPrice: "US$ 29/mês",
     purchase: "Continuar por {price}/mês",
@@ -242,7 +242,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
     manageError: "Não foi possível abrir o gerenciamento de assinaturas da App Store.",
     privacy: "Política de privacidade",
     terms: "Termos de serviço",
-    planActive: "Personal",
+    planActive: "Pro",
     planTrialing: "Teste",
     planGrace: "Nova tentativa de cobrança",
     planCancelled: "Termina no fim do período",
@@ -253,7 +253,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
   ja: {
     heroTitle: "方向を示すだけ。あとは目標を決めて動きます。",
     heroBody: "Hey Hermes があなたの意図を、プライベートなワークスペースでの作業に変えます。",
-    planName: "Hey Hermes Personal",
+    planName: "Hey Hermes Pro",
     monthlyAccess: "iPhone向けの月額プランは1つだけです。年額プランはありません。",
     monthlyFallbackPrice: "月額29米ドル",
     purchase: "月額{price}で続ける",
@@ -274,7 +274,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
     manageError: "App Storeのサブスクリプション管理を開けませんでした。",
     privacy: "プライバシーポリシー",
     terms: "利用規約",
-    planActive: "Personal",
+    planActive: "Pro",
     planTrialing: "無料体験中",
     planGrace: "支払い再試行中",
     planCancelled: "期間終了で停止",
@@ -285,7 +285,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
   ko: {
     heroTitle: "방향만 알려주세요. 목표를 세우고 실행합니다.",
     heroBody: "Hey Hermes가 당신의 의도를 비공개 워크스페이스의 작업으로 바꿉니다.",
-    planName: "Hey Hermes Personal",
+    planName: "Hey Hermes Pro",
     monthlyAccess: "iPhone 월간 구독은 하나뿐입니다. 연간 요금제는 없습니다.",
     monthlyFallbackPrice: "월 USD 29",
     purchase: "월 {price}에 계속",
@@ -306,7 +306,7 @@ const copyByLocale: Record<AppLocale, IosPaywallCopy> = {
     manageError: "App Store 구독 관리를 열 수 없습니다.",
     privacy: "개인정보 처리방침",
     terms: "서비스 이용약관",
-    planActive: "Personal",
+    planActive: "Pro",
     planTrialing: "무료 체험",
     planGrace: "결제 재시도",
     planCancelled: "기간 종료 시 해지",
@@ -340,7 +340,7 @@ export type HeyPaywallOfferCopy = {
 
 const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
   en: {
-    eyebrow: "Hey Hermes Personal",
+    eyebrow: "Hey Hermes Pro",
     trialTitle: "Try Hey Hermes free for 7 days",
     trialTitleAccent: "free for 7 days",
     planTitle: "An AI that works for you. And belongs to you.",
@@ -359,7 +359,7 @@ const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
     subscribeTerms: "{price}/month. Renews automatically each month until you cancel in your App Store settings at least 24 hours before the period ends.",
   },
   de: {
-    eyebrow: "Hey Hermes Personal",
+    eyebrow: "Hey Hermes Pro",
     trialTitle: "Teste Hey Hermes 7 Tage gratis",
     trialTitleAccent: "7 Tage gratis",
     planTitle: "Eine KI, die für dich arbeitet. Und dir gehört.",
@@ -378,7 +378,7 @@ const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
     subscribeTerms: "{price}/Monat. Verlängert sich automatisch jeden Monat, bis du spätestens 24 Stunden vor Ablauf in den App-Store-Einstellungen kündigst.",
   },
   fr: {
-    eyebrow: "Hey Hermes Personal",
+    eyebrow: "Hey Hermes Pro",
     trialTitle: "Essaie Hey Hermes gratuitement pendant 7 jours",
     trialTitleAccent: "gratuitement pendant 7 jours",
     planTitle: "Une IA qui travaille pour toi. Et qui t’appartient.",
@@ -397,7 +397,7 @@ const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
     subscribeTerms: "{price}/mois. Renouvellement automatique chaque mois jusqu’à ce que tu résilies dans les réglages de l’App Store, au moins 24 heures avant la fin de la période.",
   },
   es: {
-    eyebrow: "Hey Hermes Personal",
+    eyebrow: "Hey Hermes Pro",
     trialTitle: "Prueba Hey Hermes gratis durante 7 días",
     trialTitleAccent: "gratis durante 7 días",
     planTitle: "Una IA que trabaja para ti. Y que es tuya.",
@@ -416,7 +416,7 @@ const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
     subscribeTerms: "{price}/mes. Se renueva automáticamente cada mes hasta que canceles en los ajustes del App Store al menos 24 horas antes de que termine el periodo.",
   },
   it: {
-    eyebrow: "Hey Hermes Personal",
+    eyebrow: "Hey Hermes Pro",
     trialTitle: "Prova Hey Hermes gratis per 7 giorni",
     trialTitleAccent: "gratis per 7 giorni",
     planTitle: "Un’IA che lavora per te. E che ti appartiene.",
@@ -435,7 +435,7 @@ const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
     subscribeTerms: "{price}/mese. Si rinnova automaticamente ogni mese finché non disdici nelle impostazioni dell’App Store almeno 24 ore prima della fine del periodo.",
   },
   "pt-BR": {
-    eyebrow: "Hey Hermes Personal",
+    eyebrow: "Hey Hermes Pro",
     trialTitle: "Experimente o Hey Hermes grátis por 7 dias",
     trialTitleAccent: "grátis por 7 dias",
     planTitle: "Uma IA que trabalha para você. E que é sua.",
@@ -454,7 +454,7 @@ const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
     subscribeTerms: "{price}/mês. Renova automaticamente todo mês até você cancelar nos ajustes da App Store pelo menos 24 horas antes do fim do período.",
   },
   ja: {
-    eyebrow: "Hey Hermes Personal",
+    eyebrow: "Hey Hermes Pro",
     trialTitle: "Hey Hermesを7日間無料でお試し",
     trialTitleAccent: "7日間無料",
     planTitle: "あなたのために働くAI。そして、あなたのもの。",
@@ -473,7 +473,7 @@ const offerCopyByLocale: Record<AppLocale, HeyPaywallOfferCopy> = {
     subscribeTerms: "月額{price}。期間終了の24時間前までにApp Storeの設定で解約しない限り、毎月自動更新されます。",
   },
   ko: {
-    eyebrow: "Hey Hermes Personal",
+    eyebrow: "Hey Hermes Pro",
     trialTitle: "Hey Hermes 7일 무료 체험",
     trialTitleAccent: "7일 무료",
     planTitle: "당신을 위해 일하는 AI. 그리고 당신의 것.",
@@ -511,7 +511,8 @@ function fill(template: string, price: string) {
  * paywall round (HPD-1530).
  */
 type TierPlan = "starter" | "personal" | "max";
-const tierNames: Record<TierPlan, string> = { starter: "Hey Hermes Starter", personal: "Hey Hermes Pro", max: "Hey Hermes Max" };
+// HPD-1762 (Justus 2026-10-26): display names only; product ids stay. The 12.99 plan (product id starter) is "Personal", the 29 plan (id personal) is "Pro".
+const tierNames: Record<TierPlan, string> = { starter: "Hey Hermes Personal", personal: "Hey Hermes Pro", max: "Hey Hermes Max" };
 const tierTrialCta: Partial<Record<AppLocale, string>> & { en: string } = { en: "Start {days} days free", de: "{days} Tage gratis starten" };
 export function iosPaywallTierName(plan: TierPlan) { return tierNames[plan]; }
 const tierTrialChip: Partial<Record<AppLocale, string>> & { en: string } = { en: "{days} days free", de: "{days} Tage gratis" };
@@ -570,8 +571,9 @@ export type IosPaywallStoreState = "loading" | "ready" | "unavailable";
 function planLabel(copy: IosPaywallCopy, input: { comped: boolean; entitlementStatus: EntitlementStatus; entitlementPlan?: string; tiered?: boolean }) {
   if (input.entitlementStatus === "trialing") return copy.planTrialing;
   // HPD-1534: an active Starter or Max subscription names its tier ("Personal" stays as before).
-  if (input.entitlementStatus === "active") return input.entitlementPlan === "starter" ? "Starter" : input.entitlementPlan === "max" ? "Max"
-    : input.tiered && input.entitlementPlan === "personal" ? "Pro" : copy.planActive;
+  // HPD-1762: "personal" (the 29 plan) is Pro, "starter" (the 12.99 plan) is Personal; an unknown plan keeps copy.planActive.
+  if (input.entitlementStatus === "active") return input.entitlementPlan === "starter" ? "Personal" : input.entitlementPlan === "max" ? "Max"
+    : input.entitlementPlan === "personal" ? "Pro" : copy.planActive;
   if (input.entitlementStatus === "grace_period") return copy.planGrace;
   if (input.entitlementStatus === "cancelled") return copy.planCancelled;
   // Complimentary access is real access, but it is not a purchased plan and it
