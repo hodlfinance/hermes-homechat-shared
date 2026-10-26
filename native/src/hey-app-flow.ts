@@ -15,10 +15,10 @@ import type { HeyHermesAppWaitlistState, HeyHermesSalesStatus } from "../core/he
  */
 export type HeyAppFlowCopy = {
   valueLine: string;
-  welcome: { intro: string; talk: string; examples: readonly [lead: string, items: readonly string[]]; runs: string; price: string; start: string; login: string; code: string };
-  signUp: { title: string; sentTitle: string; sentBody: string; sentTo: string; google: string; orEmail: string; emailPlaceholder: string; sendLink: string; hint: string; haveAccount: string; logIn: string };
+  welcome: { intro: string; talk: string; examples: readonly [lead: string, items: readonly string[]]; runs: string; price: string; start: string; login: string; code: string; codeLabel: string; cancel: string };
+  signUp: { title: string; sentTitle: string; sentBody: string; sentTo: string; google: string; apple: string; orEmail: string; emailPlaceholder: string; sendLink: string; hint: string; haveAccount: string; logIn: string };
   /** Returning users (mockups 14, 15, 17, 18): the login screen, the check-your-email screen and the logged-in-as row. */
-  login: { title: string; body: string; sendLink: string; google: string; newHere: string; getStarted: string; sentTitle: string; sentBody: string; wrongAddress: string; loggedInAs: string; notYou: string };
+  login: { title: string; body: string; sendLink: string; google: string; apple: string; newHere: string; getStarted: string; sentTitle: string; sentBody: string; wrongAddress: string; loggedInAs: string; notYou: string };
   waitlist: { title: string; body: string; writeTo: string; codeQuestion: string; codePlaceholder: string; redeem: string; redeeming: string; invalid: string; subscribe: string };
   invite: { banner: string };
   release: { title: string; body: string; urgency: string; cta: string };
@@ -37,8 +37,10 @@ const en: HeyAppFlowCopy = {
     runs: "It runs on your own private server. You can switch its AI model anytime.",
     price: "30 days free, then {price} a month.",
     start: "Get started",
-    login: "I already have an account · Log in",
-    code: "Enter invitation code",
+    login: "Log in",
+    code: "I have an invitation code",
+    codeLabel: "Invitation code",
+    cancel: "Cancel",
   },
   signUp: {
     title: "One more step, then Hey Hermes replies.",
@@ -46,6 +48,7 @@ const en: HeyAppFlowCopy = {
     sentBody: "Open it on this device to continue here.",
     sentTo: "Sent to {email}",
     google: "Continue with Google",
+    apple: "Continue with Apple",
     orEmail: "or with email",
     emailPlaceholder: "you@example.com",
     sendLink: "Send link",
@@ -58,6 +61,7 @@ const en: HeyAppFlowCopy = {
     body: "Log in to your Hey Hermes account.",
     sendLink: "Send login link",
     google: "Sign in with Google",
+    apple: "Sign in with Apple",
     newHere: "New to Hey Hermes?",
     getStarted: "Get started",
     sentTitle: "Check your email.",
@@ -125,8 +129,10 @@ const de: HeyAppFlowCopy = {
     runs: "Er läuft auf deinem privaten Server in Europa. Du kannst sein KI-Modell jederzeit wechseln.",
     price: "30 Tage gratis, danach {price} im Monat.",
     start: "Los geht’s",
-    login: "Ich habe schon ein Konto · Anmelden",
-    code: "Einladungscode eingeben",
+    login: "Anmelden",
+    code: "Ich habe einen Einladungscode",
+    codeLabel: "Einladungscode",
+    cancel: "Abbrechen",
   },
   signUp: {
     title: "Noch ein Schritt, dann antwortet Hey Hermes.",
@@ -134,6 +140,7 @@ const de: HeyAppFlowCopy = {
     sentBody: "Öffne ihn auf diesem Gerät, um hier weiterzumachen.",
     sentTo: "Gesendet an {email}",
     google: "Weiter mit Google",
+    apple: "Weiter mit Apple",
     orEmail: "oder mit E-Mail",
     emailPlaceholder: "du@beispiel.de",
     sendLink: "Link senden",
@@ -146,6 +153,7 @@ const de: HeyAppFlowCopy = {
     body: "Melde dich in deinem Hey-Hermes-Konto an.",
     sendLink: "Anmeldelink senden",
     google: "Mit Google anmelden",
+    apple: "Mit Apple anmelden",
     newHere: "Neu bei Hey Hermes?",
     getStarted: "Los geht’s",
     sentTitle: "Schau in dein Postfach.",

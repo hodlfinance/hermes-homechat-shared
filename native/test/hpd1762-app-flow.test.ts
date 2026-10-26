@@ -127,3 +127,20 @@ test("the opening and plan-loading moments of the store builds use the new desig
   assert.match(surface, /offeredMobilePlans\.length === 0\)\)/);
   assert.match(surface, /imUserTime: \{ color: "rgba\(255,255,255,0\.75\)" \}/);
 });
+
+test("the 144 type scale: 50pt buttons with 1pt outlines, no weight 700, examples highlighted not underlined, one-line footer", () => {
+  const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  const block = surface.slice(surface.indexOf("const flow = StyleSheet.create"), surface.indexOf("function HeyFlowFrame"));
+  assert.doesNotMatch(block, /fontWeight: "700"/);
+  assert.match(block, /primary: \{ height: 50, borderRadius: 25/);
+  assert.match(block, /outline: \{ height: 50, borderRadius: 25, borderWidth: 1,/);
+  assert.match(block, /hl: \{ backgroundColor: flowScheme\("#e3eafb", "#1f2a4a"\) \}/);
+  const welcome = surface.slice(surface.indexOf("function HeyWelcomeScreen("), surface.indexOf("function HeyAuthScreen("));
+  assert.doesNotMatch(welcome, /underline/);
+  assert.match(surface, /\{signUp \? null : \(\s*<Pressable onPress=\{onPassword\}/);
+  for (const locale of ["en", "de"] as const) {
+    const copy = heyAppFlowCopy(locale);
+    assert.ok(copy.signUp.apple && copy.login.apple && copy.welcome.codeLabel && copy.welcome.cancel);
+    assert.doesNotMatch(copy.welcome.login, /·/);
+  }
+});

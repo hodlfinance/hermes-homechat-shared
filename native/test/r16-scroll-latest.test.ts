@@ -79,5 +79,5 @@ test("jump-to-latest restores auto-follow and hides the control", () => {
 test("the accessible jump-to-latest control has a solid surface contrast in both palettes", () => {
   assert.match(surface, /scrollDownButton:[\s\S]*?backgroundColor: palette\.accent,/);
   assert.match(surface, /<ChevronDown size=\{20\} color=\{palette\.surface\} \/>/);
-  assert.match(surface, /style=\{styles\.scrollDownButton\}[\s\S]*?onPress=\{jumpToLatestMobileMessage\}[\s\S]*?accessibilityRole="button"[\s\S]*?accessibilityLabel=\{staticUiCopy\(appLocale\)\["Scroll to latest message"\]\}/);
+  assert.match(surface, /style=\{(?:styles\.scrollDownButton|\[styles\.scrollDownButton[^\]]*\])\}[\s\S]*?onPress=\{jumpToLatestMobileMessage\}[\s\S]*?accessibilityRole="button"[\s\S]*?accessibilityLabel=\{staticUiCopy\(appLocale\)\["Scroll to latest message"\]\}/);
 });
