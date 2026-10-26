@@ -16,7 +16,9 @@ import type { HeyHermesAppWaitlistState, HeyHermesSalesStatus } from "../core/he
 export type HeyAppFlowCopy = {
   valueLine: string;
   welcome: { intro: string; talk: string; examples: readonly [lead: string, items: readonly string[]]; runs: string; price: string; start: string; login: string; code: string };
-  signUp: { title: string; sentTitle: string; sentBody: string; sentTo: string };
+  signUp: { title: string; sentTitle: string; sentBody: string; sentTo: string; google: string; orEmail: string; emailPlaceholder: string; sendLink: string; hint: string; haveAccount: string; logIn: string };
+  /** Returning users (mockups 14, 15, 17, 18): the login screen, the check-your-email screen and the logged-in-as row. */
+  login: { title: string; body: string; sendLink: string; google: string; newHere: string; getStarted: string; sentTitle: string; sentBody: string; wrongAddress: string; loggedInAs: string; notYou: string };
   waitlist: { title: string; body: string; writeTo: string; codeQuestion: string; codePlaceholder: string; redeem: string; redeeming: string; invalid: string; subscribe: string };
   invite: { banner: string };
   release: { title: string; body: string; urgency: string; cta: string };
@@ -30,7 +32,7 @@ const en: HeyAppFlowCopy = {
   valueLine: "Your own AI agent on your own private server. Text it or talk to it, like a friend.",
   welcome: {
     intro: "Hey Hermes is your own AI agent that learns how you work and what matters to you.",
-    talk: "Text it or talk to it, like a friend. You can use it right here in the app. It uses its own computer like you do.",
+    talk: "Text it or talk to it, like a friend. It uses its own computer like you do.",
     examples: ["It ", ["prioritizes your to-dos", "reserves a table for Friday", "books your next flight", "spots deals", "builds you little apps"]],
     runs: "It runs on your own private server. You can switch its AI model anytime.",
     price: "30 days free, then {price} a month.",
@@ -43,6 +45,26 @@ const en: HeyAppFlowCopy = {
     sentTitle: "We sent you a link.",
     sentBody: "Open it on this device to continue here.",
     sentTo: "Sent to {email}",
+    google: "Continue with Google",
+    orEmail: "or with email",
+    emailPlaceholder: "you@example.com",
+    sendLink: "Send link",
+    hint: "No password needed. We’ll email you a link.",
+    haveAccount: "Already have an account?",
+    logIn: "Log in",
+  },
+  login: {
+    title: "Welcome back.",
+    body: "Log in to your Hey Hermes account.",
+    sendLink: "Send login link",
+    google: "Sign in with Google",
+    newHere: "New to Hey Hermes?",
+    getStarted: "Get started",
+    sentTitle: "Check your email.",
+    sentBody: "We sent a login link to {email}. Open it on this device to log in.",
+    wrongAddress: "Wrong address? Go back",
+    loggedInAs: "Logged in as {email}",
+    notYou: "Not you? Log out",
   },
   waitlist: {
     title: "All spots are taken right now.",
@@ -95,12 +117,12 @@ const en: HeyAppFlowCopy = {
 };
 
 const de: HeyAppFlowCopy = {
-  valueLine: "Dein eigener KI-Agent auf Deinem eigenen privaten Server. Schreib ihm oder sprich mit ihm, wie mit einem Freund.",
+  valueLine: "Dein eigener KI-Agent auf deinem eigenen privaten Server. Schreib ihm oder sprich mit ihm, wie mit einem Freund.",
   welcome: {
-    intro: "Hey Hermes ist Dein eigener KI-Agent, der lernt, wie Du arbeitest und was Dir wichtig ist.",
-    talk: "Schreib ihm oder sprich mit ihm, wie mit einem Freund. Du kannst ihn direkt hier in der App nutzen. Er benutzt seinen eigenen Computer, so wie Du.",
-    examples: ["Er ", ["priorisiert Deine To-dos", "reserviert einen Tisch für Freitag", "bucht einen Flug nach Lissabon", "findet Angebote", "baut Dir kleine Apps"]],
-    runs: "Er läuft auf Deinem privaten Server in Europa. Du kannst sein KI-Modell jederzeit wechseln.",
+    intro: "Hey Hermes ist dein eigener KI-Agent, der lernt, wie du arbeitest und was dir wichtig ist.",
+    talk: "Schreib ihm oder sprich mit ihm, wie mit einem Freund. Er nutzt seinen eigenen Computer, genau wie du.",
+    examples: ["Er ", ["priorisiert deine To-dos", "reserviert einen Tisch für Freitag", "bucht einen Flug nach Lissabon", "findet Angebote", "baut dir kleine Apps"]],
+    runs: "Er läuft auf deinem privaten Server in Europa. Du kannst sein KI-Modell jederzeit wechseln.",
     price: "30 Tage gratis, danach {price} im Monat.",
     start: "Los geht’s",
     login: "Ich habe schon ein Konto · Anmelden",
@@ -108,15 +130,35 @@ const de: HeyAppFlowCopy = {
   },
   signUp: {
     title: "Noch ein Schritt, dann antwortet Hey Hermes.",
-    sentTitle: "Wir haben Dir einen Link geschickt.",
+    sentTitle: "Wir haben dir einen Link geschickt.",
     sentBody: "Öffne ihn auf diesem Gerät, um hier weiterzumachen.",
     sentTo: "Gesendet an {email}",
+    google: "Weiter mit Google",
+    orEmail: "oder mit E-Mail",
+    emailPlaceholder: "du@beispiel.de",
+    sendLink: "Link senden",
+    hint: "Kein Passwort nötig. Wir schicken dir einen Link.",
+    haveAccount: "Schon ein Konto?",
+    logIn: "Anmelden",
+  },
+  login: {
+    title: "Willkommen zurück.",
+    body: "Melde dich in deinem Hey-Hermes-Konto an.",
+    sendLink: "Anmeldelink senden",
+    google: "Mit Google anmelden",
+    newHere: "Neu bei Hey Hermes?",
+    getStarted: "Los geht’s",
+    sentTitle: "Schau in dein Postfach.",
+    sentBody: "Wir haben einen Anmeldelink an {email} geschickt. Öffne ihn auf diesem Gerät, um dich anzumelden.",
+    wrongAddress: "Falsche Adresse? Zurück",
+    loggedInAs: "Angemeldet als {email}",
+    notYou: "Nicht du? Abmelden",
   },
   waitlist: {
     title: "Gerade sind alle Plätze vergeben.",
-    body: "Wir öffnen neue Plätze Schritt für Schritt. Sobald Deiner bereit ist, melden wir uns.",
+    body: "Wir öffnen neue Plätze Schritt für Schritt. Sobald deiner bereit ist, melden wir uns.",
     writeTo: "Wir schreiben an {email} und hier in der App.",
-    codeQuestion: "Hast Du einen Einladungscode?",
+    codeQuestion: "Hast du einen Einladungscode?",
     codePlaceholder: "Einladungscode",
     redeem: "Einlösen",
     redeeming: "Wird geprüft...",
@@ -126,13 +168,13 @@ const de: HeyAppFlowCopy = {
   invite: { banner: "Du hast eine Einladung. Dein Platz wartet." },
   release: {
     title: "Dein Platz ist bereit.",
-    body: "Wir öffnen neue Plätze Schritt für Schritt. Jetzt bist Du dran.",
+    body: "Wir öffnen neue Plätze Schritt für Schritt. Jetzt bist du dran.",
     urgency: "Wer zuerst abonniert, bekommt den Platz.",
     cta: "Zum Kauf",
   },
   taken: {
     title: "Dieser Platz ist leider vergeben.",
-    body: "Wir öffnen laufend neue Plätze und schreiben Dir, sobald der nächste für Dich bereit ist.",
+    body: "Wir öffnen laufend neue Plätze und schreiben dir, sobald der nächste für dich bereit ist.",
     back: "Zurück",
   },
   purchase: {
@@ -141,8 +183,8 @@ const de: HeyAppFlowCopy = {
     plainLine: "{price}/Monat. Jederzeit kündbar.",
     trialCta: "{days} Tage gratis starten",
     plainCta: "Abonnieren für {price}/Monat",
-    trialTerms: "Heute {zero}. Danach {price} im Monat, bis Du in den App-Store-Einstellungen kündigst. Apple bestätigt die Testphase im Kaufdialog.",
-    plainTerms: "{price} im Monat, bis Du in den App-Store-Einstellungen kündigst.",
+    trialTerms: "Heute {zero}. Danach {price} im Monat, bis du in den App-Store-Einstellungen kündigst. Apple bestätigt die Testphase im Kaufdialog.",
+    plainTerms: "{price} im Monat, bis du in den App-Store-Einstellungen kündigst.",
   },
   limit: {
     title: "Du hast das Kontingent dieser Woche aufgebraucht.",
@@ -151,11 +193,11 @@ const de: HeyAppFlowCopy = {
   },
   pro: {
     title: "Mehr Spielraum mit Pro.",
-    body: "Pro hat ein größeres Wochenkontingent. Dein Server und Deine Daten bleiben, und nichts wird doppelt berechnet.",
+    body: "Pro hat ein größeres Wochenkontingent. Dein Server und deine Daten bleiben, und nichts wird doppelt berechnet.",
     name: "Pro",
     perMonth: "{price} / Monat",
     feature: "Ein größeres Wochenkontingent",
-    noTrial: "Keine Testphase. Abrechnung über Dein App-Store-Konto; jederzeit in den App-Store-Einstellungen kündbar.",
+    noTrial: "Keine Testphase. Abrechnung über dein App-Store-Konto; jederzeit in den App-Store-Einstellungen kündbar.",
     cta: "Zu Pro wechseln · {price} im Monat",
     later: "Jetzt nicht",
     ownKey: "Oder eigenen OpenRouter-Schlüssel nutzen",
@@ -224,4 +266,9 @@ export function heyShowLimitCard(input: { remainingIncludedPercent: number | nul
 /** HPD-1762: Android push needs the Firebase config in the build; the build says so with extra.androidPush === true. */
 export function heyAndroidPushAvailable(androidPush: unknown): boolean {
   return androidPush === true;
+}
+
+/** HPD-1762: a reply that is one short plain line hugs its text in the iMessage bubble; anything longer or structured keeps the definite width. */
+export function heyIsShortReply(text: string): boolean {
+  return text.length > 0 && text.length <= 60 && !/[\n`*#>|]|^\s*(?:[-+]|\d+[.)])\s/.test(text);
 }

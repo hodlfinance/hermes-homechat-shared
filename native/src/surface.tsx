@@ -52,7 +52,7 @@ import { nativeR8HostScreenTarget, type NativeR8ScreenRequest } from "./host-scr
 import { mobileHostSendBlocked, mobileHostThreadLoading, mobileHostThreadOpenFailed, mobileHostThreadTarget, mobileHostThreadTargetKey, mobileMessagePagesEqual, mobileStartupHydrationAllowed, mobileStartupMaySelectConversation, mobileStartupPaintsSnapshotMessages } from "./mobile-host-thread-open";
 import { subscribeKeyboardInsetRelease } from "./mobile-keyboard-inset";
 import { WindowKeyboardAvoidingView } from "./window-keyboard-avoiding-view";
-import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createDelegatedTaskPollLoop, nextDelegatedTasks, type DelegatedTaskPollConditions } from "./delegated-task-poll";
 import {
   AccessibilityInfo,
@@ -72,6 +72,7 @@ import {
   SafeAreaView,
   ScrollView,
   Share,
+  StatusBar as RNStatusBar,
   StyleSheet,
   Switch,
   Text,
@@ -477,7 +478,7 @@ import { heyNoAccessCopy, heyPaywallAccountCopy, heyPreparingBody, heyPreparingC
 import { appStoreManagedSentence, mobileStoreNotice, mobileSubscriptionManageAction, mobileSubscriptionManagementTarget, type MobileSubscriptionManagementTarget } from "./subscription-management";
 import { heyServerDeletedCopy, heyServerDeletedDateLine, heyServerDeletedErrorMessage, heyServerDeletedModel, heyServerDeletedReceiptLine } from "./hey-server-deleted";
 import { deviceAppLocale, heySignInCopy, heySignInHeadline } from "./hey-sign-in";
-import { HEY_PERSONAL_PRICE_FALLBACK, heyAndroidPushAvailable, heyAppEntryScreen, heyAppFlowCopy, heyAppFlowFill, heyInviteCodeFromUrl, heyInviteRedeemAccepted, heyNormalizeInviteCode, heyShowLimitCard } from "./hey-app-flow";
+import { HEY_PERSONAL_PRICE_FALLBACK, heyAndroidPushAvailable, heyAppEntryScreen, heyIsShortReply, heyAppFlowCopy, heyAppFlowFill, heyInviteCodeFromUrl, heyInviteRedeemAccepted, heyNormalizeInviteCode, heyShowLimitCard } from "./hey-app-flow";
 import { MobileGoogleMark } from "./mobile-google-mark";
 import {
   iosPaywallCopy,
@@ -598,6 +599,8 @@ export function createNativeR8Surface(host: NativeR8Host) {
     RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync,
     useAudioRecorder, useAudioRecorderState, FileSystem } = host.platform;
   const brandIcon = host.identity.icon ?? require("../assets/baby-dragon-neutral.png");
+  // HPD-1762: the Hey app (standalone host) draws the chat as iMessage bubbles; the HODL host keeps its own.
+  const imessageChatStyle = host.session.mode === "standalone";
   // HPD-1442: a host may draw Hermes itself (HODL: a round bot figure in the
   // colour of the thread). Without it every mark stays the dragon or the brand icon.
   const HostAssistantAvatar = host.presentation?.assistantAvatar ?? null;
@@ -8542,12 +8545,18 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
 
   if (!token) {
     const canSubmitLogin = Boolean(email.trim() && (loginPassword || accessCode.trim())) && !busy;
-    const signInCopy = heySignInCopy(appLocale);
+    const flowLogin = heyAppFlowCopy(appLocale).login;
+    // HPD-1762: the 1.1 login words for the store builds (mockup 14): "Send login link", "New to Hey Hermes? Get started".
+    const signInCopy = storePlatform && host.session.mode === "standalone"
+      ? { ...heySignInCopy(appLocale), ...(authEntryMode === "sign_in" ? { sendLink: flowLogin.sendLink } : {}), newHere: flowLogin.newHere, createLink: flowLogin.getStarted }
+      : heySignInCopy(appLocale);
     const flowCopy = heyAppFlowCopy(appLocale);
     // HPD-1762: the sign-up headline of the 1.1 screens (store builds only); sign-in keeps its text.
-    const signInHeadline = storePlatform && authEntryMode === "create_account"
+    const signInHeadline = storePlatform && host.session.mode === "standalone" && authEntryMode === "create_account"
       ? { title: flowCopy.signUp.title, titleAccent: "", body: flowCopy.valueLine }
-      : heySignInHeadline(appLocale, authEntryMode);
+      : storePlatform && host.session.mode === "standalone"
+        ? { title: flowLogin.title, titleAccent: "", body: flowLogin.body }
+        : heySignInHeadline(appLocale, authEntryMode);
     const signInTitleAccentAt = signInHeadline.titleAccent ? signInHeadline.title.indexOf(signInHeadline.titleAccent) : -1;
     // HPD-1105: Apple and Google look alike - black in light mode; in dark mode
     // Google's own dark variant (#131314, grey outline) and Apple's black button.
@@ -8567,7 +8576,45 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     }
     if (storePlatform && emailMagicLinkPhase === "sent" && !signInWithPassword && !signedOutSupportOpen) {
       return (
-        <HeyLinkSentScreen locale={appLocale} dark={resolvedColorScheme === "dark"} email={emailSignupEmail.trim()} onBack={() => setEmailMagicLinkPhase("idle")} />
+        <HeyLinkSentScreen locale={appLocale} dark={resolvedColorScheme === "dark"} email={emailSignupEmail.trim()} login={authEntryMode === "sign_in"} onBack={() => setEmailMagicLinkPhase("idle")} />
+      );
+    }
+    if (storePlatform && host.session.mode === "standalone" && !signInWithPassword && !signedOutSupportOpen) {
+      const appleOffered = Boolean(nativeAuthConfig?.providers.apple && appleSignInAvailable);
+      const appleNode = appleOffered ? (
+        nativeAuthBusy === "apple" ? (
+          <View style={flow.primary}><ActivityIndicator color={flowOnInk} /></View>
+        ) : (
+          <AppleAuthentication.AppleAuthenticationButton
+            key={`apple-${resolvedColorScheme}`}
+            buttonStyle={resolvedColorScheme === "dark" ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+            buttonType={authEntryMode === "sign_in" ? (AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN ?? AppleAuthentication.AppleAuthenticationButtonType.CONTINUE) : AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+            cornerRadius={26}
+            onPress={() => { if (!nativeAuthBusy) void signInWithApple(); }}
+            style={[styles.appleAuthButton, { height: 52, width: "100%" }, Boolean(nativeAuthBusy) && styles.disabledButton]}
+          />
+        )
+      ) : null;
+      return (
+        <HeyAuthScreen
+          locale={appLocale}
+          dark={resolvedColorScheme === "dark"}
+          mode={authEntryMode}
+          email={emailSignupEmail}
+          onEmail={(value) => { setEmailSignupEmail(value); if (emailMagicLinkPhase === "sent") setEmailMagicLinkPhase("idle"); }}
+          sending={emailMagicLinkPhase === "sending"}
+          completing={emailMagicLinkPhase === "completing"}
+          sent={emailMagicLinkPhase === "sent"}
+          onSendLink={() => void requestEmailMagicLink()}
+          appleNode={appleNode}
+          googleOffered={googleOffered}
+          onGoogle={() => void signInWithGoogle()}
+          googleBusy={nativeAuthBusy === "google"}
+          googleBlocked={googleButtonBlocked("login")}
+          errorNode={error ? <Notice locale={appLocale} tone="error" text={error} onDismiss={dismissAppError} /> : null}
+          onSwitch={() => { setSignInWithPassword(false); setAuthEntryMode(authEntryMode === "sign_in" ? "create_account" : "sign_in"); }}
+          onPassword={() => { if (!email.trim() && emailSignupEmail.trim()) setEmail(emailSignupEmail.trim()); setAuthEntryMode("sign_in"); setSignInWithPassword(true); }}
+        />
       );
     }
     if (signedOutSupportOpen) {
@@ -9255,12 +9302,13 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const entryScreen = productAccessScreen === "purchase" && storePlatform ? heyAppEntryScreen(salesStatus, purchaseOpened) : "purchase";
   if (entryScreen !== "purchase") {
     const dark = resolvedColorScheme === "dark";
-    if (entryScreen === "release") return <HeyReleaseScreen locale={appLocale} dark={dark} onPurchase={() => setPurchaseOpened(true)} />;
-    if (entryScreen === "taken" && !takenDismissed) return <HeyTakenScreen locale={appLocale} dark={dark} onBack={() => setTakenDismissed(true)} />;
+    if (entryScreen === "release") return <HeyReleaseScreen locale={appLocale} dark={dark} account={heyFlowAccount(appLocale, snapshot.me.email, () => void logout())} onPurchase={() => setPurchaseOpened(true)} />;
+    if (entryScreen === "taken" && !takenDismissed) return <HeyTakenScreen locale={appLocale} dark={dark} account={heyFlowAccount(appLocale, snapshot.me.email, () => void logout())} onBack={() => setTakenDismissed(true)} />;
     return (
       <HeyWaitlistScreen
         locale={appLocale}
         dark={dark}
+        account={heyFlowAccount(appLocale, snapshot.me.email, () => void logout())}
         email={snapshot.me.email}
         code={inviteInput}
         onCode={(value) => { setInviteInput(value); if (invitePhase === "invalid") setInvitePhase("idle"); }}
@@ -9273,6 +9321,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   if (productAccessScreen === "purchase" && storePlatform && selectedMobilePlan && selectedMobilePlan.plan === "starter" && offeredMobilePlans.length === 1) {
     return (
       <HeySinglePurchasePanel
+        account={heyFlowAccount(appLocale, snapshot.me.email, () => void logout())}
         locale={appLocale}
         store={storePlatform}
         dark={resolvedColorScheme === "dark"}
@@ -9288,8 +9337,6 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         onRestore={restoreMobilePurchases}
         accountLabel={heyPaywallAccountCopy(appLocale).entry}
         onOpenAccount={() => setPaywallAccountOpen(true)}
-        signOutLabel={staticUiCopy(appLocale)["Sign out"]}
-        onSignOut={() => void logout()}
       />
     );
   }
@@ -11395,6 +11442,8 @@ function IosPaywallPanel({ locale,
 // throughout instead of light blue on a dark page. Web keeps the light values.
 const androidStartsDark = Platform.OS === "android" && Appearance?.getColorScheme?.() === "dark";
 const paywallBrandColor = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4ed8", dark: "#7ea2ff" }) : androidStartsDark ? "#7ea2ff" : "#1d4ed8";
+const chatAssistantBubble = Platform.OS === "ios" ? DynamicColorIOS({ light: "#eceef3", dark: "#262a33" }) : androidStartsDark ? "#262a33" : "#eceef3";
+const chatUserBubble = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4ed8", dark: "#2f5fd0" }) : androidStartsDark ? "#2f5fd0" : "#1d4ed8";
 const paywallCtaColor = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4ed8", dark: "#3563e9" }) : androidStartsDark ? "#3563e9" : "#1d4ed8";
 const paywallCheckBackground = Platform.OS === "ios" ? DynamicColorIOS({ light: "#e8eefc", dark: "#1e2742" }) : androidStartsDark ? "#1e2742" : "#e8eefc";
 const paywallIllustration = require("../assets/paywall-ink-key.png");
@@ -11625,35 +11674,78 @@ function IosPaywallOfferPanel({ locale,
 }
 
 // ---------------------------------------------------------------------------
-// HPD-1762: Hey Hermes App 1.1 sign-up, waitlist, purchase and upgrade screens.
-// Copy and logic live in hey-app-flow.ts; these are only the views.
+// HPD-1762: Hey Hermes App 1.1 sign-up, login, waitlist, purchase and upgrade screens, drawn like the approved
+// mockups (handoffs/hey-app-1.0-screens, EN light and dark): small dragon mark, serif text, ink pill buttons, no
+// purple. Copy and logic live in hey-app-flow.ts; these are only the views.
 // ---------------------------------------------------------------------------
-const flowSerif = Platform.select({ ios: "Georgia", android: "serif", default: "serif" });
+const flowScheme = (light: string, dark: string) => Platform.OS === "ios" ? DynamicColorIOS({ light, dark }) : androidStartsDark ? dark : light;
+const flowInk = flowScheme("#1e2537", "#f3f4f6");
+const flowOnInk = flowScheme("#ffffff", "#0b0d12");
+const flowBg = flowScheme("#ffffff", "#0b0d12");
+const flowMuted = flowScheme("#5b6272", "#a1a6b5");
+const flowLine = flowScheme("#cfd3dc", "#374151");
+const flowTint = flowScheme("#e8edfb", "#1a2238");
+const flowCardBg = flowScheme("#f5f6fb", "#12151d");
+const flowBlue = flowScheme("#1d4ed8", "#7ea2ff");
+const flowSerif = Platform.select({ ios: "Charter", android: "serif", default: "serif" });
+const flowMark = require("../assets/baby-dragon-neutral.png");
 const flow = StyleSheet.create({
-  title: { color: palette.ink, fontSize: 32, lineHeight: 38, fontFamily: flowSerif, marginTop: 20 },
-  lead: { color: palette.muted, fontSize: 19, lineHeight: 27, fontFamily: flowSerif, marginTop: 14 },
-  price: { color: palette.ink, fontSize: 26, lineHeight: 32, fontFamily: flowSerif, marginTop: 22 },
-  body: { color: palette.text, fontSize: 16, lineHeight: 23, marginTop: 14 },
-  small: { color: palette.muted, fontSize: 14, lineHeight: 20, marginTop: 12 },
-  urgency: { color: palette.ink, fontSize: 17, lineHeight: 24, fontWeight: "700", marginTop: 12 },
+  page: { flexGrow: 1, backgroundColor: flowBg, paddingHorizontal: 24 },
+  mark: { width: 44, height: 44, marginTop: 6 },
+  title: { color: flowInk, fontSize: 32, lineHeight: 38, fontFamily: flowSerif, marginTop: 30 },
+  lead: { color: flowMuted, fontSize: 19, lineHeight: 27, fontFamily: flowSerif, marginTop: 16 },
+  serif: { color: flowInk, fontSize: 19, lineHeight: 27, fontFamily: flowSerif, marginTop: 16 },
+  price: { color: flowInk, fontSize: 28, lineHeight: 34, fontFamily: flowSerif, marginTop: 28 },
+  small: { color: flowMuted, fontSize: 15, lineHeight: 21, marginTop: 14 },
+  smallCentered: { color: flowMuted, fontSize: 14, lineHeight: 20, textAlign: "center", marginTop: 10 },
   error: { color: "#b3261e", fontSize: 14, marginTop: 6 },
-  link: { color: palette.muted, fontSize: 15, textDecorationLine: "underline", textAlign: "center", paddingVertical: 12 },
-  outlineButton: { minHeight: 54, borderRadius: 27, borderWidth: 1.5, borderColor: palette.ink, alignItems: "center", justifyContent: "center", marginTop: 12, paddingHorizontal: 16 },
-  outlineButtonText: { color: palette.ink, fontSize: 17, fontWeight: "700" },
-  banner: { backgroundColor: paywallCheckBackground, borderRadius: 12, padding: 12, marginTop: 14 },
-  bannerText: { color: palette.ink, fontSize: 15, fontWeight: "700" },
-  card: { borderWidth: 1, borderColor: palette.line, borderRadius: 16, padding: 16, marginTop: 16, backgroundColor: palette.surface },
+  link: { color: flowMuted, fontSize: 16, textDecorationLine: "underline", textAlign: "center", paddingVertical: 10 },
+  strong: { color: flowInk, fontSize: 16, textAlign: "center" },
+  primary: { minHeight: 52, borderRadius: 26, backgroundColor: flowInk, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, marginTop: 14, paddingHorizontal: 16 },
+  primaryText: { color: flowOnInk, fontSize: 17, fontWeight: "700" },
+  outline: { minHeight: 52, borderRadius: 26, borderWidth: 1.5, borderColor: flowInk, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, marginTop: 12, paddingHorizontal: 16 },
+  outlineText: { color: flowInk, fontSize: 17, fontWeight: "600" },
+  field: { minHeight: 52, borderRadius: 26, borderWidth: 1.5, borderColor: flowLine, paddingHorizontal: 20, color: flowInk, fontSize: 17, marginTop: 12 },
+  orText: { color: flowMuted, fontSize: 14, textAlign: "center", marginTop: 14 },
+  tintCard: { backgroundColor: flowTint, borderRadius: 24, padding: 22, marginTop: 14 },
+  cardTitle: { color: flowInk, fontSize: 27, lineHeight: 33, fontFamily: flowSerif },
+  cardBody: { color: flowInk, fontSize: 19, lineHeight: 27, fontFamily: flowSerif, marginTop: 10 },
+  fadedIntro: { color: flowMuted, opacity: 0.45, fontSize: 19, lineHeight: 27, fontFamily: flowSerif, marginTop: 26 },
+  proCard: { borderWidth: 2, borderColor: flowInk, backgroundColor: flowCardBg, borderRadius: 24, padding: 22, marginTop: 24 },
+  proRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
+  proName: { color: flowInk, fontSize: 26, fontFamily: flowSerif },
+  proPrice: { color: flowInk, fontSize: 18, fontWeight: "700" },
+  mailCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: flowTint, alignItems: "center", justifyContent: "center", marginTop: 22 },
+  mailGlyph: { color: flowBlue, fontSize: 24 },
+  banner: { backgroundColor: flowTint, borderRadius: 14, padding: 14, marginTop: 14 },
+  bannerText: { color: flowInk, fontSize: 15, fontWeight: "700" },
   spacer: { flexGrow: 1, minHeight: 24 },
-  centered: { alignItems: "center" },
+  accountRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 12 },
+  accountLine: { color: flowMuted, fontSize: 14, flexShrink: 1 },
+  accountAction: { color: flowMuted, fontSize: 14, textDecorationLine: "underline" },
+  footerRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 6, marginTop: 14 },
+  footerLink: { color: flowMuted, fontSize: 14, textDecorationLine: "underline" },
+  footerDot: { color: flowMuted, fontSize: 14 },
 });
 
-function HeyFlowFrame({ dark, children }: { dark: boolean; children: React.ReactNode }) {
+function HeyFlowFrame({ dark, children, account }: { dark: boolean; children: ReactNode; account?: { line: string; action: string; onAction: () => void } }) {
+  // Android draws under the status bar and the gesture bar: the content keeps clear of both.
+  const androidTop = Platform.OS === "android" ? (RNStatusBar.currentHeight ?? 24) + 6 : 0;
+  const androidBottom = Platform.OS === "android" ? 28 : 0;
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: flowBg }]}>
       <StatusBar style={dark ? "light" : "dark"} />
-      <KeyboardAvoidingView style={styles.authKeyboard} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView contentContainerStyle={[styles.paywallScreen, { flexGrow: 1 }]} keyboardShouldPersistTaps="handled">
-          <PaywallArt />
+      <KeyboardAvoidingView style={[styles.authKeyboard, { backgroundColor: flowBg }]} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView style={{ backgroundColor: flowBg }} contentContainerStyle={[flow.page, { paddingTop: 14 + androidTop, paddingBottom: 14 + androidBottom }]} keyboardShouldPersistTaps="handled">
+          {account ? (
+            <View style={flow.accountRow}>
+              <Text style={flow.accountLine} numberOfLines={1}>{account.line}</Text>
+              <Pressable onPress={account.onAction} accessibilityRole="button" accessibilityLabel={account.action} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={flow.accountAction}>{account.action}</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          <Image source={flowMark} style={flow.mark} resizeMode="contain" accessibilityIgnoresInvertColors accessibilityLabel="Hey Hermes" />
           {children}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -11661,11 +11753,17 @@ function HeyFlowFrame({ dark, children }: { dark: boolean; children: React.React
   );
 }
 
-function HeyFlowButton({ label, onPress, busy = false, disabled = false }: { label: string; onPress: () => void; busy?: boolean; disabled?: boolean }) {
+function heyFlowAccount(locale: AppLocale, email: string | null | undefined, onLogout: (() => void) | undefined) {
+  if (!email || !onLogout) return undefined;
+  const copy = heyAppFlowCopy(locale).login;
+  return { line: heyAppFlowFill(copy.loggedInAs, { email }), action: copy.notYou, onAction: onLogout };
+}
+
+function HeyFlowButton({ label, onPress, busy = false, disabled = false, outline = false }: { label: string; onPress: () => void; busy?: boolean; disabled?: boolean; outline?: boolean }) {
   return (
-    <Pressable style={[styles.paywallCta, (disabled || busy) && styles.disabledButton]} disabled={disabled || busy} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
-      {busy ? <ActivityIndicator color="#ffffff" /> : null}
-      <Text style={styles.paywallCtaText}>{label}</Text>
+    <Pressable style={[outline ? flow.outline : flow.primary, (disabled || busy) && styles.disabledButton]} disabled={disabled || busy} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+      {busy ? <ActivityIndicator color={outline ? flowInk : flowOnInk} /> : null}
+      <Text style={outline ? flow.outlineText : flow.primaryText}>{label}</Text>
     </Pressable>
   );
 }
@@ -11684,97 +11782,139 @@ function HeyWelcomeScreen({ locale, dark, price, onStart, onLogin, onCode }: { l
   const [code, setCode] = useState("");
   const [invalid, setInvalid] = useState(false);
   const [lead, items] = copy.examples;
+  const underline = { textDecorationLine: "underline" as const, textDecorationColor: flowScheme("#a9bbe9", "#3a4a78") };
   return (
     <HeyFlowFrame dark={dark}>
-      <Text style={flow.lead} accessibilityRole="header">{copy.intro}</Text>
-      <Text style={flow.body}>{copy.talk}</Text>
-      <Text style={flow.body}>
+      <Text style={[flow.serif, { marginTop: 32 }]} accessibilityRole="header">{copy.intro}</Text>
+      <Text style={flow.serif}>{copy.talk}</Text>
+      <Text style={flow.serif}>
         {lead}
         {items.map((item, index) => (
           <Text key={item}>
-            <Text style={{ fontWeight: "700", color: palette.ink }}>{item}</Text>
+            <Text style={underline}>{item}</Text>
             {index < items.length - 2 ? ", " : index === items.length - 2 ? " and " : "."}
           </Text>
         ))}
       </Text>
-      <Text style={flow.body}>{copy.runs}</Text>
-      <Text style={[flow.body, { fontWeight: "700", color: palette.ink }]}>{heyAppFlowFill(copy.price, { price })}</Text>
+      <Text style={flow.serif}>{copy.runs}</Text>
       <View style={flow.spacer} />
+      <Text style={[flow.strong, { marginTop: 18 }]}>{heyAppFlowFill(copy.price, { price })}</Text>
       <HeyFlowButton label={copy.start} onPress={onStart} />
-      <HeyFlowLink label={copy.login} onPress={onLogin} />
+      <HeyFlowButton label={copy.login} onPress={onLogin} outline />
       {codeOpen ? (
         <View>
           <TextInput value={code} onChangeText={(value) => { setCode(value); setInvalid(false); }} autoCapitalize="characters" autoCorrect={false}
-            placeholder={heyAppFlowCopy(locale).waitlist.codePlaceholder} placeholderTextColor={palette.muted} style={styles.authInput} accessibilityLabel={copy.code} />
+            placeholder={heyAppFlowCopy(locale).waitlist.codePlaceholder} placeholderTextColor={flowMuted} style={flow.field} accessibilityLabel={copy.code} />
           {invalid ? <Text style={flow.error}>{heyAppFlowCopy(locale).waitlist.invalid}</Text> : null}
-          <Pressable style={flow.outlineButton} accessibilityRole="button" onPress={() => { const normalized = heyNormalizeInviteCode(code); if (normalized) onCode(normalized); else setInvalid(true); }}>
-            <Text style={flow.outlineButtonText}>{heyAppFlowCopy(locale).waitlist.redeem}</Text>
-          </Pressable>
+          <HeyFlowButton label={heyAppFlowCopy(locale).waitlist.redeem} outline onPress={() => { const normalized = heyNormalizeInviteCode(code); if (normalized) onCode(normalized); else setInvalid(true); }} />
         </View>
       ) : <HeyFlowLink label={copy.code} onPress={() => setCodeOpen(true)} />}
     </HeyFlowFrame>
   );
 }
 
-function HeyLinkSentScreen({ locale, dark, email, onBack }: { locale: AppLocale; dark: boolean; email: string; onBack: () => void }) {
-  const copy = heyAppFlowCopy(locale).signUp;
+/** Sign-up (mockup 02) and login (mockup 14): Apple, Google, email link, and the quiet switch to the other one. */
+function HeyAuthScreen({ locale, dark, mode, email, onEmail, sending, completing, sent, onSendLink, appleNode, googleOffered, onGoogle, googleBusy, googleBlocked, errorNode, onSwitch, onPassword }: {
+  locale: AppLocale; dark: boolean; mode: "sign_in" | "create_account"; email: string; onEmail: (value: string) => void; sending: boolean; completing: boolean; sent: boolean;
+  onSendLink: () => void; appleNode: ReactNode; googleOffered: boolean; onGoogle: () => void; googleBusy: boolean; googleBlocked: boolean;
+  errorNode: ReactNode; onSwitch: () => void; onPassword: () => void;
+}) {
+  const copy = heyAppFlowCopy(locale);
+  const signUp = mode === "create_account";
+  const title = signUp ? copy.signUp.title : copy.login.title;
+  const lead = signUp ? copy.valueLine : copy.login.body;
+  const busy = sending || completing;
   return (
     <HeyFlowFrame dark={dark}>
-      <Text style={flow.title} accessibilityRole="header">{copy.sentTitle}</Text>
-      <Text style={flow.lead}>{copy.sentBody}</Text>
-      <Text style={flow.small}>{heyAppFlowFill(copy.sentTo, { email })}</Text>
+      <Text style={flow.title} accessibilityRole="header">{title}</Text>
+      <Text style={flow.lead}>{lead}</Text>
+      <View style={{ marginTop: 22 }}>
+        {appleNode}
+        {googleOffered ? (
+          <Pressable style={[flow.outline, googleBlocked && styles.disabledButton]} disabled={googleBlocked} onPress={onGoogle} accessibilityRole="button"
+            accessibilityLabel={signUp ? copy.signUp.google : copy.login.google}>
+            {googleBusy ? <ActivityIndicator color={flowInk} /> : <MobileGoogleMark size={19} />}
+            <Text style={flow.outlineText}>{signUp ? copy.signUp.google : copy.login.google}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      <Text style={flow.orText}>{copy.signUp.orEmail}</Text>
+      <TextInput value={email} onChangeText={onEmail} autoCapitalize="none" autoComplete="email" textContentType="emailAddress" keyboardType="email-address"
+        placeholder={copy.signUp.emailPlaceholder} placeholderTextColor={flowMuted} style={flow.field} accessibilityLabel={copy.signUp.emailPlaceholder} editable={!busy} />
+      <HeyFlowButton label={sending ? staticUiCopy(locale)["Sending link…"] : completing ? staticUiCopy(locale)["Finishing sign-in…"] : signUp ? copy.signUp.sendLink : copy.login.sendLink}
+        outline busy={busy} disabled={!email.trim()} onPress={onSendLink} />
+      <Text style={flow.smallCentered} accessibilityRole={sent ? "alert" : undefined}>
+        {sent ? staticUiCopy(locale)["If this email can be used with Hey Hermes, a sign-in link is on its way."] : copy.signUp.hint}
+      </Text>
+      {errorNode}
       <View style={flow.spacer} />
-      <HeyFlowLink label={staticUiCopy(locale)["Back"]} onPress={onBack} />
+      <Text style={[flow.strong, { color: flowMuted, marginTop: 20 }]}>{signUp ? copy.signUp.haveAccount : copy.login.newHere}</Text>
+      <HeyFlowLink label={signUp ? copy.signUp.logIn : copy.login.getStarted} onPress={onSwitch} />
+      <Pressable onPress={onPassword} accessibilityRole="button" hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}>
+        <Text style={[flow.smallCentered, { textDecorationLine: "underline" }]}>{staticUiCopy(locale)["Sign in with password"]}</Text>
+      </Pressable>
     </HeyFlowFrame>
   );
 }
 
-function HeyWaitlistScreen({ locale, dark, email, code, onCode, phase, onRedeem, onSubscribe }: {
-  locale: AppLocale; dark: boolean; email: string; code: string; onCode: (value: string) => void;
+function HeyLinkSentScreen({ locale, dark, email, login, onBack }: { locale: AppLocale; dark: boolean; email: string; login: boolean; onBack: () => void }) {
+  const flowCopy = heyAppFlowCopy(locale);
+  const copy = flowCopy.signUp;
+  return (
+    <HeyFlowFrame dark={dark}>
+      <View style={flow.mailCircle}><Text style={flow.mailGlyph}>{"✉"}</Text></View>
+      <Text style={[flow.title, { marginTop: 26 }]} accessibilityRole="header">{login ? flowCopy.login.sentTitle : copy.sentTitle}</Text>
+      <Text style={flow.lead}>{login ? heyAppFlowFill(flowCopy.login.sentBody, { email }) : copy.sentBody}</Text>
+      {login ? null : <Text style={flow.small}>{heyAppFlowFill(copy.sentTo, { email })}</Text>}
+      <View style={flow.spacer} />
+      <HeyFlowLink label={login ? flowCopy.login.wrongAddress : staticUiCopy(locale)["Back"]} onPress={onBack} />
+    </HeyFlowFrame>
+  );
+}
+
+function HeyWaitlistScreen({ locale, dark, account, email, code, onCode, phase, onRedeem, onSubscribe }: {
+  locale: AppLocale; dark: boolean; account?: ReturnType<typeof heyFlowAccount>; email: string; code: string; onCode: (value: string) => void;
   phase: "idle" | "checking" | "invalid"; onRedeem: () => void; onSubscribe: () => void;
 }) {
   const copy = heyAppFlowCopy(locale).waitlist;
   return (
-    <HeyFlowFrame dark={dark}>
+    <HeyFlowFrame dark={dark} account={account}>
       <Text style={flow.title} accessibilityRole="header">{copy.title}</Text>
       <Text style={flow.lead}>{copy.body}</Text>
       <Text style={flow.small}>{heyAppFlowFill(copy.writeTo, { email })}</Text>
-      <Text style={[flow.body, { marginTop: 26, color: palette.ink }]}>{copy.codeQuestion}</Text>
+      <Text style={[flow.small, { marginTop: 28, color: flowInk, fontSize: 16 }]}>{copy.codeQuestion}</Text>
       <TextInput value={code} onChangeText={onCode} autoCapitalize="characters" autoCorrect={false} placeholder={copy.codePlaceholder}
-        placeholderTextColor={palette.muted} style={[styles.authInput, { marginTop: 10 }]} accessibilityLabel={copy.codePlaceholder} editable={phase !== "checking"} />
+        placeholderTextColor={flowMuted} style={flow.field} accessibilityLabel={copy.codePlaceholder} editable={phase !== "checking"} />
       {phase === "invalid" ? <Text style={flow.error} accessibilityRole="alert">{copy.invalid}</Text> : null}
-      <Pressable style={[flow.outlineButton, phase === "checking" && styles.disabledButton]} accessibilityRole="button" disabled={phase === "checking" || !code.trim()} onPress={onRedeem}>
-        {phase === "checking" ? <ActivityIndicator color={palette.ink} /> : null}
-        <Text style={flow.outlineButtonText}>{phase === "checking" ? copy.redeeming : copy.redeem}</Text>
-      </Pressable>
+      <HeyFlowButton label={phase === "checking" ? copy.redeeming : copy.redeem} outline busy={phase === "checking"} disabled={!code.trim()} onPress={onRedeem} />
       <View style={flow.spacer} />
       <HeyFlowLink label={copy.subscribe} onPress={onSubscribe} />
     </HeyFlowFrame>
   );
 }
 
-function HeyReleaseScreen({ locale, dark, onPurchase }: { locale: AppLocale; dark: boolean; onPurchase: () => void }) {
+function HeyReleaseScreen({ locale, dark, account, onPurchase }: { locale: AppLocale; dark: boolean; account?: ReturnType<typeof heyFlowAccount>; onPurchase: () => void }) {
   const copy = heyAppFlowCopy(locale).release;
   return (
-    <HeyFlowFrame dark={dark}>
-      <View style={flow.card} accessibilityRole="alert">
-        <Text style={[flow.title, { marginTop: 0, fontSize: 26, lineHeight: 32 }]} accessibilityRole="header">{copy.title}</Text>
-        <Text style={flow.body}>{copy.body}</Text>
-        <Text style={flow.urgency}>{copy.urgency}</Text>
+    <HeyFlowFrame dark={dark} account={account}>
+      <View style={[flow.tintCard, { marginTop: 22 }]} accessibilityRole="alert">
+        <Text style={flow.cardTitle} accessibilityRole="header">{copy.title}</Text>
+        <Text style={flow.cardBody}>{copy.body} {copy.urgency}</Text>
         <HeyFlowButton label={copy.cta} onPress={onPurchase} />
       </View>
+      <Text style={flow.fadedIntro}>{heyAppFlowCopy(locale).welcome.intro}</Text>
     </HeyFlowFrame>
   );
 }
 
-function HeyTakenScreen({ locale, dark, onBack }: { locale: AppLocale; dark: boolean; onBack: () => void }) {
+function HeyTakenScreen({ locale, dark, account, onBack }: { locale: AppLocale; dark: boolean; account?: ReturnType<typeof heyFlowAccount>; onBack: () => void }) {
   const copy = heyAppFlowCopy(locale).taken;
   return (
-    <HeyFlowFrame dark={dark}>
+    <HeyFlowFrame dark={dark} account={account}>
       <Text style={flow.title} accessibilityRole="header">{copy.title}</Text>
       <Text style={flow.lead}>{copy.body}</Text>
       <View style={flow.spacer} />
-      <HeyFlowButton label={copy.back} onPress={onBack} />
+      <HeyFlowButton label={copy.back} onPress={onBack} outline />
     </HeyFlowFrame>
   );
 }
@@ -11783,11 +11923,12 @@ function HeyTakenScreen({ locale, dark, onBack }: { locale: AppLocale; dark: boo
  * The purchase screen with one plan: no plan card, no plan name. "30 days free, then $12.99/month. Cancel
  * anytime." and one big button. The price is the store's own; the trial is promised only when the store confirms it.
  */
-function HeySinglePurchasePanel({ locale, store, view, plan, phase, accountReady, purchaseAvailable, notice, onDismissNotice, inviteBanner, onPurchase, onRestore, accountLabel, onOpenAccount, signOutLabel, onSignOut, dark }: {
-  locale: AppLocale; store: HeyStorePlatform; view: ReturnType<typeof iosPaywallView>; plan: MobilePurchasePlan | null; phase: MobilePurchasePhase;
+function HeySinglePurchasePanel({ account, locale, store, view, plan, phase, accountReady, purchaseAvailable, notice, onDismissNotice, inviteBanner, onPurchase, onRestore, dark, accountLabel, onOpenAccount }: {
+  account?: ReturnType<typeof heyFlowAccount>; locale: AppLocale; store: HeyStorePlatform; view: ReturnType<typeof iosPaywallView>; plan: MobilePurchasePlan | null; phase: MobilePurchasePhase;
   accountReady: boolean; purchaseAvailable: boolean; notice: string | null; onDismissNotice: () => void; inviteBanner: boolean; dark: boolean;
   onPurchase: (packageId: MobileRevenueCatPackageId) => Promise<void>; onRestore: () => Promise<void>;
-  accountLabel?: string; onOpenAccount?: () => void; signOutLabel?: string; onSignOut?: () => void;
+  /** The Account panel (account deletion) stays reachable from the purchase screen (App Review 5.1.1). */
+  accountLabel?: string; onOpenAccount?: () => void;
 }) {
   const copy = heyAppFlowCopy(locale);
   const busy = phase === "purchasing" || phase === "restoring";
@@ -11801,37 +11942,38 @@ function HeySinglePurchasePanel({ locale, store, view, plan, phase, accountReady
   const terms = plan ? worded(heyAppFlowFill(trial ? copy.purchase.trialTerms : copy.purchase.plainTerms, { ...values, zero: price.replace(/[\d.,]+/, "0.00") })) : view.renewalText;
   const disabled = busy || !accountReady || !plan || !purchaseAvailable;
   return (
-    <HeyFlowFrame dark={dark}>
+    <HeyFlowFrame dark={dark} account={account}>
       {inviteBanner ? <View style={flow.banner} accessibilityRole="alert"><Text style={flow.bannerText}>{copy.invite.banner}</Text></View> : null}
       <Text style={flow.title} accessibilityRole="header">{copy.purchase.title}</Text>
       <Text style={flow.lead}>{copy.valueLine}</Text>
       <Text style={flow.price}>{line}</Text>
-      {phase === "loading" ? <ActivityIndicator color={paywallBrandColor} style={{ marginTop: 16 }} /> : null}
+      {phase === "loading" ? <ActivityIndicator color={flowInk} style={{ marginTop: 16 }} /> : null}
       <View style={flow.spacer} />
       <HeyFlowButton label={cta} busy={phase === "purchasing"} disabled={disabled} onPress={() => { if (plan) void onPurchase(plan.packageId); }} />
-      <Text style={styles.paywallTerms}>{terms}</Text>
+      <Text style={flow.smallCentered}>{terms}</Text>
       {notice ? <Notice locale={locale} tone={phase === "error" ? "error" : "info"} text={notice} onDismiss={onDismissNotice} /> : null}
-      <View style={styles.paywallFooter}>
+      <View style={flow.footerRow}>
         <Pressable disabled={busy || !accountReady} onPress={() => void onRestore()} accessibilityRole="button" accessibilityLabel={view.restoreLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
-          <Text style={styles.paywallFooterLink}>{phase === "restoring" ? view.restoringLabel : view.restoreLabel}</Text>
+          <Text style={flow.footerLink}>{phase === "restoring" ? view.restoringLabel : view.restoreLabel}</Text>
         </Pressable>
         {view.legalLinks.map((link) => (
-          <Pressable key={link.key} onPress={() => void openHeyLegalHref(link.url)} accessibilityRole="link" accessibilityLabel={link.label} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
-            <Text style={styles.paywallFooterLink}>{link.label}</Text>
-          </Pressable>
+          <Fragment key={link.key}>
+            <Text style={flow.footerDot}>{"·"}</Text>
+            <Pressable onPress={() => void openHeyLegalHref(link.url)} accessibilityRole="link" accessibilityLabel={link.label} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+              <Text style={flow.footerLink}>{link.label}</Text>
+            </Pressable>
+          </Fragment>
         ))}
         {onOpenAccount && accountLabel ? (
-          <Pressable onPress={onOpenAccount} accessibilityRole="button" accessibilityLabel={accountLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
-            <Text style={styles.paywallFooterLink}>{accountLabel}</Text>
-          </Pressable>
-        ) : null}
-        {onSignOut && signOutLabel ? (
-          <Pressable onPress={onSignOut} accessibilityRole="button" accessibilityLabel={signOutLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
-            <Text style={styles.paywallFooterLink}>{signOutLabel}</Text>
-          </Pressable>
+          <>
+            <Text style={flow.footerDot}>{"\u00b7"}</Text>
+            <Pressable onPress={onOpenAccount} accessibilityRole="button" accessibilityLabel={accountLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+              <Text style={flow.footerLink}>{accountLabel}</Text>
+            </Pressable>
+          </>
         ) : null}
       </View>
-      <Text style={styles.paywallTerms}>{view.ageText} {view.accountBoundaryText}</Text>
+      <Text style={flow.smallCentered}>{view.ageText} {view.accountBoundaryText}</Text>
     </HeyFlowFrame>
   );
 }
@@ -11840,10 +11982,10 @@ function HeySinglePurchasePanel({ locale, store, view, plan, phase, accountReady
 function HeyLimitCard({ locale, onSeePro }: { locale: AppLocale; onSeePro: () => void }) {
   const copy = heyAppFlowCopy(locale).limit;
   return (
-    <View style={[flow.card, { marginHorizontal: 12, marginBottom: 8, marginTop: 0 }]} accessibilityRole="alert">
-      <Text style={[flow.body, { marginTop: 0, fontWeight: "700", color: palette.ink }]}>{copy.title}</Text>
-      <Text style={flow.small}>{copy.body}</Text>
-      <Pressable style={flow.outlineButton} accessibilityRole="button" onPress={onSeePro}><Text style={flow.outlineButtonText}>{copy.cta}</Text></Pressable>
+    <View style={[flow.tintCard, { marginHorizontal: 16, marginBottom: 10, marginTop: 0, padding: 18 }]} accessibilityRole="alert">
+      <Text style={[flow.cardTitle, { fontSize: 22, lineHeight: 28 }]}>{copy.title}</Text>
+      <Text style={[flow.cardBody, { fontSize: 17, lineHeight: 24 }]}>{copy.body}</Text>
+      <HeyFlowButton label={copy.cta} onPress={onSeePro} />
     </View>
   );
 }
@@ -11859,14 +12001,16 @@ function HeyProScreen({ locale, dark, store, price, busy, notice, onSwitch, onLa
     <HeyFlowFrame dark={dark}>
       <Text style={flow.title} accessibilityRole="header">{copy.title}</Text>
       <Text style={flow.lead}>{heyStoreWording(copy.body, locale, store)}</Text>
-      <View style={flow.card}>
-        <Text style={[flow.body, { marginTop: 0, fontWeight: "800", color: palette.ink, fontSize: 20 }]}>{copy.name}</Text>
-        <Text style={[flow.body, { marginTop: 4, color: palette.ink }]}>{heyAppFlowFill(copy.perMonth, values)}</Text>
-        <Text style={flow.small}>{copy.feature}</Text>
-        <Text style={flow.small}>{heyStoreWording(copy.noTrial, locale, store)}</Text>
+      <View style={flow.proCard}>
+        <View style={flow.proRow}>
+          <Text style={flow.proName}>{copy.name}</Text>
+          <Text style={flow.proPrice}>{heyAppFlowFill(copy.perMonth, values)}</Text>
+        </View>
+        <Text style={[flow.lead, { fontSize: 19, marginTop: 10 }]}>{copy.feature}</Text>
       </View>
       {notice ? <Text style={flow.small} accessibilityRole="alert">{notice}</Text> : null}
       <View style={flow.spacer} />
+      <Text style={[flow.small, { marginTop: 20 }]}>{heyStoreWording(copy.noTrial, locale, store)}</Text>
       <HeyFlowButton label={heyAppFlowFill(copy.cta, values)} busy={busy} onPress={onSwitch} />
       <HeyFlowLink label={copy.later} onPress={onLater} />
       <HeyFlowLink label={copy.ownKey} onPress={onOwnKey} />
@@ -12588,7 +12732,10 @@ const MessageBubble = memo(function MessageBubble({
   onVisibleTextLayout?: () => void;
 }) {
   const isUser = message.role === "user";
-  const textStyle = isUser ? styles.userMessageText : styles.messageText;
+  // HPD-1762: the iMessage chat style of the Hey app (standalone host): blue user bubbles with white text, grey
+  // assistant bubbles, small corner towards the sender. Colours, shapes and layout only; no behaviour changes.
+  const imessage = imessageChatStyle;
+  const textStyle = isUser ? (imessage ? [styles.userMessageText, styles.imUserText] : styles.userMessageText) : styles.messageText;
   const messageTime = formatMessageTime(message.createdAt, locale, now);
   const assistantView = isUser ? null : mobileAssistantContentView(message.content);
   const assistantText = assistantView?.visibleText || (assistantView?.technicalActivities.length
@@ -12668,7 +12815,8 @@ const MessageBubble = memo(function MessageBubble({
   const BubbleContainer = (onReport ? Pressable : View) as typeof Pressable;
   return (
     <BubbleContainer
-      style={[styles.message, isUser ? styles.userMessage : styles.assistantMessage]}
+      style={[styles.message, isUser ? styles.userMessage : styles.assistantMessage,
+        imessage && (isUser ? styles.imUser : [styles.imAssistant, heyIsShortReply(assistantText) && styles.imAssistantShort])]}
       // Only a reportable reply becomes one TalkBack node; user bubbles and running replies keep their parts reachable.
       accessible={onReport ? Boolean(report) : undefined}
       onLongPress={report ? () => confirmReplyReport() : undefined}
@@ -16416,6 +16564,28 @@ const styles = StyleSheet.create({
     borderColor: palette.lineStrong,
     borderWidth: 1,
   },
+  // HPD-1762: iMessage style bubbles (approved mockups en-20b / en-dark-20b).
+  imUser: {
+    backgroundColor: chatUserBubble,
+    borderWidth: 0,
+    borderRadius: 22,
+    borderBottomRightRadius: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    maxWidth: "78%",
+  },
+  imUserText: { color: "#ffffff" },
+  imAssistant: {
+    backgroundColor: chatAssistantBubble,
+    borderRadius: 22,
+    borderBottomLeftRadius: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    // A definite width keeps long answers measured (HPD-1422); short replies hug their text below.
+    maxWidth: "86%",
+    alignSelf: "stretch",
+  },
+  imAssistantShort: { alignSelf: "flex-start" },
   assistantIdentity: {
     alignItems: "center",
     flexDirection: "row",

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { heyAndroidPushAvailable, heyAppEntryScreen, heyAppFlowCopy, heyAppFlowFill, heyInviteCodeFromUrl, heyInviteRedeemAccepted, heyNormalizeInviteCode, heyShowLimitCard } from "../src/hey-app-flow";
+import { heyIsShortReply, heyAndroidPushAvailable, heyAppEntryScreen, heyAppFlowCopy, heyAppFlowFill, heyInviteCodeFromUrl, heyInviteRedeemAccepted, heyNormalizeInviteCode, heyShowLimitCard } from "../src/hey-app-flow";
 import { parseHeyHermesSalesStatus } from "../core/hermes-api";
 
 // HPD-1762: Hey Hermes App 1.1 screens (copy approved by Justus 2026-10-26; server switch decides the waitlist).
@@ -86,4 +86,37 @@ test("Android push waits for the Firebase config in the build (capability check)
   for (const value of [false, undefined, null, "true", 1]) assert.equal(heyAndroidPushAvailable(value), false);
   const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   assert.match(source, /Platform\.OS === "android" && !heyAndroidPushAvailable\(/);
+});
+
+test("iMessage chat style: only a short plain line hugs its text; lists and long answers keep the definite width", () => {
+  assert.equal(heyIsShortReply("Done."), true);
+  assert.equal(heyIsShortReply("Three things: a 10 am meeting, the reply to Anna and your flight. Where shall we start?"), false);
+  assert.equal(heyIsShortReply("- one\n- two"), false);
+  assert.equal(heyIsShortReply("**bold**"), false);
+  assert.equal(heyIsShortReply(""), false);
+  const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  assert.match(source, /imessage && \(isUser \? styles\.imUser/);
+});
+
+test("returning users (mockups 14, 15, 17, 18): login words, check-your-email, logged-in-as row; no purple in the flow", () => {
+  const login = heyAppFlowCopy("en").login;
+  assert.equal(login.title, "Welcome back.");
+  assert.equal(login.sendLink, "Send login link");
+  assert.equal(login.sentTitle, "Check your email.");
+  assert.equal(heyAppFlowFill(login.sentBody, { email: "a@b.co" }), "We sent a login link to a@b.co. Open it on this device to log in.");
+  assert.equal(login.wrongAddress, "Wrong address? Go back");
+  assert.equal(heyAppFlowFill(login.loggedInAs, { email: "a@b.co" }), "Logged in as a@b.co");
+  assert.equal(login.notYou, "Not you? Log out");
+  const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  const flowBlock = source.slice(source.indexOf("const flowScheme"), source.indexOf("type AssistantThread"));
+  assert.doesNotMatch(flowBlock, /#9184d9|#d2cefd|#7c3aed|purple|violet/i);
+  assert.match(flowBlock, /<HeyAuthScreen|function HeyAuthScreen/);
+});
+
+test("the sentence 'You can use it right here in the app.' is gone in every language (Justus 2026-10-26)", () => {
+  for (const locale of ["en", "de", "fr"] as const) assert.doesNotMatch(JSON.stringify(heyAppFlowCopy(locale)), /right here in the app|direkt hier in der App/i);
+  const source = readFileSync(new URL("../src/hey-app-flow.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /right here in the app|direkt hier in der App/i);
+  const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  assert.match(surface, /onOpenAccount && accountLabel[\s\S]*?flow\.footerLink/);
 });

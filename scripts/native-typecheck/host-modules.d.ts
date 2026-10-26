@@ -46,6 +46,7 @@ declare module "react-native" {
   export const ScrollView: any;
   export type ScrollView = any;
   export const Share: any;
+  export const StatusBar: any;
   export const StyleSheet: any;
   export const Switch: any;
   export const Text: any;
