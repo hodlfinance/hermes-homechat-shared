@@ -18,7 +18,7 @@ const valid: HeyHermesSalesStatus = {
   invitation: null,
   waitlist: { status: "waiting", position: 4 },
   checkedAt: "2026-10-06T10:00:00.000Z",
-  playStorePersonalProductId: null,
+  playStorePersonalProductId: null, appWaitlist: null,
 };
 
 function client(respond: (url: string, init?: RequestInit) => Response | Promise<Response>) {

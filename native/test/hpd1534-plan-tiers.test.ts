@@ -56,13 +56,13 @@ test("without server tiers the app sells Personal from the current offering exac
   assert.deepEqual(mobileServerPlanTiers(null), []);
 });
 
-test("with server tiers: tiers_v1, Starter first with 30 days, Pro 7, Max without a trial; Max only when listed", async () => {
+test("with server tiers: tiers_v1, Personal (starter) first with 30 days, Pro without a trial (HPD-1762), Max without a trial; Max only when listed", async () => {
   const { value } = adapter(iosPackages);
   const controller = new MobilePurchasesController(value);
   await controller.bindAccount("acct_1", "key");
   const three = await controller.loadPlans("acct_1", { tiers: ["starter", "personal", "max"] });
   assert.deepEqual(three.map((plan) => [plan.packageId, plan.trialDays, plan.trialEligibility]),
-    [["starter_monthly", 30, "eligible"], ["personal_monthly", 7, "eligible"], ["max_monthly", 0, "unavailable"]]);
+    [["starter_monthly", 30, "eligible"], ["personal_monthly", 0, "unknown"], ["max_monthly", 0, "unavailable"]]);
   const two = await controller.loadPlans("acct_1", { tiers: mobileServerPlanTiers({ webBilling: { tiers: [{ plan: "starter" }, { plan: "personal" }] } }) });
   assert.deepEqual(two.map((plan) => plan.packageId), ["starter_monthly", "personal_monthly"]);
 });
@@ -108,23 +108,23 @@ test("a plan change starts only from a running plan of another tier bought in th
 });
 
 test("the paywall names the chosen plan and its own trial; the single-plan paywall is unchanged", () => {
-  const starter = { packageId: "starter_monthly" as const, plan: "starter" as const, productId: MOBILE_REVENUECAT_PRODUCTS.starter_monthly, displayName: "Starter" as const,
+  const starter = { packageId: "starter_monthly" as const, plan: "starter" as const, productId: MOBILE_REVENUECAT_PRODUCTS.starter_monthly, displayName: "Personal" as const,
     trialDays: 30, title: "", description: "", priceString: "$12.99", trialEligibility: "eligible" as const };
   const max = { ...starter, packageId: "max_monthly" as const, plan: "max" as const, displayName: "Max" as const, trialDays: 0, priceString: "$79.00", trialEligibility: "unavailable" as const };
   const base = { comped: false, entitlementStatus: "none" as const, runtimeAccess: "enabled" as const, storeState: "ready" as const };
   const de = iosPaywallView({ ...base, locale: "de", plan: starter, tiered: true });
-  assert.equal(de.offer.eyebrow, "Hey Hermes Starter");
+  assert.equal(de.offer.eyebrow, "Hey Hermes Personal");
   assert.equal(de.offer.ctaLabel, "30 Tage gratis starten");
   assert.match(de.offer.title, /30 Tage gratis/);
   const en = iosPaywallView({ ...base, locale: "en", plan: max, tiered: true });
   assert.equal(en.offer.kind, "subscribe");
   assert.doesNotMatch(`${en.offer.title} ${en.offer.termsText} ${en.trialText}`, /free|7 days/);
   assert.throws(() => iosPaywallView({ ...base, locale: "en", plan: starter }));
-  const personal = { ...starter, packageId: "personal_monthly" as const, plan: "personal" as const, displayName: "Personal" as const, trialDays: 7, priceString: "$29.00" };
+  const personal = { ...starter, packageId: "personal_monthly" as const, plan: "personal" as const, displayName: "Pro" as const, trialDays: 0, priceString: "$29.00" };
   const single = iosPaywallView({ ...base, locale: "en", plan: personal });
-  assert.equal(single.offer.eyebrow, "Hey Hermes Personal");
+  assert.equal(single.offer.eyebrow, "Hey Hermes Pro");
   assert.equal(single.offer.ctaLabel, "Start your free week");
-  assert.equal(iosPaywallView({ ...base, locale: "en", plan: personal, entitlementStatus: "active", entitlementPlan: "starter" }).planLabel, "Starter");
+  assert.equal(iosPaywallView({ ...base, locale: "en", plan: personal, entitlementStatus: "active", entitlementPlan: "starter" }).planLabel, "Personal");
 });
 
 test("review of #185: iOS downgrade accepts the plan kept until renewal; a pending completion blocks another change; a broken tier offering falls back to Personal", async () => {
@@ -169,16 +169,16 @@ test("Justus 2026-10-24: the first purchase offers Starter alone; Pro and Max on
 });
 
 test("review of #189: the purchase notice names the plan bought, and Hey Hermes", () => {
-  assert.equal(mobilePlanActiveNotice("starter", true), "Starter is active for this Hey Hermes account.");
+  assert.equal(mobilePlanActiveNotice("starter", true), "Personal is active for this Hey Hermes account.");
   assert.equal(mobilePlanActiveNotice("personal", true), "Pro is active for this Hey Hermes account.");
   assert.equal(mobilePlanActiveNotice("max", true), "Max is active for this Hey Hermes account.");
-  assert.equal(mobilePlanActiveNotice("personal", false), "Personal is active for this Hey Hermes account.");
+  assert.equal(mobilePlanActiveNotice("personal", false), "Pro is active for this Hey Hermes account.");
   for (const locale of ["en", "de", "fr", "es", "it", "pt-BR", "ja", "ko"] as const) {
     const copy = authUiCopy(locale) as Record<string, string>;
     for (const tier of ["starter", "personal", "max"] as const) for (const tiered of [true, false]) {
       const key = mobilePlanActiveNotice(tier, tiered);
       assert.ok(copy[key], `${locale}: ${key}`);
-      if (tier === "starter") assert.doesNotMatch(copy[key]!, /Personal|Pro\b/, locale);
+      if (tier === "starter") assert.doesNotMatch(copy[key]!, /Pro\b|Starter/, locale);
     }
   }
 });

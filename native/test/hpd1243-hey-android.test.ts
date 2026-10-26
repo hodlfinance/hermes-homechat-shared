@@ -293,7 +293,7 @@ test("the App Store controller is unchanged: its product, its eligibility check,
   await controller.bindAccount("acct_1", "appl_key");
   const plans = await controller.loadPlans("acct_1");
   assert.deepEqual(plans, [{
-    packageId: "personal_monthly", plan: "personal", productId: "app.heyhermes.personal.monthly.v3", displayName: "Personal", trialDays: 7,
+    packageId: "personal_monthly", plan: "personal", productId: "app.heyhermes.personal.monthly.v3", displayName: "Pro", trialDays: 7,
     title: "Hey Hermes Personal", description: "", priceString: "$29.00", trialEligibility: "eligible",
   }]);
   assert.ok(fake.calls.includes("checkTrialEligibility:app.heyhermes.personal.monthly.v3"));

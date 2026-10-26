@@ -477,6 +477,7 @@ import { heyNoAccessCopy, heyPaywallAccountCopy, heyPreparingBody, heyPreparingC
 import { appStoreManagedSentence, mobileStoreNotice, mobileSubscriptionManageAction, mobileSubscriptionManagementTarget, type MobileSubscriptionManagementTarget } from "./subscription-management";
 import { heyServerDeletedCopy, heyServerDeletedDateLine, heyServerDeletedErrorMessage, heyServerDeletedModel, heyServerDeletedReceiptLine } from "./hey-server-deleted";
 import { deviceAppLocale, heySignInCopy, heySignInHeadline } from "./hey-sign-in";
+import { HEY_PERSONAL_PRICE_FALLBACK, heyAppEntryScreen, heyAppFlowCopy, heyAppFlowFill, heyInviteCodeFromUrl, heyInviteRedeemAccepted, heyNormalizeInviteCode, heyShowLimitCard } from "./hey-app-flow";
 import { MobileGoogleMark } from "./mobile-google-mark";
 import {
   iosPaywallCopy,
@@ -490,7 +491,7 @@ import {
   shouldShowIosPaywallOnboarding,
   type IosPaywallStoreState,
 } from "./ios-paywall";
-import { heyAccountDeletionStoreCopy, heyPlayProductGuard, heySignInSurface, heyStorePlatform, heyStoreWordedView, type HeyStorePlatform } from "./hey-store-platform";
+import { heyAccountDeletionStoreCopy, heyPlayProductGuard, heySignInSurface, heyStorePlatform, heyStoreWording, heyStoreWordedView, type HeyStorePlatform } from "./hey-store-platform";
 import { heySalesPaywallInView, heySalesStatusRereadOnOpen, readHeySalesStatus } from "./hey-sales-status-read";
 import {
   isProductSessionAuthError,
@@ -2470,11 +2471,44 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       if (cancelled) return;
       setSalesStatus(status);
       setSalesStatusSettled(true);
+      // HPD-1762: gated by the server switch: the account joins the waitlist (idempotent; no position is returned).
+      if (status?.appWaitlist?.state === "waiting") void api.joinAppWaitlist();
     });
     return () => {
       cancelled = true;
     };
   }, [api, token, host.session.mode, salesStatusReadRound]);
+  // HPD-1762: the app flow. A release link or typed code redeems the invite; "subscribe right away" opens the purchase.
+  const [purchaseOpened, setPurchaseOpened] = useState(false);
+  const [takenDismissed, setTakenDismissed] = useState(false);
+  const [inviteInput, setInviteInput] = useState("");
+  const [invitePhase, setInvitePhase] = useState<"idle" | "checking" | "invalid">("idle");
+  const [inviteAccepted, setInviteAccepted] = useState(false);
+  const [pendingInviteCode, setPendingInviteCode] = useState<string | null>(null);
+  const [welcomeDone, setWelcomeDone] = useState(false);
+  const [proScreenOpen, setProScreenOpen] = useState(false);
+  async function redeemInviteCode(raw: string) {
+    const code = heyNormalizeInviteCode(raw);
+    if (!code) { setInvitePhase("invalid"); return; }
+    setInvitePhase("checking");
+    const answer = await api.redeemInviteCode(code);
+    if (heyInviteRedeemAccepted(answer.status)) {
+      setInviteAccepted(true);
+      setInvitePhase("idle");
+      setInviteInput("");
+      setPurchaseOpened(true);
+      setSalesStatusReadRound((round) => round + 1);
+    } else {
+      setInvitePhase("invalid");
+    }
+  }
+  // A /i/<code> link (or a code typed before sign-in) is redeemed as soon as the account is signed in.
+  useEffect(() => {
+    if (!token || !pendingInviteCode || host.session.mode !== "standalone") return;
+    const code = pendingInviteCode;
+    setPendingInviteCode(null);
+    void redeemInviteCode(code);
+  }, [token, pendingInviteCode, host.session.mode]);
   async function joinMobileWaitlist() {
     if (waitlistPhase === "joining") return;
     setWaitlistPhase("joining");
@@ -4929,6 +4963,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       if (!active || !url) return;
       const magicToken = emailMagicLinkTokenFromUrl(url);
       if (magicToken) void completeEmailMagicLink(magicToken);
+      // HPD-1762: https://heyhermes.app/i/<code> opens the app (Universal Link / App Link) and redeems the code.
+      const inviteCode = heyInviteCodeFromUrl(url);
+      if (inviteCode) setPendingInviteCode(inviteCode);
     };
     void Linking.getInitialURL().then(accept).catch(() => undefined);
     const subscription = Linking.addEventListener("url", ({ url }) => accept(url));
@@ -8498,12 +8535,33 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   if (!token) {
     const canSubmitLogin = Boolean(email.trim() && (loginPassword || accessCode.trim())) && !busy;
     const signInCopy = heySignInCopy(appLocale);
-    const signInHeadline = heySignInHeadline(appLocale, authEntryMode);
+    const flowCopy = heyAppFlowCopy(appLocale);
+    // HPD-1762: the sign-up headline of the 1.1 screens (store builds only); sign-in keeps its text.
+    const signInHeadline = storePlatform && authEntryMode === "create_account"
+      ? { title: flowCopy.signUp.title, titleAccent: "", body: flowCopy.valueLine }
+      : heySignInHeadline(appLocale, authEntryMode);
     const signInTitleAccentAt = signInHeadline.titleAccent ? signInHeadline.title.indexOf(signInHeadline.titleAccent) : -1;
     // HPD-1105: Apple and Google look alike - black in light mode; in dark mode
     // Google's own dark variant (#131314, grey outline) and Apple's black button.
     const authProviderTone = resolvedColorScheme === "dark" ? styles.authProviderGoogleDark : styles.authProviderDark;
     const authProviderTextColor = resolvedColorScheme === "dark" ? "#e3e3e3" : "#ffffff";
+    if (storePlatform && host.session.mode === "standalone" && !welcomeDone && !signedOutSupportOpen) {
+      return (
+        <HeyWelcomeScreen
+          locale={appLocale}
+          dark={resolvedColorScheme === "dark"}
+          price={HEY_PERSONAL_PRICE_FALLBACK}
+          onStart={() => { setAuthEntryMode("create_account"); setWelcomeDone(true); }}
+          onLogin={() => { setAuthEntryMode("sign_in"); setWelcomeDone(true); }}
+          onCode={(code) => { setPendingInviteCode(code); setAuthEntryMode("create_account"); setWelcomeDone(true); }}
+        />
+      );
+    }
+    if (storePlatform && emailMagicLinkPhase === "sent" && !signInWithPassword && !signedOutSupportOpen) {
+      return (
+        <HeyLinkSentScreen locale={appLocale} dark={resolvedColorScheme === "dark"} email={emailSignupEmail.trim()} onBack={() => setEmailMagicLinkPhase("idle")} />
+      );
+    }
     if (signedOutSupportOpen) {
       return (
         <SafeAreaView style={styles.safe}>
@@ -8809,6 +8867,29 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     mobilePurchasesController.personalProduct,
   ) || Boolean(selectedMobilePlan && serverPlanTiers.length > 0 &&
     mobilePlanChangeCanStart(snapshot.subscription, mobilePurchasesController, selectedMobilePlan.plan, Date.now(), mobilePurchaseCompletion));
+  // HPD-1762: Pro appears only in context, as a change from the Personal plan when the included weekly allowance is used up.
+  const proPlan = offeredMobilePlans.find((plan) => plan.plan === "personal") ?? null;
+  const proChange = proPlan && storePlatform ? mobilePlanChangeCanStart(snapshot.subscription, mobilePurchasesController, "personal", Date.now(), mobilePurchaseCompletion) : null;
+  const limitCardVisible = Boolean(proChange) && heyShowLimitCard({
+    remainingIncludedPercent: workspaceStatusTruth?.aiAccess.availability === "available" ? workspaceStatusTruth.aiAccess.remainingIncludedPercent : null,
+    plan: snapshot.entitlement.plan,
+    proOffered: Boolean(proPlan),
+  });
+  if (proScreenOpen && proPlan && proChange && storePlatform) {
+    return (
+      <HeyProScreen
+        locale={appLocale}
+        dark={resolvedColorScheme === "dark"}
+        store={storePlatform}
+        price={proPlan.priceString}
+        busy={mobilePurchasePhase === "purchasing"}
+        notice={mobilePurchaseNotice}
+        onSwitch={() => void purchaseMobilePlan(proPlan.packageId)}
+        onLater={() => setProScreenOpen(false)}
+        onOwnKey={() => { setProScreenOpen(false); selectMobileScreen("ai_access"); }}
+      />
+    );
+  }
   const chatAccess = mobileChatAccessView(snapshot, selectedChatRoutePreference ?? snapshot.chatRoutePreference, workspaceStatusTruth);
   const activeSubthreadHeader = subthreadHeader(subthreadOrigin, tab, appLocale);
   const aiAccessTruth = mobileAiAccessTruthFromSources(
@@ -9161,6 +9242,49 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     );
   }
 
+  // HPD-1762: the app waitlist (server switch). Without a gate, or after "subscribe right away" or an accepted
+  // invite, the purchase screen leads exactly as in 1.0; the unknown sales status also keeps the purchase.
+  const entryScreen = productAccessScreen === "purchase" && storePlatform ? heyAppEntryScreen(salesStatus, purchaseOpened) : "purchase";
+  if (entryScreen !== "purchase") {
+    const dark = resolvedColorScheme === "dark";
+    if (entryScreen === "release") return <HeyReleaseScreen locale={appLocale} dark={dark} onPurchase={() => setPurchaseOpened(true)} />;
+    if (entryScreen === "taken" && !takenDismissed) return <HeyTakenScreen locale={appLocale} dark={dark} onBack={() => setTakenDismissed(true)} />;
+    return (
+      <HeyWaitlistScreen
+        locale={appLocale}
+        dark={dark}
+        email={snapshot.me.email}
+        code={inviteInput}
+        onCode={(value) => { setInviteInput(value); if (invitePhase === "invalid") setInvitePhase("idle"); }}
+        phase={invitePhase}
+        onRedeem={() => void redeemInviteCode(inviteInput)}
+        onSubscribe={() => setPurchaseOpened(true)}
+      />
+    );
+  }
+  if (productAccessScreen === "purchase" && storePlatform && selectedMobilePlan && selectedMobilePlan.plan === "starter" && offeredMobilePlans.length === 1) {
+    return (
+      <HeySinglePurchasePanel
+        locale={appLocale}
+        store={storePlatform}
+        dark={resolvedColorScheme === "dark"}
+        view={paywall}
+        plan={selectedMobilePlan}
+        phase={mobilePurchasePhase}
+        accountReady={mobilePurchaseAccountReady}
+        purchaseAvailable={mobilePersonalPurchaseAvailable}
+        notice={mobilePurchaseNotice}
+        onDismissNotice={() => setMobilePurchaseNotice(null)}
+        inviteBanner={inviteAccepted}
+        onPurchase={purchaseMobilePlan}
+        onRestore={restoreMobilePurchases}
+        accountLabel={heyPaywallAccountCopy(appLocale).entry}
+        onOpenAccount={() => setPaywallAccountOpen(true)}
+        signOutLabel={staticUiCopy(appLocale)["Sign out"]}
+        onSignOut={() => void logout()}
+      />
+    );
+  }
   if (productAccessScreen === "purchase" || (productAccessScreen === "deleted" && deletedPaywallOpen && !hasValidMobileProductAccess(snapshot.entitlement))) {
     return (
       <SafeAreaView style={styles.safe}>
@@ -9926,6 +10050,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   ))}
                 </ScrollView>
               ) : null}
+              {limitCardVisible ? <HeyLimitCard locale={appLocale} onSeePro={() => setProScreenOpen(true)} /> : null}
               <View style={styles.composer}>
                 <Pressable
                   style={[
@@ -10466,7 +10591,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                           view={paywall}
                           personalAccess={personalAccess}
                           plan={selectedMobilePlan}
-                          plans={offeredMobilePlans}
+                          plans={[]}
                           onSelectPlan={setSelectedMobilePackage}
                           phase={mobilePurchasePhase}
                           accountReady={mobilePurchaseAccountReady}
@@ -11488,6 +11613,256 @@ function IosPaywallOfferPanel({ locale,
         ) : null}
       </View>
     </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// HPD-1762: Hey Hermes App 1.1 sign-up, waitlist, purchase and upgrade screens.
+// Copy and logic live in hey-app-flow.ts; these are only the views.
+// ---------------------------------------------------------------------------
+const flowSerif = Platform.select({ ios: "Georgia", android: "serif", default: "serif" });
+const flow = StyleSheet.create({
+  title: { color: palette.ink, fontSize: 32, lineHeight: 38, fontFamily: flowSerif, marginTop: 20 },
+  lead: { color: palette.muted, fontSize: 19, lineHeight: 27, fontFamily: flowSerif, marginTop: 14 },
+  price: { color: palette.ink, fontSize: 26, lineHeight: 32, fontFamily: flowSerif, marginTop: 22 },
+  body: { color: palette.text, fontSize: 16, lineHeight: 23, marginTop: 14 },
+  small: { color: palette.muted, fontSize: 14, lineHeight: 20, marginTop: 12 },
+  urgency: { color: palette.ink, fontSize: 17, lineHeight: 24, fontWeight: "700", marginTop: 12 },
+  error: { color: "#b3261e", fontSize: 14, marginTop: 6 },
+  link: { color: palette.muted, fontSize: 15, textDecorationLine: "underline", textAlign: "center", paddingVertical: 12 },
+  outlineButton: { minHeight: 54, borderRadius: 27, borderWidth: 1.5, borderColor: palette.ink, alignItems: "center", justifyContent: "center", marginTop: 12, paddingHorizontal: 16 },
+  outlineButtonText: { color: palette.ink, fontSize: 17, fontWeight: "700" },
+  banner: { backgroundColor: paywallCheckBackground, borderRadius: 12, padding: 12, marginTop: 14 },
+  bannerText: { color: palette.ink, fontSize: 15, fontWeight: "700" },
+  card: { borderWidth: 1, borderColor: palette.line, borderRadius: 16, padding: 16, marginTop: 16, backgroundColor: palette.surface },
+  spacer: { flexGrow: 1, minHeight: 24 },
+  centered: { alignItems: "center" },
+});
+
+function HeyFlowFrame({ dark, children }: { dark: boolean; children: React.ReactNode }) {
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar style={dark ? "light" : "dark"} />
+      <KeyboardAvoidingView style={styles.authKeyboard} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView contentContainerStyle={[styles.paywallScreen, { flexGrow: 1 }]} keyboardShouldPersistTaps="handled">
+          <PaywallArt />
+          {children}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+function HeyFlowButton({ label, onPress, busy = false, disabled = false }: { label: string; onPress: () => void; busy?: boolean; disabled?: boolean }) {
+  return (
+    <Pressable style={[styles.paywallCta, (disabled || busy) && styles.disabledButton]} disabled={disabled || busy} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+      {busy ? <ActivityIndicator color="#ffffff" /> : null}
+      <Text style={styles.paywallCtaText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function HeyFlowLink({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}>
+      <Text style={flow.link}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function HeyWelcomeScreen({ locale, dark, price, onStart, onLogin, onCode }: { locale: AppLocale; dark: boolean; price: string; onStart: () => void; onLogin: () => void; onCode: (code: string) => void }) {
+  const copy = heyAppFlowCopy(locale).welcome;
+  const [codeOpen, setCodeOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [invalid, setInvalid] = useState(false);
+  const [lead, items] = copy.examples;
+  return (
+    <HeyFlowFrame dark={dark}>
+      <Text style={flow.lead} accessibilityRole="header">{copy.intro}</Text>
+      <Text style={flow.body}>{copy.talk}</Text>
+      <Text style={flow.body}>
+        {lead}
+        {items.map((item, index) => (
+          <Text key={item}>
+            <Text style={{ fontWeight: "700", color: palette.ink }}>{item}</Text>
+            {index < items.length - 2 ? ", " : index === items.length - 2 ? " and " : "."}
+          </Text>
+        ))}
+      </Text>
+      <Text style={flow.body}>{copy.runs}</Text>
+      <Text style={[flow.body, { fontWeight: "700", color: palette.ink }]}>{heyAppFlowFill(copy.price, { price })}</Text>
+      <View style={flow.spacer} />
+      <HeyFlowButton label={copy.start} onPress={onStart} />
+      <HeyFlowLink label={copy.login} onPress={onLogin} />
+      {codeOpen ? (
+        <View>
+          <TextInput value={code} onChangeText={(value) => { setCode(value); setInvalid(false); }} autoCapitalize="characters" autoCorrect={false}
+            placeholder={heyAppFlowCopy(locale).waitlist.codePlaceholder} placeholderTextColor={palette.muted} style={styles.authInput} accessibilityLabel={copy.code} />
+          {invalid ? <Text style={flow.error}>{heyAppFlowCopy(locale).waitlist.invalid}</Text> : null}
+          <Pressable style={flow.outlineButton} accessibilityRole="button" onPress={() => { const normalized = heyNormalizeInviteCode(code); if (normalized) onCode(normalized); else setInvalid(true); }}>
+            <Text style={flow.outlineButtonText}>{heyAppFlowCopy(locale).waitlist.redeem}</Text>
+          </Pressable>
+        </View>
+      ) : <HeyFlowLink label={copy.code} onPress={() => setCodeOpen(true)} />}
+    </HeyFlowFrame>
+  );
+}
+
+function HeyLinkSentScreen({ locale, dark, email, onBack }: { locale: AppLocale; dark: boolean; email: string; onBack: () => void }) {
+  const copy = heyAppFlowCopy(locale).signUp;
+  return (
+    <HeyFlowFrame dark={dark}>
+      <Text style={flow.title} accessibilityRole="header">{copy.sentTitle}</Text>
+      <Text style={flow.lead}>{copy.sentBody}</Text>
+      <Text style={flow.small}>{heyAppFlowFill(copy.sentTo, { email })}</Text>
+      <View style={flow.spacer} />
+      <HeyFlowLink label={staticUiCopy(locale)["Back"]} onPress={onBack} />
+    </HeyFlowFrame>
+  );
+}
+
+function HeyWaitlistScreen({ locale, dark, email, code, onCode, phase, onRedeem, onSubscribe }: {
+  locale: AppLocale; dark: boolean; email: string; code: string; onCode: (value: string) => void;
+  phase: "idle" | "checking" | "invalid"; onRedeem: () => void; onSubscribe: () => void;
+}) {
+  const copy = heyAppFlowCopy(locale).waitlist;
+  return (
+    <HeyFlowFrame dark={dark}>
+      <Text style={flow.title} accessibilityRole="header">{copy.title}</Text>
+      <Text style={flow.lead}>{copy.body}</Text>
+      <Text style={flow.small}>{heyAppFlowFill(copy.writeTo, { email })}</Text>
+      <Text style={[flow.body, { marginTop: 26, color: palette.ink }]}>{copy.codeQuestion}</Text>
+      <TextInput value={code} onChangeText={onCode} autoCapitalize="characters" autoCorrect={false} placeholder={copy.codePlaceholder}
+        placeholderTextColor={palette.muted} style={[styles.authInput, { marginTop: 10 }]} accessibilityLabel={copy.codePlaceholder} editable={phase !== "checking"} />
+      {phase === "invalid" ? <Text style={flow.error} accessibilityRole="alert">{copy.invalid}</Text> : null}
+      <Pressable style={[flow.outlineButton, phase === "checking" && styles.disabledButton]} accessibilityRole="button" disabled={phase === "checking" || !code.trim()} onPress={onRedeem}>
+        {phase === "checking" ? <ActivityIndicator color={palette.ink} /> : null}
+        <Text style={flow.outlineButtonText}>{phase === "checking" ? copy.redeeming : copy.redeem}</Text>
+      </Pressable>
+      <View style={flow.spacer} />
+      <HeyFlowLink label={copy.subscribe} onPress={onSubscribe} />
+    </HeyFlowFrame>
+  );
+}
+
+function HeyReleaseScreen({ locale, dark, onPurchase }: { locale: AppLocale; dark: boolean; onPurchase: () => void }) {
+  const copy = heyAppFlowCopy(locale).release;
+  return (
+    <HeyFlowFrame dark={dark}>
+      <View style={flow.card} accessibilityRole="alert">
+        <Text style={[flow.title, { marginTop: 0, fontSize: 26, lineHeight: 32 }]} accessibilityRole="header">{copy.title}</Text>
+        <Text style={flow.body}>{copy.body}</Text>
+        <Text style={flow.urgency}>{copy.urgency}</Text>
+        <HeyFlowButton label={copy.cta} onPress={onPurchase} />
+      </View>
+    </HeyFlowFrame>
+  );
+}
+
+function HeyTakenScreen({ locale, dark, onBack }: { locale: AppLocale; dark: boolean; onBack: () => void }) {
+  const copy = heyAppFlowCopy(locale).taken;
+  return (
+    <HeyFlowFrame dark={dark}>
+      <Text style={flow.title} accessibilityRole="header">{copy.title}</Text>
+      <Text style={flow.lead}>{copy.body}</Text>
+      <View style={flow.spacer} />
+      <HeyFlowButton label={copy.back} onPress={onBack} />
+    </HeyFlowFrame>
+  );
+}
+
+/**
+ * The purchase screen with one plan: no plan card, no plan name. "30 days free, then $12.99/month. Cancel
+ * anytime." and one big button. The price is the store's own; the trial is promised only when the store confirms it.
+ */
+function HeySinglePurchasePanel({ locale, store, view, plan, phase, accountReady, purchaseAvailable, notice, onDismissNotice, inviteBanner, onPurchase, onRestore, accountLabel, onOpenAccount, signOutLabel, onSignOut, dark }: {
+  locale: AppLocale; store: HeyStorePlatform; view: ReturnType<typeof iosPaywallView>; plan: MobilePurchasePlan | null; phase: MobilePurchasePhase;
+  accountReady: boolean; purchaseAvailable: boolean; notice: string | null; onDismissNotice: () => void; inviteBanner: boolean; dark: boolean;
+  onPurchase: (packageId: MobileRevenueCatPackageId) => Promise<void>; onRestore: () => Promise<void>;
+  accountLabel?: string; onOpenAccount?: () => void; signOutLabel?: string; onSignOut?: () => void;
+}) {
+  const copy = heyAppFlowCopy(locale);
+  const busy = phase === "purchasing" || phase === "restoring";
+  const worded = (text: string) => heyStoreWording(text, locale, store);
+  const price = plan?.priceString ?? "";
+  const trial = Boolean(plan && plan.trialEligibility === "eligible" && plan.trialDays > 0);
+  const values = { price, days: String(plan?.trialDays ?? 0), zero: "0" };
+  const line = plan ? heyAppFlowFill(trial ? copy.purchase.trialLine : copy.purchase.plainLine, values) : view.purchaseLabel;
+  const cta = plan ? heyAppFlowFill(trial ? copy.purchase.trialCta : copy.purchase.plainCta, values) : view.purchaseLabel;
+  // The trial line states the amount due today next to the button (App Review 3.1.2).
+  const terms = plan ? worded(heyAppFlowFill(trial ? copy.purchase.trialTerms : copy.purchase.plainTerms, { ...values, zero: price.replace(/[\d.,]+/, "0.00") })) : view.renewalText;
+  const disabled = busy || !accountReady || !plan || !purchaseAvailable;
+  return (
+    <HeyFlowFrame dark={dark}>
+      {inviteBanner ? <View style={flow.banner} accessibilityRole="alert"><Text style={flow.bannerText}>{copy.invite.banner}</Text></View> : null}
+      <Text style={flow.title} accessibilityRole="header">{copy.purchase.title}</Text>
+      <Text style={flow.lead}>{copy.valueLine}</Text>
+      <Text style={flow.price}>{line}</Text>
+      {phase === "loading" ? <ActivityIndicator color={paywallBrandColor} style={{ marginTop: 16 }} /> : null}
+      <View style={flow.spacer} />
+      <HeyFlowButton label={cta} busy={phase === "purchasing"} disabled={disabled} onPress={() => { if (plan) void onPurchase(plan.packageId); }} />
+      <Text style={styles.paywallTerms}>{terms}</Text>
+      {notice ? <Notice locale={locale} tone={phase === "error" ? "error" : "info"} text={notice} onDismiss={onDismissNotice} /> : null}
+      <View style={styles.paywallFooter}>
+        <Pressable disabled={busy || !accountReady} onPress={() => void onRestore()} accessibilityRole="button" accessibilityLabel={view.restoreLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+          <Text style={styles.paywallFooterLink}>{phase === "restoring" ? view.restoringLabel : view.restoreLabel}</Text>
+        </Pressable>
+        {view.legalLinks.map((link) => (
+          <Pressable key={link.key} onPress={() => void openHeyLegalHref(link.url)} accessibilityRole="link" accessibilityLabel={link.label} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+            <Text style={styles.paywallFooterLink}>{link.label}</Text>
+          </Pressable>
+        ))}
+        {onOpenAccount && accountLabel ? (
+          <Pressable onPress={onOpenAccount} accessibilityRole="button" accessibilityLabel={accountLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+            <Text style={styles.paywallFooterLink}>{accountLabel}</Text>
+          </Pressable>
+        ) : null}
+        {onSignOut && signOutLabel ? (
+          <Pressable onPress={onSignOut} accessibilityRole="button" accessibilityLabel={signOutLabel} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
+            <Text style={styles.paywallFooterLink}>{signOutLabel}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      <Text style={styles.paywallTerms}>{view.ageText} {view.accountBoundaryText}</Text>
+    </HeyFlowFrame>
+  );
+}
+
+/** The limit card in the chat: shown only when the included weekly allowance is used up (Pro appears nowhere else). */
+function HeyLimitCard({ locale, onSeePro }: { locale: AppLocale; onSeePro: () => void }) {
+  const copy = heyAppFlowCopy(locale).limit;
+  return (
+    <View style={[flow.card, { marginHorizontal: 12, marginBottom: 8, marginTop: 0 }]} accessibilityRole="alert">
+      <Text style={[flow.body, { marginTop: 0, fontWeight: "700", color: palette.ink }]}>{copy.title}</Text>
+      <Text style={flow.small}>{copy.body}</Text>
+      <Pressable style={flow.outlineButton} accessibilityRole="button" onPress={onSeePro}><Text style={flow.outlineButtonText}>{copy.cta}</Text></Pressable>
+    </View>
+  );
+}
+
+/** The upgrade screen: Pro (29/month), no free trial. A change of plan, so nothing is charged twice. */
+function HeyProScreen({ locale, dark, store, price, busy, notice, onSwitch, onLater, onOwnKey }: {
+  locale: AppLocale; dark: boolean; store: HeyStorePlatform; price: string; busy: boolean; notice: string | null;
+  onSwitch: () => void; onLater: () => void; onOwnKey: () => void;
+}) {
+  const copy = heyAppFlowCopy(locale).pro;
+  const values = { price };
+  return (
+    <HeyFlowFrame dark={dark}>
+      <Text style={flow.title} accessibilityRole="header">{copy.title}</Text>
+      <Text style={flow.lead}>{heyStoreWording(copy.body, locale, store)}</Text>
+      <View style={flow.card}>
+        <Text style={[flow.body, { marginTop: 0, fontWeight: "800", color: palette.ink, fontSize: 20 }]}>{copy.name}</Text>
+        <Text style={[flow.body, { marginTop: 4, color: palette.ink }]}>{heyAppFlowFill(copy.perMonth, values)}</Text>
+        <Text style={flow.small}>{copy.feature}</Text>
+        <Text style={flow.small}>{heyStoreWording(copy.noTrial, locale, store)}</Text>
+      </View>
+      {notice ? <Text style={flow.small} accessibilityRole="alert">{notice}</Text> : null}
+      <View style={flow.spacer} />
+      <HeyFlowButton label={heyAppFlowFill(copy.cta, values)} busy={busy} onPress={onSwitch} />
+      <HeyFlowLink label={copy.later} onPress={onLater} />
+      <HeyFlowLink label={copy.ownKey} onPress={onOwnKey} />
+    </HeyFlowFrame>
   );
 }
 

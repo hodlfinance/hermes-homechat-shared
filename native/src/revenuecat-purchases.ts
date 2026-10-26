@@ -130,7 +130,7 @@ export type MobilePurchasePlan = {
   plan: MobilePlanTier;
   /** The App Store product id, or the host-configured Google Play one. */
   productId: string;
-  displayName: "Personal" | "Starter" | "Max";
+  displayName: "Pro" | "Personal" | "Max";
   /**
    * HPD-1534: the free days the store offer carries for this buyer as far as it is known
    * (Starter 30, Pro 7 until the switch-on removes it, Max none); 0 = no trial wording.
@@ -143,8 +143,9 @@ export type MobilePurchasePlan = {
 };
 
 const planDetails: Record<MobileRevenueCatPackageId, Pick<MobilePurchasePlan, "displayName">> = {
-  personal_monthly: { displayName: "Personal" },
-  starter_monthly: { displayName: "Starter" },
+  // HPD-1762: display names only; the package ids and store product ids are unchanged.
+  personal_monthly: { displayName: "Pro" },
+  starter_monthly: { displayName: "Personal" },
   max_monthly: { displayName: "Max" },
 };
 
@@ -166,8 +167,8 @@ export function isMobileReceiptAlreadyInUse(error: unknown): boolean {
 }
 
 export function mobilePurchasePlanLabel(plan: string) {
-  if (plan === "personal") return "Personal";
-  if (plan === "starter") return "Starter";
+  if (plan === "personal") return "Pro";
+  if (plan === "starter") return "Personal";
   if (plan === "max") return "Max";
   if (plan === "trial") return "Trial";
   return "No mobile plan";
@@ -543,7 +544,8 @@ export class MobilePurchasesController {
         // HPD-1534: only Starter has a decided trial (30 days); Pro keeps its 7 until the
         // switch-on removes the store offer; Max has none. Any other free phase promises
         // nothing (unknown: the store sheet decides).
-        const decided = tier === "starter" ? offeredDays === 30 : tier === "personal" ? offeredDays === 7 : false;
+        // HPD-1762 (Justus 2026-10-26): Pro (the 29 plan) has no free trial; a store offer that still carries one promises nothing.
+        const decided = tier === "starter" ? offeredDays === 30 : false;
         const storeEligibility = eligibility[storePackage.product.identifier] ?? "unknown";
         const trialEligibility: MobileTrialEligibility = offeredDays === 0 ? "unavailable"
           : this.store === "play_store" ? (decided ? "eligible" : "unknown")
@@ -725,7 +727,7 @@ export function mobileServerPlanTiers(state: unknown): MobilePlanTier[] {
  * the `personal` package is sold as Pro; without them it stays "Personal" as before.
  */
 export function mobilePlanActiveNotice(tier: MobilePlanTier, tiered: boolean) {
-  if (tier === "starter") return "Starter is active for this Hey Hermes account." as const;
+  if (tier === "starter") return "Personal is active for this Hey Hermes account." as const;
   if (tier === "max") return "Max is active for this Hey Hermes account." as const;
-  return tiered ? "Pro is active for this Hey Hermes account." as const : "Personal is active for this Hey Hermes account." as const;
+  return "Pro is active for this Hey Hermes account." as const;
 }
