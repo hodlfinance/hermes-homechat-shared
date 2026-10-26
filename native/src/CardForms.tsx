@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { palette } from "./mobile-palette";
 import type { AppLocale } from "../core/index";
@@ -66,17 +66,27 @@ export function CardEntryForm({ locale = "en", request, busy, sealer, onScan, on
     }
   }
 
+  const submitting = useRef(false);
+
   async function save() {
-    if (busy) return;
+    if (busy || submitting.current) return;
+    submitting.current = true;
     setFailure(null);
-    const sealed = await sealCardEntry(request, { number, expiry, cvc, name, billingAddress: { line1, postalCode, city, country } }, new Date(), sealer);
-    if (!sealed.ok) {
-      setErrors(sealed.errors);
-      if (sealed.reason) setFailure(copy.guestMissing);
-      return;
+    try {
+      const sealed = await sealCardEntry(request, { number, expiry, cvc, name, billingAddress: { line1, postalCode, city, country } }, new Date(), sealer);
+      if (!sealed.ok) {
+        setErrors(sealed.errors);
+        if (sealed.reason) setFailure(copy.guestMissing);
+        return;
+      }
+      setErrors({});
+      await onSave(sealed.body);
+      clear();
+    } catch {
+      setFailure(copy.failed);
+    } finally {
+      submitting.current = false;
     }
-    setErrors({});
-    try { await onSave(sealed.body); clear(); } catch { setFailure(copy.failed); }
   }
 
   return (
@@ -120,11 +130,11 @@ export function CardEntryForm({ locale = "en", request, busy, sealer, onScan, on
       <Text style={styles.note}>{copy.cvcNote}</Text>
       <Field label={copy.name} error={errors.name ? copy.nameInvalid : null}>
         <TextInput
-          accessibilityLabel={copy.name} autoComplete="cc-name" textContentType="name" autoCapitalize="words"
+          accessibilityLabel={copy.name} autoComplete="cc-name" textContentType="creditCardName" autoCapitalize="words"
           editable={!busy} style={[styles.input, errors.name && styles.invalid]} value={name} onChangeText={setName}
         />
       </Field>
-      <Pressable accessibilityRole="button" onPress={() => setShowBilling((value) => !value)}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: showBilling }} onPress={() => setShowBilling((value) => !value)}>
         <Text style={styles.link}>{copy.billing}</Text>
       </Pressable>
       {showBilling ? (
@@ -132,17 +142,17 @@ export function CardEntryForm({ locale = "en", request, busy, sealer, onScan, on
           <TextInput accessibilityLabel={copy.billingLine1} placeholder={copy.billingLine1} placeholderTextColor={palette.muted} autoComplete="street-address" textContentType="fullStreetAddress" editable={!busy} style={styles.input} value={line1} onChangeText={setLine1} />
           <View style={styles.row}>
             <TextInput accessibilityLabel={copy.billingPostalCode} placeholder={copy.billingPostalCode} placeholderTextColor={palette.muted} autoComplete="postal-code" textContentType="postalCode" editable={!busy} style={[styles.input, styles.half]} value={postalCode} onChangeText={setPostalCode} />
-            <TextInput accessibilityLabel={copy.billingCity} placeholder={copy.billingCity} placeholderTextColor={palette.muted} textContentType="addressCity" editable={!busy} style={[styles.input, styles.half]} value={city} onChangeText={setCity} />
+            <TextInput accessibilityLabel={copy.billingCity} placeholder={copy.billingCity} placeholderTextColor={palette.muted} autoComplete="postal-address-locality" textContentType="addressCity" editable={!busy} style={[styles.input, styles.half]} value={city} onChangeText={setCity} />
           </View>
           <TextInput accessibilityLabel={copy.billingCountry} placeholder={copy.billingCountry} placeholderTextColor={palette.muted} textContentType="countryName" editable={!busy} style={styles.input} value={country} onChangeText={setCountry} />
         </View>
       ) : null}
-      {failure ? <Text style={styles.error} accessibilityRole="alert">{failure}</Text> : null}
+      {failure ? <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">{failure}</Text> : null}
       <Pressable accessibilityRole="button" disabled={busy || !number || !expiry || !name} onPress={() => void save()}
         style={({ pressed }) => [styles.primary, (pressed || busy || !number || !expiry || !name) && styles.dimmed]}>
         <Text style={styles.primaryText}>{busy ? copy.saving : copy.save}</Text>
       </Pressable>
-      <Pressable accessibilityRole="button" disabled={busy} onPress={() => { clear(); void onCancel(); }} style={({ pressed }) => [styles.secondary, (pressed || busy) && styles.dimmed]}>
+      <Pressable accessibilityRole="button" disabled={busy} onPress={() => { clear(); void onCancel().catch(() => setFailure(copy.failed)); }} style={({ pressed }) => [styles.secondary, (pressed || busy) && styles.dimmed]}>
         <Text style={styles.secondaryText}>{copy.cancel}</Text>
       </Pressable>
     </View>
@@ -154,7 +164,7 @@ function Field({ label, error, children }: { label: string; error: string | null
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
       {children}
-      {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
+      {error ? <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</Text> : null}
     </View>
   );
 }
@@ -170,12 +180,21 @@ export function CardPaymentApproval({ locale = "en", request, busy, sealer, onAp
   const copy = paymentCardCopy(locale);
   const [cvc, setCvc] = useState("");
   const [failure, setFailure] = useState<string | null>(null);
+  const submitting = useRef(false);
   async function approve() {
-    if (busy) return;
-    const sealed = await sealPaymentCvc(request, cvc, sealer);
-    if (!sealed.ok) { setFailure(copy.cvcInvalid); return; }
-    setFailure(null);
-    try { await onApprove(sealed.body); setCvc(""); } catch { setFailure(copy.approveFailed); }
+    if (busy || submitting.current) return;
+    submitting.current = true;
+    try {
+      const sealed = await sealPaymentCvc(request, cvc, sealer);
+      if (!sealed.ok) { setFailure(copy.cvcInvalid); return; }
+      setFailure(null);
+      await onApprove(sealed.body);
+      setCvc("");
+    } catch {
+      setFailure(copy.approveFailed);
+    } finally {
+      submitting.current = false;
+    }
   }
   return (
     <View style={styles.card} accessibilityLabel={copy.approveTitle}>
@@ -189,12 +208,12 @@ export function CardPaymentApproval({ locale = "en", request, busy, sealer, onAp
         />
       </Field>
       <Text style={styles.note}>{copy.approveCvcNote}</Text>
-      {failure ? <Text style={styles.error} accessibilityRole="alert">{failure}</Text> : null}
+      {failure ? <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">{failure}</Text> : null}
       <Pressable accessibilityRole="button" disabled={busy || cvc.length < 3} onPress={() => void approve()}
         style={({ pressed }) => [styles.primary, (pressed || busy || cvc.length < 3) && styles.dimmed]}>
         <Text style={styles.primaryText}>{copy.approveYes}</Text>
       </Pressable>
-      <Pressable accessibilityRole="button" disabled={busy} onPress={() => void onDecline()} style={({ pressed }) => [styles.secondary, (pressed || busy) && styles.dimmed]}>
+      <Pressable accessibilityRole="button" disabled={busy} onPress={() => void onDecline().catch(() => setFailure(copy.approveFailed))} style={({ pressed }) => [styles.secondary, (pressed || busy) && styles.dimmed]}>
         <Text style={styles.secondaryText}>{copy.approveNo}</Text>
       </Pressable>
     </View>

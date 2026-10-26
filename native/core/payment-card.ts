@@ -424,10 +424,20 @@ export function hostMayReceiveCard(pageHost: string, approvedHost: string): bool
   return page === approved || page.endsWith(`.${approved}`);
 }
 
-export function formatAmount(amountMinor: number, currency: string, locale = "en"): string {
+/** The number of minor-unit digits of a currency (2 for CHF, 0 for JPY, 3 for KWD). */
+export function currencyFractionDigits(currency: string, locale = "en"): number {
   try {
-    return new Intl.NumberFormat(locale, { style: "currency", currency }).format(amountMinor / 100);
+    return new Intl.NumberFormat(locale, { style: "currency", currency }).resolvedOptions().maximumFractionDigits ?? 2;
   } catch {
-    return `${(amountMinor / 100).toFixed(2)} ${currency}`;
+    return 2;
+  }
+}
+
+export function formatAmount(amountMinor: number, currency: string, locale = "en"): string {
+  const digits = currencyFractionDigits(currency, locale);
+  try {
+    return new Intl.NumberFormat(locale, { style: "currency", currency }).format(amountMinor / 10 ** digits);
+  } catch {
+    return `${(amountMinor / 10 ** digits).toFixed(digits)} ${currency}`;
   }
 }

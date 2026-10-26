@@ -73,6 +73,21 @@ test("the pure-JS sealer (React Native) makes envelopes the guest's WebCrypto op
   await assert.rejects(openCardEnvelope(sealed.body.envelope, privateKey, "card-entry:crq_bbbbbbbbbbbbbbbb"));
 });
 
+test("the amount follows the currency's own minor units and a payment without a sound amount is refused", async () => {
+  const { formatAmount } = await import("../core/payment-card");
+  assert.equal(formatAmount(4890, "CHF", "en").replace(/\u00a0/gu, " "), "CHF 48.90");
+  assert.match(formatAmount(1000, "JPY", "en"), /1,000/);
+  assert.match(formatAmount(12345, "KWD", "en"), /12\.345/);
+  const card = { id: "card_aaaaaaaaaaaaaaaa", brand: "visa", last4: "1234", expMonth: 8, expYear: 2028, isDefault: true, createdAt: "" };
+  const payment = { cardId: card.id, merchant: "X", merchantHost: "shop.example.ch", amountMinor: 100, currency: "CHF" };
+  const ok = { id: "cpay_aaaaaaaaaaaaaaaa", kind: "payment", status: "pending", payment, card };
+  assert.equal(cardRequestFrom(ok).payment?.amountMinor, 100);
+  assert.throws(() => cardRequestFrom({ ...ok, payment: { ...payment, amountMinor: NaN } }));
+  assert.throws(() => cardRequestFrom({ ...ok, payment: { ...payment, currency: "chf" } }));
+  assert.throws(() => cardRequestFrom({ ...ok, card: null }));
+  assert.throws(() => cardRequestFrom({ ...ok, payment: null }));
+});
+
 test("only a host that passes a cards port gets the card surface; policy never lists the card routes", async () => {
   const { readFileSync } = await import("node:fs");
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");

@@ -198,6 +198,13 @@ export function cardRequestFrom(value: unknown): CardRequest {
   const status = String(source.status ?? "");
   if (!["pending", "approved", "completed", "cancelled", "expired"].includes(status)) throw new Error("The card request is invalid.");
   const payment = source.payment === null || source.payment === undefined ? null : record(source.payment);
+  if (kind === "payment") {
+    // The consent sentence is built from these: a payment without a sound amount, currency and card is not shown.
+    const amount = Number(payment?.amountMinor);
+    if (!payment || !Number.isSafeInteger(amount) || amount <= 0 || !/^[A-Z]{3}$/u.test(String(payment.currency ?? "")) || !source.card) {
+      throw new Error("The card request is invalid.");
+    }
+  }
   return {
     id,
     kind,

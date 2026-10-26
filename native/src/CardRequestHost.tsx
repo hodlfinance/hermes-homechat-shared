@@ -37,24 +37,31 @@ export function CardRequestHost({ client, port, locale = "en", conversationSessi
   const [busyCardId, setBusyCardId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  // Only the newest refresh may set state, so a slow answer for another conversation or an older poll never wins.
+  const latest = useRef(0);
 
   const refresh = useCallback(async () => {
+    const ticket = ++latest.current;
+    const current = () => mounted.current && latest.current === ticket;
     if (!conversationSessionId) { setRequest(null); return; }
     try {
       const pending = await client.pendingCardRequests(conversationSessionId);
       const first = pending[0] ?? null;
-      if (!first) { if (mounted.current) setRequest(null); return; }
+      if (!first) { if (current()) setRequest(null); return; }
       const full = first.kind === "manage" ? first : await client.cardRequest(first.id);
       const list = full.kind === "manage" ? await client.paymentCards() : null;
-      if (!mounted.current) return;
+      if (!current()) return;
       setRequest(full.status === "pending" ? full : null);
       if (list) setCards(list);
     } catch {
       // Stays invisible; the next event or poll tries again.
+      if (current()) setRequest(null);
     }
   }, [client, conversationSessionId]);
 
+  // A new conversation starts with nothing open and no old notice.
+  useEffect(() => { latest.current += 1; setRequest(null); setNotice(null); }, [conversationSessionId]);
   useEffect(() => { void refresh(); }, [refresh, refreshKey]);
   useEffect(() => {
     const timer = setInterval(() => { void refresh(); }, FALLBACK_POLL_MS);
@@ -63,6 +70,7 @@ export function CardRequestHost({ client, port, locale = "en", conversationSessi
 
   async function finish(task: () => Promise<unknown>, success: string | null) {
     setBusy(true);
+    latest.current += 1; // an answer already on its way must not bring the form back
     try {
       await task();
       if (mounted.current) { setNotice(success); setRequest(null); }
@@ -95,13 +103,13 @@ export function CardRequestHost({ client, port, locale = "en", conversationSessi
   }
   const act = (card: PaymentCardMetadata, task: () => Promise<unknown>) => {
     setBusyCardId(card.id);
-    void task().then(async () => { if (mounted.current) setCards(await client.paymentCards()); }).finally(() => { if (mounted.current) setBusyCardId(null); });
+    void task().then(async () => { if (mounted.current) setCards(await client.paymentCards()); }).catch(() => { if (mounted.current) setNotice(copy.failed); }).finally(() => { if (mounted.current) setBusyCardId(null); });
   };
   return (
     <CardList key={request.id} locale={locale} cards={cards} busyId={busyCardId}
       onMakeDefault={(card) => act(card, () => client.setDefaultPaymentCard(card.id))}
       onRemove={(card) => act(card, () => client.deletePaymentCard(card.id))}
-      onClose={() => void finish(() => client.cancelCardRequest(request.id), null)} />
+      onClose={() => void finish(() => client.cancelCardRequest(request.id), null).catch(() => undefined)} />
   );
 }
 
