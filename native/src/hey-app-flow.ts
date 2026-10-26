@@ -8,7 +8,7 @@ import type { HeyHermesAppWaitlistState, HeyHermesSalesStatus } from "../core/he
  * the value line reads "Your own AI agent on your own private server. Text it or talk to it, like a
  * friend." and the word is "spot". German follows the German mockup. The other six languages read
  * English until they are translated (the sign-in and paywall catalogs fall back the same way). The US
- * English text names no region; only the German variant keeps "in Europa".
+ * English text names no place, city, country or server location (Justus/coordinator 2026-10-26); only the German variant keeps "in Europa".
  *
  * No screen of this file shows a position number or says who "gets the spot": that urgency line is
  * only in the release message (email, push, in-app card) and on the card of the released state.
@@ -31,7 +31,7 @@ const en: HeyAppFlowCopy = {
   welcome: {
     intro: "Hey Hermes is your own AI agent that learns how you work and what matters to you.",
     talk: "Text it or talk to it, like a friend. You can use it right here in the app. It uses its own computer like you do.",
-    examples: ["It ", ["prioritizes your to-dos", "reserves a table for Friday", "books a flight to Austin", "spots deals", "builds you little apps"]],
+    examples: ["It ", ["prioritizes your to-dos", "reserves a table for Friday", "books your next flight", "spots deals", "builds you little apps"]],
     runs: "It runs on your own private server. You can switch its AI model anytime.",
     price: "30 days free, then {price} a month.",
     start: "Get started",

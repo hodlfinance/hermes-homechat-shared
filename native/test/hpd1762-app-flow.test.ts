@@ -9,8 +9,8 @@ test("the English text carries the approved value line and the word spot; no reg
   const en = heyAppFlowCopy("en");
   assert.equal(en.valueLine, "Your own AI agent on your own private server. Text it or talk to it, like a friend.");
   const all = JSON.stringify(en);
-  assert.doesNotMatch(all, /Just text it|Europe|EU\b|Frankfurt|Falkenstein|German|Lisbon/);
-  assert.match(all, /Austin/);
+  assert.doesNotMatch(all, /Just text it|Europe|EU\b|Frankfurt|Falkenstein|German|Lisbon|Austin|Berlin|Texas|USA|America/);
+  assert.match(all, /books your next flight/);
   assert.doesNotMatch(all, /\bplace\b|\bplaces\b/);
   const de = heyAppFlowCopy("de");
   assert.match(de.valueLine, /Schreib ihm oder sprich mit ihm, wie mit einem Freund\./);
