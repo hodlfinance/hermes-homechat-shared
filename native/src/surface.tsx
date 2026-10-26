@@ -477,7 +477,7 @@ import { heyNoAccessCopy, heyPaywallAccountCopy, heyPreparingBody, heyPreparingC
 import { appStoreManagedSentence, mobileStoreNotice, mobileSubscriptionManageAction, mobileSubscriptionManagementTarget, type MobileSubscriptionManagementTarget } from "./subscription-management";
 import { heyServerDeletedCopy, heyServerDeletedDateLine, heyServerDeletedErrorMessage, heyServerDeletedModel, heyServerDeletedReceiptLine } from "./hey-server-deleted";
 import { deviceAppLocale, heySignInCopy, heySignInHeadline } from "./hey-sign-in";
-import { HEY_PERSONAL_PRICE_FALLBACK, heyAppEntryScreen, heyAppFlowCopy, heyAppFlowFill, heyInviteCodeFromUrl, heyInviteRedeemAccepted, heyNormalizeInviteCode, heyShowLimitCard } from "./hey-app-flow";
+import { HEY_PERSONAL_PRICE_FALLBACK, heyAndroidPushAvailable, heyAppEntryScreen, heyAppFlowCopy, heyAppFlowFill, heyInviteCodeFromUrl, heyInviteRedeemAccepted, heyNormalizeInviteCode, heyShowLimitCard } from "./hey-app-flow";
 import { MobileGoogleMark } from "./mobile-google-mark";
 import {
   iosPaywallCopy,
@@ -816,6 +816,8 @@ type ApiBaseConfig = {
 
 type MobileAppConfigExtra = {
   apiBaseUrl?: string;
+  /** HPD-1762: true only in an Android build that carries the Firebase google-services.json (push possible). */
+  androidPush?: boolean;
 };
 
 function cleanApiBaseUrl(value?: string | null) {
@@ -3846,6 +3848,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       try {
         const projectId = easProjectId();
         if (!projectId) throw new Error("EAS project id is missing from the app config.");
+        // HPD-1762: capability check. An Android build without the Firebase config cannot get a push token
+        // (the SDK throws); it stays quiet, and the in-app release card still reaches the user.
+        if (Platform.OS === "android" && !heyAndroidPushAvailable((Constants.expoConfig?.extra as MobileAppConfigExtra | undefined)?.androidPush)) {
+          if (!options.silent) setMobilePushNotice("Push notifications are not available in this build yet.");
+          return;
+        }
         if (Platform.OS === "android") {
           await Notifications.setNotificationChannelAsync("default", {
             name: "Hey Hermes",
