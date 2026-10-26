@@ -10082,7 +10082,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             </MessageLinkOpenerContext.Provider>
             {showScrollDown ? (
               <Pressable
-                style={[styles.scrollDownButton, imessageChatStyle && { bottom: 10 }]}
+                style={styles.scrollDownButton}
                 onPress={jumpToLatestMobileMessage}
                 accessibilityRole="button"
                 accessibilityLabel={staticUiCopy(appLocale)["Scroll to latest message"]}
