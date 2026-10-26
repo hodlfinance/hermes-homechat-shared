@@ -21,3 +21,7 @@ test("buildConfigNotice shows the sentence in debug builds only", () => {
   assert.equal(helper(false, sentence), null);
   assert.equal(helper(undefined, sentence), null);
 });
+
+test("a thrown 'is not configured for this build' error is also routed through the debug-only helper", () => {
+  assert.match(surface, /is not configured for this\/i\.test\(planError\) \? buildConfigNotice\(planError\)/);
+});

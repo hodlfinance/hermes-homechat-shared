@@ -3544,7 +3544,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       .catch((caught) => {
         if (cancelled) return;
         setMobilePurchasePhase("error");
-        setMobilePurchaseNotice(userFacingError(displayError(caught, "App Store plans are unavailable.")));
+        const planError = displayError(caught, "App Store plans are unavailable.");
+        // HPD-1760: "RevenueCat is not configured for this ... build" is a developer note too.
+        setMobilePurchaseNotice(/is not configured for this/i.test(planError) ? buildConfigNotice(planError) : userFacingError(planError));
       });
 
     return () => {
