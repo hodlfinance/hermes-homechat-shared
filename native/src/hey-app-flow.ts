@@ -16,7 +16,9 @@ import type { HeyHermesAppWaitlistState, HeyHermesSalesStatus } from "../core/he
 export type HeyAppFlowCopy = {
   valueLine: string;
   welcome: { intro: string; talk: string; examples: readonly [lead: string, items: readonly string[]]; runs: string; price: string; start: string; login: string; code: string };
-  signUp: { title: string; sentTitle: string; sentBody: string; sentTo: string };
+  signUp: { title: string; sentTitle: string; sentBody: string; sentTo: string; google: string; orEmail: string; emailPlaceholder: string; sendLink: string; hint: string; haveAccount: string; logIn: string };
+  /** Returning users (mockups 14, 15, 17, 18): the login screen, the check-your-email screen and the logged-in-as row. */
+  login: { title: string; body: string; sendLink: string; google: string; newHere: string; getStarted: string; sentTitle: string; sentBody: string; wrongAddress: string; loggedInAs: string; notYou: string };
   waitlist: { title: string; body: string; writeTo: string; codeQuestion: string; codePlaceholder: string; redeem: string; redeeming: string; invalid: string; subscribe: string };
   invite: { banner: string };
   release: { title: string; body: string; urgency: string; cta: string };
@@ -43,6 +45,26 @@ const en: HeyAppFlowCopy = {
     sentTitle: "We sent you a link.",
     sentBody: "Open it on this device to continue here.",
     sentTo: "Sent to {email}",
+    google: "Continue with Google",
+    orEmail: "or with email",
+    emailPlaceholder: "you@example.com",
+    sendLink: "Send link",
+    hint: "No password needed. We’ll email you a link.",
+    haveAccount: "Already have an account?",
+    logIn: "Log in",
+  },
+  login: {
+    title: "Welcome back.",
+    body: "Log in to your Hey Hermes account.",
+    sendLink: "Send login link",
+    google: "Sign in with Google",
+    newHere: "New to Hey Hermes?",
+    getStarted: "Get started",
+    sentTitle: "Check your email.",
+    sentBody: "We sent a login link to {email}. Open it on this device to log in.",
+    wrongAddress: "Wrong address? Go back",
+    loggedInAs: "Logged in as {email}",
+    notYou: "Not you? Log out",
   },
   waitlist: {
     title: "All spots are taken right now.",
@@ -111,6 +133,26 @@ const de: HeyAppFlowCopy = {
     sentTitle: "Wir haben Dir einen Link geschickt.",
     sentBody: "Öffne ihn auf diesem Gerät, um hier weiterzumachen.",
     sentTo: "Gesendet an {email}",
+    google: "Weiter mit Google",
+    orEmail: "oder mit E-Mail",
+    emailPlaceholder: "du@beispiel.de",
+    sendLink: "Link senden",
+    hint: "Kein Passwort nötig. Wir schicken Dir einen Link.",
+    haveAccount: "Schon ein Konto?",
+    logIn: "Anmelden",
+  },
+  login: {
+    title: "Willkommen zurück.",
+    body: "Melde Dich in Deinem Hey-Hermes-Konto an.",
+    sendLink: "Anmeldelink senden",
+    google: "Mit Google anmelden",
+    newHere: "Neu bei Hey Hermes?",
+    getStarted: "Los geht’s",
+    sentTitle: "Schau in Dein Postfach.",
+    sentBody: "Wir haben einen Anmeldelink an {email} geschickt. Öffne ihn auf diesem Gerät, um Dich anzumelden.",
+    wrongAddress: "Falsche Adresse? Zurück",
+    loggedInAs: "Angemeldet als {email}",
+    notYou: "Nicht Du? Abmelden",
   },
   waitlist: {
     title: "Gerade sind alle Plätze vergeben.",
@@ -224,4 +266,9 @@ export function heyShowLimitCard(input: { remainingIncludedPercent: number | nul
 /** HPD-1762: Android push needs the Firebase config in the build; the build says so with extra.androidPush === true. */
 export function heyAndroidPushAvailable(androidPush: unknown): boolean {
   return androidPush === true;
+}
+
+/** HPD-1762: a reply that is one short plain line hugs its text in the iMessage bubble; anything longer or structured keeps the definite width. */
+export function heyIsShortReply(text: string): boolean {
+  return text.length > 0 && text.length <= 60 && !/[\n`*#>|]|^\s*(?:[-+]|\d+[.)])\s/.test(text);
 }

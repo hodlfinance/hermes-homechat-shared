@@ -71,7 +71,7 @@ export type NativeR8Platform = {
     AppleAuthenticationCredentialState: { AUTHORIZED: string | number };
     AppleAuthenticationButton: ComponentType<{ buttonStyle: string | number; buttonType: string | number; cornerRadius: number; onPress(): void; style: StyleProp<ViewStyle> }>;
     AppleAuthenticationButtonStyle: { BLACK: string | number; WHITE: string | number };
-    AppleAuthenticationButtonType: { CONTINUE: string | number; SIGN_UP: string | number };
+    AppleAuthenticationButtonType: { CONTINUE: string | number; SIGN_UP: string | number; SIGN_IN?: string | number };
   };
   Google: {
     useIdTokenAuthRequest(options: { clientId: string; extraParams?: { nonce: string }; iosClientId: string; selectAccount: boolean; shouldAutoExchangeCode?: boolean }): [NativeGoogleRequest | null, NativeGoogleResponse, () => Promise<unknown>];
