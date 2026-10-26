@@ -272,6 +272,16 @@ export async function checkGuestKey(key: GuestCardPublicKey, pin: GuestKeyPin): 
   return pinned === fingerprint ? { status: "match", fingerprint } : { status: "changed", fingerprint, pinned };
 }
 
+/** The pin of this browser: local storage, one value. Storage that throws leaves the key unpinned. */
+export function browserGuestKeyPin(storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> | undefined = typeof localStorage === "undefined" ? undefined : localStorage): GuestKeyPin & { clear: () => void } {
+  const name = "hey-hermes.card-guest-key";
+  return {
+    read: () => { try { return storage?.getItem(name) ?? null; } catch { return null; } },
+    write: (fingerprint) => { try { storage?.setItem(name, fingerprint); } catch { /* Unpinned next time. */ } },
+    clear: () => { try { storage?.removeItem(name); } catch { /* Nothing to clear. */ } },
+  };
+}
+
 export type CardEntrySealResult =
   | { ok: true; body: { envelope: CardEnvelope } }
   | { ok: false; errors: CardFormErrors; reason?: undefined }
