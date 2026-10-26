@@ -120,3 +120,10 @@ test("the 'use it right here' sentence is gone in every language (Justus 2026-10
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   assert.match(surface, /onOpenAccount && accountLabel[\s\S]*?flow\.footerLink/);
 });
+
+test("the opening and plan-loading moments of the store builds use the new design (no large working dragon, no old paywall)", () => {
+  const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  assert.equal((surface.match(/<HeyOpeningScreen/g) ?? []).length, 2);
+  assert.match(surface, /offeredMobilePlans\.length === 0\)\)/);
+  assert.match(surface, /imUserTime: \{ color: "rgba\(255,255,255,0\.75\)" \}/);
+});

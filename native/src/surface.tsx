@@ -8525,6 +8525,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     if (host.presentation?.openingMode === "chat") {
       return renderChatOpening(host.presentation.openingStatus || "Connecting to Hermes...");
     }
+    // HPD-1762: in the store builds the opening moment is the new design (small mark, no large dragon).
+    if (storePlatform && host.session.mode === "standalone") {
+      return <HeyOpeningScreen locale={appLocale} dark={resolvedColorScheme === "dark"} />;
+    }
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style={resolvedColorScheme === "dark" ? "light" : "dark"} />
@@ -8850,6 +8854,18 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       return renderChatOpening(
         error ? staticUiMessage(appLocale, error) : host.presentation.openingStatus || "Connecting to Hermes...",
         Boolean(error),
+      );
+    }
+    if (storePlatform && host.session.mode === "standalone") {
+      return (
+        <HeyOpeningScreen
+          locale={appLocale}
+          dark={resolvedColorScheme === "dark"}
+          message={error ? staticUiMessage(appLocale, error) : null}
+          retrying={isRefreshing}
+          onRetry={() => void refresh()}
+          onSignOut={() => void logout()}
+        />
       );
     }
     return (
@@ -9339,7 +9355,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       />
     );
   }
-  if (productAccessScreen === "purchase" && storePlatform && selectedMobilePlan && selectedMobilePlan.plan === "starter" && offeredMobilePlans.length === 1) {
+  if (productAccessScreen === "purchase" && storePlatform && (selectedMobilePlan ? selectedMobilePlan.plan === "starter" && offeredMobilePlans.length === 1 : offeredMobilePlans.length === 0)) {
+    // Also while the store plan is still loading or unavailable: never fall back to the old paywall design for a moment.
     return (
       <HeySinglePurchasePanel
         account={heyFlowAccount(appLocale, snapshot.me.email, () => void logout())}
@@ -11900,6 +11917,25 @@ function HeyPasswordScreen({ locale, dark, email, onEmail, password, onPassword,
       <HeyFlowLink label={ui["Use a sign-in link instead"]} onPress={onUseLink} />
       <Text style={[flow.strong, { color: flowMuted, marginTop: 8 }]}>{copy.newHere}</Text>
       <HeyFlowLink label={copy.getStarted} onPress={onSwitch} />
+    </HeyFlowFrame>
+  );
+}
+
+/** The moment between sign-in and the next screen: the small mark and a quiet spinner; on an error the words and two buttons. */
+function HeyOpeningScreen({ locale, dark, message = null, retrying = false, onRetry, onSignOut }: { locale: AppLocale; dark: boolean; message?: string | null; retrying?: boolean; onRetry?: () => void; onSignOut?: () => void }) {
+  const ui = staticUiCopy(locale);
+  return (
+    <HeyFlowFrame dark={dark}>
+      {message ? (
+        <>
+          <Text style={flow.lead}>{message}</Text>
+          <View style={flow.spacer} />
+          {onRetry ? <HeyFlowButton label={retrying ? ui["Checking..."] : ui["Retry now"]} busy={retrying} onPress={onRetry} /> : null}
+          {onSignOut ? <HeyFlowLink label={ui["Sign out"]} onPress={onSignOut} /> : null}
+        </>
+      ) : (
+        <ActivityIndicator color={flowMuted} style={{ marginTop: 28 }} accessibilityLabel={ui["Opening Hey Hermes"]} />
+      )}
     </HeyFlowFrame>
   );
 }
