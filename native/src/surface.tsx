@@ -1128,6 +1128,17 @@ function connectionRetryText() {
     : "Could not reach Hey Hermes. Check your connection, then try again.";
 }
 
+/**
+ * HPD-1760: a technical build-configuration note ("purchases are not configured in this
+ * build") is for developers only. A release build (no __DEV__) shows the ordinary
+ * "price unavailable" state and no such sentence, so a reviewer or customer never reads it.
+ * Release builds without purchase config are refused at build time (hey-hermes guard).
+ */
+function buildConfigNotice(message: string): string | null {
+  // React Native sets the global __DEV__ (true in a debug build, false in a release build).
+  return (globalThis as { __DEV__?: unknown }).__DEV__ === true ? message : null;
+}
+
 function userFacingError(message: string) {
   if (isConnectionError(message)) return connectionRetryText();
   return message;
@@ -3495,7 +3506,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       setMobilePurchasePlans([]);
       setMobilePurchaseAccountReady(false);
       setMobilePurchasePhase("unavailable");
-      setMobilePurchaseNotice("App Store purchases are not configured in this build.");
+      setMobilePurchaseNotice(buildConfigNotice("App Store purchases are not configured in this build."));
       return;
     }
     if (playProductGuard !== "match") {
@@ -3505,7 +3516,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       setMobilePurchasePlans([]);
       setMobilePurchaseAccountReady(false);
       setMobilePurchasePhase(playProductGuard === "pending" ? "loading" : "unavailable");
-      setMobilePurchaseNotice(playProductGuard === "pending" ? null : "App Store purchases are not configured in this build.");
+      setMobilePurchaseNotice(playProductGuard === "pending" ? null : buildConfigNotice("App Store purchases are not configured in this build."));
       return;
     }
 
@@ -3533,7 +3544,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       .catch((caught) => {
         if (cancelled) return;
         setMobilePurchasePhase("error");
-        setMobilePurchaseNotice(userFacingError(displayError(caught, "App Store plans are unavailable.")));
+        const planError = displayError(caught, "App Store plans are unavailable.");
+        // HPD-1760: "RevenueCat is not configured for this ... build" is a developer note too.
+        setMobilePurchaseNotice(/is not configured for this/i.test(planError) ? buildConfigNotice(planError) : userFacingError(planError));
       });
 
     return () => {
