@@ -8,7 +8,7 @@ on:
 
 jobs:
   contract:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, hodl-ci]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,6 +16,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --workspaces=false
+      - run: node scripts/test-workflow-runner-lint.mjs && node scripts/lint-workflow-runners.mjs .github/workflows
       - run: npm run typecheck --workspaces=false
       - run: npm run typecheck:native --workspaces=false
       - run: npm test --workspaces=false
