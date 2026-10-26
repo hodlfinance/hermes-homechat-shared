@@ -10713,7 +10713,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                       /* HPD-1722: Settings > Cards. Adding starts in the chat, because only Hermes opens the form. */
                       <MobileSystemSection title={paymentCardCopy(appLocale).listTitle}>
                         <View style={styles.systemSurfaceNotice}>
-                          <CardsSettings client={api} locale={appLocale} onAddViaChat={() => { setInput(paymentCardCopy(appLocale).add); setTab("chat"); }} />
+                          <CardsSettings client={api} port={host.cards} locale={appLocale} onAddViaChat={() => { setInput(paymentCardCopy(appLocale).add); setTab("chat"); }} />
                         </View>
                       </MobileSystemSection>
                     ) : null}

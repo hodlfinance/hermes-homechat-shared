@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Text } from "react-native";
+import { Pressable, Text } from "react-native";
 import type { AppLocale } from "../core/index";
-import type { CardEnvelope, CardRequest, PaymentCardMetadata } from "../core/payment-card";
+import type { CardEnvelope, CardRequest, GuestCardPublicKey, PaymentCardMetadata } from "../core/payment-card";
 import { sealerWithRandom } from "../core/payment-card-js";
-import { paymentCardCopy, parseCardScanText } from "../core/payment-card-view";
+import { checkGuestKey, paymentCardCopy, parseCardScanText, type GuestKeyCheck } from "../core/payment-card-view";
 import type { NativeCardsPort } from "../host";
 import { palette } from "./mobile-palette";
 import { CardEntryForm, CardList, CardPaymentApproval } from "./CardForms";
@@ -16,6 +16,7 @@ export type CardRequestsClient = {
   paymentCards: () => Promise<PaymentCardMetadata[]>;
   setDefaultPaymentCard: (cardId: string) => Promise<unknown>;
   deletePaymentCard: (cardId: string) => Promise<unknown>;
+  paymentCardGuestKey: () => Promise<GuestCardPublicKey>;
 };
 
 const FALLBACK_POLL_MS = 20_000;
@@ -89,14 +90,14 @@ export function CardRequestHost({ client, port, locale = "en", conversationSessi
   if (!request) return notice ? <Text style={{ color: palette.muted, fontSize: 13 }}>{notice}</Text> : null;
   if (request.kind === "entry") {
     return (
-      <CardEntryForm key={request.id} locale={locale} request={request} busy={busy} sealer={sealer} onScan={onScan}
+      <CardEntryForm key={request.id} locale={locale} request={request} busy={busy} sealer={sealer} keyPin={port.keyPin} onScan={onScan}
         onSave={(body) => finish(() => client.completeCardRequest(request.id, body), copy.saved)}
         onCancel={() => finish(() => client.cancelCardRequest(request.id), null)} />
     );
   }
   if (request.kind === "payment") {
     return (
-      <CardPaymentApproval key={request.id} locale={locale} request={request} busy={busy} sealer={sealer}
+      <CardPaymentApproval key={request.id} locale={locale} request={request} busy={busy} sealer={sealer} keyPin={port.keyPin}
         onApprove={(body) => finish(() => client.completeCardRequest(request.id, body), copy.approved)}
         onDecline={() => finish(() => client.cancelCardRequest(request.id), null)} />
     );
@@ -113,19 +114,40 @@ export function CardRequestHost({ client, port, locale = "en", conversationSessi
   );
 }
 
-/** Settings > Cards. Adding a card starts in the chat, because only Hermes opens the form. */
-export function CardsSettings({ client, locale = "en", onAddViaChat }: { client: Pick<CardRequestsClient, "paymentCards" | "setDefaultPaymentCard" | "deletePaymentCard">; locale?: AppLocale; onAddViaChat: () => void }) {
+/** Settings > Cards. Adding a card starts in the chat, because only Hermes opens the form. Shows the server key's fingerprint. */
+export function CardsSettings({ client, port, locale = "en", onAddViaChat }: { client: Pick<CardRequestsClient, "paymentCards" | "setDefaultPaymentCard" | "deletePaymentCard" | "paymentCardGuestKey">; port?: Pick<NativeCardsPort, "keyPin">; locale?: AppLocale; onAddViaChat: () => void }) {
+  const copy = paymentCardCopy(locale);
   const [cards, setCards] = useState<PaymentCardMetadata[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const load = useCallback(async () => { try { setCards(await client.paymentCards()); } catch { setCards([]); } }, [client]);
+  const [key, setKey] = useState<GuestKeyCheck | null>(null);
+  const load = useCallback(async () => {
+    try { setCards(await client.paymentCards()); } catch { setCards([]); }
+    try {
+      const guestKey = await client.paymentCardGuestKey();
+      setKey(port?.keyPin ? await checkGuestKey(guestKey, port.keyPin) : null);
+    } catch { setKey(null); }
+  }, [client, port]);
   useEffect(() => { void load(); }, [load]);
   const act = (card: PaymentCardMetadata, task: () => Promise<unknown>) => {
     setBusyId(card.id);
     void task().then(load).finally(() => setBusyId(null));
   };
   return (
-    <CardList bare locale={locale} cards={cards} busyId={busyId} onAdd={onAddViaChat}
-      onMakeDefault={(card) => act(card, () => client.setDefaultPaymentCard(card.id))}
-      onRemove={(card) => act(card, () => client.deletePaymentCard(card.id))} />
+    <>
+      <CardList bare locale={locale} cards={cards} busyId={busyId} onAdd={onAddViaChat}
+        onMakeDefault={(card) => act(card, () => client.setDefaultPaymentCard(card.id))}
+        onRemove={(card) => act(card, () => client.deletePaymentCard(card.id))} />
+      {key ? (
+        <>
+          <Text style={{ color: palette.ink, fontSize: 13 }} accessibilityLabel={copy.keyTitle}>{copy.keyTitle}: {key.fingerprint}</Text>
+          <Text style={{ color: palette.muted, fontSize: 13 }}>{key.status === "changed" ? copy.keyChanged : key.status === "unpinned" ? copy.keyUnknown : copy.keyNote}</Text>
+          {key.status === "changed" && port?.keyPin ? (
+            <Pressable accessibilityRole="button" onPress={() => { void port.keyPin!.write(key.fingerprint).then(load); }}>
+              <Text style={{ color: palette.ink, fontSize: 13, fontWeight: "700" }}>{copy.keyTrust}</Text>
+            </Pressable>
+          ) : null}
+        </>
+      ) : null}
+    </>
   );
 }
