@@ -2997,6 +2997,12 @@ export interface ProductPrice {
   description: string;
 }
 
+/** HPD-1774: what this workspace's server can do for the apps; absent or false means the app hides the surface. */
+export interface AppCapabilities {
+  /** The customer's own server keeps payment cards (card vault ready). */
+  paymentCards?: boolean;
+}
+
 export interface AppSnapshot {
   me: UserProfile;
   accounts: AlphaAccount[];
@@ -3029,6 +3035,8 @@ export interface AppSnapshot {
   restoreJobs: RestoreJob[];
   auditLogs: AuditLogEntry[];
   recentMessages: ChatMessage[];
+  /** HPD-1774: server capabilities, default off. */
+  capabilities?: AppCapabilities;
 }
 
 /** HPD-1027 S4: the server Owner's SSH keys (public keys only) and customer root. */

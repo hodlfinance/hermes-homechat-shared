@@ -91,8 +91,10 @@ test("the amount follows the currency's own minor units and a payment without a 
 test("only a host that passes a cards port gets the card surface; policy never lists the card routes", async () => {
   const { readFileSync } = await import("node:fs");
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
-  assert.ok(surface.includes("host.cards && token && activeConversationSessionId"));
-  assert.ok(surface.includes("host.cards && snapshot"));
+  assert.ok(surface.includes("host.cards && snapshot?.capabilities?.paymentCards === true ? host.cards : undefined"));
+  assert.ok(surface.includes("cardsPort && token && activeConversationSessionId"));
+  assert.ok(surface.includes("cardsPort && snapshot"));
+  assert.ok(!surface.includes("port={host.cards}"));
   const policy = readFileSync(new URL("../policy.ts", import.meta.url), "utf8");
   assert.ok(!policy.includes("/cards"), "HODL and LiveQuote keep no card routes");
 });

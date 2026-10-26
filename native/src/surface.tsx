@@ -1840,6 +1840,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [secureSecretEntryBusyId, setSecureSecretEntryBusyId] = useState<string | null>(null);
   // HPD-1722: bumps when a card run-status event arrives so the card form or approval shows at once.
   const [cardRefreshKey, setCardRefreshKey] = useState(0);
+  // HPD-1774: the card surface needs the host's card port AND the server saying its card vault is ready
+  // (snapshot.capabilities.paymentCards, default off); until both hold no card entry is shown anywhere.
+  const cardsPort = host.cards && snapshot?.capabilities?.paymentCards === true ? host.cards : undefined;
   const [secureSecretEntryReceipt, setSecureSecretEntryReceipt] = useState<{
     conversationSessionId: string;
     text: string;
@@ -6266,7 +6269,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             ));
           }).catch(() => undefined);
         }
-        if (host.cards && ownsVisibleConversation() && isCardRunEvent(event)) setCardRefreshKey((value) => value + 1);
+        if (cardsPort && ownsVisibleConversation() && isCardRunEvent(event)) setCardRefreshKey((value) => value + 1);
         if (ownsVisibleConversation()) {
           const genericSecureEntry = secureSecretEntryAfterEvent(
             secureSecretEntryRequestRef.current,
@@ -9765,8 +9768,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
               {secureSecretEntryReceipt?.conversationSessionId === activeConversationSessionId ? (
                 <Notice locale={appLocale} tone="info" text={secureSecretEntryReceipt.text} onDismiss={() => setSecureSecretEntryReceipt(null)} />
               ) : null}
-              {host.cards && token && activeConversationSessionId ? (
-                <CardRequestHost client={api} port={host.cards} locale={appLocale} conversationSessionId={activeConversationSessionId} refreshKey={cardRefreshKey} />
+              {cardsPort && token && activeConversationSessionId ? (
+                <CardRequestHost client={api} port={cardsPort} locale={appLocale} conversationSessionId={activeConversationSessionId} refreshKey={cardRefreshKey} />
               ) : null}
               {secureSecretEntryRequest?.conversationSessionId === activeConversationSessionId ? (
                 <View style={styles.secureConnectionEntry}>
@@ -10709,11 +10712,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                         />
                       </View>
                     ) : null}
-                    {host.cards && snapshot ? (
+                    {cardsPort && snapshot ? (
                       /* HPD-1722: Settings > Cards. Adding starts in the chat, because only Hermes opens the form. */
                       <MobileSystemSection title={paymentCardCopy(appLocale).listTitle}>
                         <View style={styles.systemSurfaceNotice}>
-                          <CardsSettings client={api} port={host.cards} locale={appLocale} onAddViaChat={() => { setInput(paymentCardCopy(appLocale).add); setTab("chat"); }} />
+                          <CardsSettings client={api} port={cardsPort} locale={appLocale} onAddViaChat={() => { setInput(paymentCardCopy(appLocale).add); setTab("chat"); }} />
                         </View>
                       </MobileSystemSection>
                     ) : null}
