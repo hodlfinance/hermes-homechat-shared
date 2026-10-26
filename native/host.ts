@@ -184,7 +184,22 @@ export type NativeR8AssistantAvatarProps = {
   /** Absent: the figure is decoration next to a text that says the same. */
   accessibilityLabel?: string;
 };
+/**
+ * HPD-1722: the customer's own payment cards (Hey Hermes only; HODL and
+ * LiveQuote pass nothing and show nothing). `randomBytes` is the device's
+ * secure random source, used to seal the card to the guest's key.
+ * `scanText` lets the user take or pick a photo of a card and returns the text
+ * lines recognised ON THE DEVICE (iOS Vision, Android ML Kit); the image never
+ * leaves the phone. Without it the form has no scan button.
+ */
+export type NativeCardsPort = {
+  randomBytes(length: number): Uint8Array;
+  scanText?: () => Promise<string[] | null>;
+};
+
 export type NativeR8Host = {
+  /** HPD-1722: present only in Hey Hermes. Turns on the card form, the payment approval and Settings > Cards. */
+  cards?: NativeCardsPort;
   /**
    * HPD-1097: opens the protected browser takeover (an authenticated
    * /browser/<id> URL) in the host's own full-screen view. Hey Hermes passes

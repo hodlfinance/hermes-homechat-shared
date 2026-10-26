@@ -1,3 +1,5 @@
+import { cardRequestFrom, cardRequestListFrom, paymentCardFrom, paymentCardListFrom } from "./payment-card-view";
+import type { CardEnvelope } from "./payment-card";
 import type {
   SelfManagedView,
   AgentMailbox,
@@ -948,6 +950,20 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
       request<unknown>(`/secure-secrets/requests/${encodeURIComponent(requestId)}/cancel`, {
         method: "POST",
       }).then(secureSecretEntryRequestFrom),
+    // HPD-1722: the customer's own payment cards. Only sealed envelopes go up; only metadata comes down.
+    paymentCards: () => request<unknown>("/cards").then(paymentCardListFrom),
+    pendingCardRequests: (conversationSessionId: string) =>
+      request<unknown>(`/cards/requests/pending?${new URLSearchParams({ conversationSessionId }).toString()}`).then(cardRequestListFrom),
+    cardRequest: (requestId: string) =>
+      request<unknown>(`/cards/requests/${encodeURIComponent(requestId)}`).then(cardRequestFrom),
+    completeCardRequest: (requestId: string, body: { envelope: CardEnvelope }) =>
+      request<unknown>(`/cards/requests/${encodeURIComponent(requestId)}/complete`, { method: "POST", body: JSON.stringify(body) }),
+    cancelCardRequest: (requestId: string) =>
+      request<unknown>(`/cards/requests/${encodeURIComponent(requestId)}/cancel`, { method: "POST" }),
+    setDefaultPaymentCard: (cardId: string) =>
+      request<unknown>(`/cards/${encodeURIComponent(cardId)}/default`, { method: "POST" }).then(paymentCardFrom),
+    deletePaymentCard: (cardId: string) =>
+      request<unknown>(`/cards/${encodeURIComponent(cardId)}`, { method: "DELETE" }),
     listSecureSecretEntries: (): Promise<SecureSecretEntryMetadata[]> =>
       request<unknown>("/secure-secrets").then((value) => {
         if (!Array.isArray(value)) throw new Error("Secure secret entry list is invalid.");
