@@ -8579,6 +8579,27 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         <HeyLinkSentScreen locale={appLocale} dark={resolvedColorScheme === "dark"} email={emailSignupEmail.trim()} login={authEntryMode === "sign_in"} onBack={() => setEmailMagicLinkPhase("idle")} />
       );
     }
+    if (storePlatform && host.session.mode === "standalone" && authEntryMode === "sign_in" && signInWithPassword && !signedOutSupportOpen) {
+      return (
+        <HeyPasswordScreen
+          locale={appLocale}
+          dark={resolvedColorScheme === "dark"}
+          email={email}
+          onEmail={setEmail}
+          password={loginPassword}
+          onPassword={setLoginPassword}
+          code={accessCode}
+          onCode={setAccessCode}
+          busy={busy}
+          busyLabel={busyLabel}
+          canSubmit={canSubmitLogin}
+          onSubmit={() => void login()}
+          errorNode={error ? <Notice locale={appLocale} tone="error" text={error} onDismiss={dismissAppError} /> : null}
+          onUseLink={() => { if (!emailSignupEmail.trim() && email.trim()) setEmailSignupEmail(email.trim()); setSignInWithPassword(false); }}
+          onSwitch={() => { setSignInWithPassword(false); setAuthEntryMode("create_account"); }}
+        />
+      );
+    }
     if (storePlatform && host.session.mode === "standalone" && !signInWithPassword && !signedOutSupportOpen) {
       const appleOffered = Boolean(nativeAuthConfig?.providers.apple && appleSignInAvailable);
       const appleNode = appleOffered ? (
@@ -11838,7 +11859,7 @@ function HeyAuthScreen({ locale, dark, mode, email, onEmail, sending, completing
           </Pressable>
         ) : null}
       </View>
-      <Text style={flow.orText}>{copy.signUp.orEmail}</Text>
+      {appleNode || googleOffered ? <Text style={flow.orText}>{copy.signUp.orEmail}</Text> : null}
       <TextInput value={email} onChangeText={onEmail} autoCapitalize="none" autoComplete="email" textContentType="emailAddress" keyboardType="email-address"
         placeholder={copy.signUp.emailPlaceholder} placeholderTextColor={flowMuted} style={flow.field} accessibilityLabel={copy.signUp.emailPlaceholder} editable={!busy} />
       <HeyFlowButton label={sending ? staticUiCopy(locale)["Sending link…"] : completing ? staticUiCopy(locale)["Finishing sign-in…"] : signUp ? copy.signUp.sendLink : copy.login.sendLink}
@@ -11857,12 +11878,43 @@ function HeyAuthScreen({ locale, dark, mode, email, onEmail, sending, completing
   );
 }
 
+/** The password / access-code sign-in (App Review's demo account uses it), in the same design as the other screens. */
+function HeyPasswordScreen({ locale, dark, email, onEmail, password, onPassword, code, onCode, busy, busyLabel, canSubmit, onSubmit, errorNode, onUseLink, onSwitch }: {
+  locale: AppLocale; dark: boolean; email: string; onEmail: (v: string) => void; password: string; onPassword: (v: string) => void; code: string; onCode: (v: string) => void;
+  busy: boolean; busyLabel: string | null; canSubmit: boolean; onSubmit: () => void; errorNode: ReactNode; onUseLink: () => void; onSwitch: () => void;
+}) {
+  const copy = heyAppFlowCopy(locale).login;
+  const ui = staticUiCopy(locale);
+  return (
+    <HeyFlowFrame dark={dark}>
+      <Text style={flow.title} accessibilityRole="header">{copy.title}</Text>
+      <Text style={flow.lead}>{copy.body}</Text>
+      <View style={{ marginTop: 18 }}>
+        <TextInput value={email} onChangeText={onEmail} autoCapitalize="none" autoComplete="email" textContentType="username" keyboardType="email-address" placeholder={ui["Email"]} placeholderTextColor={flowMuted} style={flow.field} />
+        <TextInput value={password} onChangeText={onPassword} autoCapitalize="none" autoComplete="current-password" textContentType="password" secureTextEntry placeholder={ui["Password"]} placeholderTextColor={flowMuted} style={flow.field} />
+        <TextInput value={code} onChangeText={onCode} autoCapitalize="none" autoCorrect={false} autoComplete="off" textContentType="none" placeholder={ui["Access code (if you have not set a password)"]} placeholderTextColor={flowMuted} style={flow.field} />
+        <HeyFlowButton label={busyLabel ? staticUiMessage(locale, busyLabel) : ui["Sign in"]} busy={busy} disabled={!canSubmit} onPress={onSubmit} />
+      </View>
+      {errorNode}
+      <View style={flow.spacer} />
+      <HeyFlowLink label={ui["Use a sign-in link instead"]} onPress={onUseLink} />
+      <Text style={[flow.strong, { color: flowMuted, marginTop: 8 }]}>{copy.newHere}</Text>
+      <HeyFlowLink label={copy.getStarted} onPress={onSwitch} />
+    </HeyFlowFrame>
+  );
+}
+
 function HeyLinkSentScreen({ locale, dark, email, login, onBack }: { locale: AppLocale; dark: boolean; email: string; login: boolean; onBack: () => void }) {
   const flowCopy = heyAppFlowCopy(locale);
   const copy = flowCopy.signUp;
   return (
     <HeyFlowFrame dark={dark}>
-      <View style={flow.mailCircle}><Text style={flow.mailGlyph}>{"✉"}</Text></View>
+      <View style={flow.mailCircle}>
+        <Svg width={28} height={28} viewBox="0 0 24 24" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <Rect x={3} y={5.5} width={18} height={13} rx={2.5} fill="none" stroke={dark ? "#7ea2ff" : "#1d4ed8"} strokeWidth={1.8} />
+          <Path d="M3.8 7.2 12 13l8.2-5.8" fill="none" stroke={dark ? "#7ea2ff" : "#1d4ed8"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      </View>
       <Text style={[flow.title, { marginTop: 26 }]} accessibilityRole="header">{login ? flowCopy.login.sentTitle : copy.sentTitle}</Text>
       <Text style={flow.lead}>{login ? heyAppFlowFill(flowCopy.login.sentBody, { email }) : copy.sentBody}</Text>
       {login ? null : <Text style={flow.small}>{heyAppFlowFill(copy.sentTo, { email })}</Text>}
@@ -12887,7 +12939,7 @@ const MessageBubble = memo(function MessageBubble({
         />
       ) : null}
       {messageTime ? (
-        <Text style={[styles.messageTime, isUser && styles.userMessageTime]} accessibilityLabel={`${copy.messageTime} ${messageTime}`}>
+        <Text style={[styles.messageTime, isUser && styles.userMessageTime, isUser && imessage && styles.imUserTime]} accessibilityLabel={`${copy.messageTime} ${messageTime}`}>
           {messageTime}
         </Text>
       ) : null}
@@ -16575,6 +16627,8 @@ const styles = StyleSheet.create({
     maxWidth: "78%",
   },
   imUserText: { color: "#ffffff" },
+  // The time inside the blue bubble: white at 75 % (palette.muted was dark blue on blue). Light and dark.
+  imUserTime: { color: "rgba(255,255,255,0.75)" },
   imAssistant: {
     backgroundColor: chatAssistantBubble,
     borderRadius: 22,
