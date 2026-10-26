@@ -220,3 +220,8 @@ export function heyInviteRedeemAccepted(status: string): boolean {
 export function heyShowLimitCard(input: { remainingIncludedPercent: number | null; plan: string | null; proOffered: boolean }): boolean {
   return input.proOffered && input.plan === "starter" && input.remainingIncludedPercent !== null && input.remainingIncludedPercent <= 0;
 }
+
+/** HPD-1762: Android push needs the Firebase config in the build; the build says so with extra.androidPush === true. */
+export function heyAndroidPushAvailable(androidPush: unknown): boolean {
+  return androidPush === true;
+}

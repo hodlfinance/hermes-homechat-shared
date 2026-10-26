@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { heyAppEntryScreen, heyAppFlowCopy, heyAppFlowFill, heyInviteCodeFromUrl, heyInviteRedeemAccepted, heyNormalizeInviteCode, heyShowLimitCard } from "../src/hey-app-flow";
+import { heyAndroidPushAvailable, heyAppEntryScreen, heyAppFlowCopy, heyAppFlowFill, heyInviteCodeFromUrl, heyInviteRedeemAccepted, heyNormalizeInviteCode, heyShowLimitCard } from "../src/hey-app-flow";
 import { parseHeyHermesSalesStatus } from "../core/hermes-api";
 
 // HPD-1762: Hey Hermes App 1.1 screens (copy approved by Justus 2026-10-26; server switch decides the waitlist).
@@ -79,4 +79,11 @@ test("the surface wires the flow: welcome, link sent, waitlist, release, taken, 
   for (const needle of ["<HeyWelcomeScreen", "<HeyLinkSentScreen", "<HeyWaitlistScreen", "<HeyReleaseScreen", "<HeyTakenScreen", "<HeySinglePurchasePanel", "<HeyLimitCard", "<HeyProScreen", "heyInviteCodeFromUrl(url)", "api.joinAppWaitlist()"]) {
     assert.ok(source.includes(needle), needle);
   }
+});
+
+test("Android push waits for the Firebase config in the build (capability check)", () => {
+  assert.equal(heyAndroidPushAvailable(true), true);
+  for (const value of [false, undefined, null, "true", 1]) assert.equal(heyAndroidPushAvailable(value), false);
+  const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  assert.match(source, /Platform\.OS === "android" && !heyAndroidPushAvailable\(/);
 });
