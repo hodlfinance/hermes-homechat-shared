@@ -522,6 +522,9 @@ export type SharedHomechatVoiceRecording<Recording> = {
 
 export type SharedHomechatVoiceControllerErrorCode =
   | "permission_denied"
+  | "start_failed"
+  | "start_timeout"
+  | "start_cancelled"
   | "not_recording"
   | "empty_recording"
   | "empty_transcript";
@@ -2712,9 +2715,13 @@ export function createHomechatVoiceController<Recording, Audio>(
     stopRecording: (recording: Recording, context: SharedHomechatTransportContext) => Promise<Audio>;
     transcribe: (audio: Audio, context: SharedHomechatTransportContext & { mimeType?: string }) => Promise<string | { text: string }>;
   },
-  options: { onState?: (state: SharedHomechatVoiceState) => void } = {},
+  options: { onState?: (state: SharedHomechatVoiceState) => void; startTimeoutMs?: number } = {},
 ): SharedHomechatVoiceController<Recording> {
+  const startTimeoutMs = options.startTimeoutMs ?? 5_000;
   let active: SharedHomechatVoiceRecording<Recording> | null = null;
+  let startGeneration = 0;
+  let startsBegun = 0;
+  let abortPendingStart: (() => void) | null = null;
   let state: SharedHomechatVoiceState = { error: null, permission: "unknown", phase: "idle" };
   const listeners = new Set<(state: SharedHomechatVoiceState) => void>();
 
@@ -2729,21 +2736,71 @@ export function createHomechatVoiceController<Recording, Audio>(
     setState({ ...state, error: message, phase: "error" });
   }
 
+  // HPD-1797: a start that never settles (no microphone, a hung native
+  // recorder) must not leave the button spinning. It times out, and a cancel
+  // while it is pending returns to idle at once; a late recording is discarded.
   async function start(context: SharedHomechatTransportContext = {}) {
     if (active) return active;
+    const generation = ++startGeneration;
+    const startNumber = ++startsBegun;
     setState({ ...state, error: null, phase: "requesting_permission" });
-    try {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
+    let abortThisStart: (() => void) | null = null;
+    const stopped = new Promise<never>((_, reject) => {
+      abortThisStart = () => reject(new SharedHomechatVoiceControllerError("start_cancelled", "The voice note was cancelled."));
+    });
+    stopped.catch(() => undefined);
+    abortPendingStart = abortThisStart;
+    const attempt = (async () => {
+      // The OS permission dialog is not timed: the person may take a while.
       if (!await adapter.requestPermission(context)) {
-        const error = new SharedHomechatVoiceControllerError("permission_denied", "Microphone permission is required to record a voice note.");
-        setState({ error: error.message, permission: "denied", phase: "error" });
-        throw error;
+        throw new SharedHomechatVoiceControllerError("permission_denied", "Microphone permission is required to record a voice note.");
       }
-      active = await adapter.startRecording(context);
+      if (generation !== startGeneration) {
+        throw new SharedHomechatVoiceControllerError("start_cancelled", "The voice note was cancelled.");
+      }
+      const starting = adapter.startRecording(context);
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          timedOut = true;
+          reject(new SharedHomechatVoiceControllerError("start_timeout", "The microphone did not start."));
+        }, startTimeoutMs);
+      });
+      starting.then(async (late) => {
+        if (!timedOut && generation === startGeneration) return;
+        // A newer start or recording may own the same native recorder; leave it alone then.
+        if (startNumber !== startsBegun && (active || abortPendingStart)) return;
+        await adapter.discardRecording?.(late.recording, context).catch(() => undefined);
+      }, () => undefined);
+      return Promise.race([starting, timeout]);
+    })();
+    attempt.catch(() => undefined);
+    try {
+      const recording = await Promise.race([attempt, stopped]);
+      if (generation !== startGeneration) {
+        throw new SharedHomechatVoiceControllerError("start_cancelled", "The voice note was cancelled.");
+      }
+      active = recording;
       setState({ error: null, permission: "granted", phase: "recording" });
-      return active;
-    } catch (error) {
-      if (state.phase !== "error") fail(error);
+      return recording;
+    } catch (caught) {
+      const error = caught instanceof SharedHomechatVoiceControllerError
+        ? caught
+        : new SharedHomechatVoiceControllerError("start_failed", caught instanceof Error && caught.message ? caught.message : "The microphone did not start.");
+      if (generation !== startGeneration) {
+        throw new SharedHomechatVoiceControllerError("start_cancelled", "The voice note was cancelled.");
+      }
+      startGeneration += 1;
+      setState({
+        error: error.message,
+        permission: error.code === "permission_denied" ? "denied" : state.permission,
+        phase: "error",
+      });
       throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
+      if (abortPendingStart === abortThisStart) abortPendingStart = null;
     }
   }
 
@@ -2770,7 +2827,11 @@ export function createHomechatVoiceController<Recording, Audio>(
   }
 
   async function cancel(context: SharedHomechatTransportContext = {}) {
+    startGeneration += 1;
+    const abortStart = abortPendingStart;
+    abortPendingStart = null;
     if (!active) {
+      abortStart?.();
       setState({ ...state, error: null, phase: "idle" });
       return;
     }

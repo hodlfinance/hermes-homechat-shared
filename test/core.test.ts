@@ -1284,3 +1284,104 @@ test("keeps following a research run past four minutes and survives repeated str
   assert.equal(streamed.terminal, true);
   assert.equal(opens, 6);
 });
+
+// HPD-1797: the microphone button must never spin forever.
+test("voice start that never settles times out to an error and discards a late recording", async () => {
+  let resolveStart: ((value: { recording: string; mimeType: string }) => void) | undefined;
+  const discarded: string[] = [];
+  const voice = createHomechatVoiceController({
+    requestPermission: async () => true,
+    startRecording: () => new Promise<{ recording: string; mimeType: string }>((resolve) => { resolveStart = resolve; }),
+    stopRecording: async () => "audio",
+    discardRecording: async (recording: string) => { discarded.push(recording); },
+    transcribe: async () => "text",
+  }, { startTimeoutMs: 20 });
+  await assert.rejects(voice.start(), (error: { code?: string }) => error.code === "start_timeout");
+  assert.equal(voice.getState().phase, "error");
+  assert.equal(voice.isRecording(), false);
+  resolveStart?.({ recording: "late", mimeType: "audio/m4a" });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(discarded, ["late"]);
+  assert.equal(voice.isRecording(), false);
+});
+
+test("voice start reports denied permission and a failing recorder as errors", async () => {
+  const denied = createHomechatVoiceController({
+    requestPermission: async () => false,
+    startRecording: async () => ({ recording: "r", mimeType: "m" }),
+    stopRecording: async () => "a",
+    transcribe: async () => "t",
+  });
+  await assert.rejects(denied.start(), (error: { code?: string }) => error.code === "permission_denied");
+  assert.equal(denied.getState().permission, "denied");
+  assert.equal(denied.getState().phase, "error");
+  const noDevice = createHomechatVoiceController({
+    requestPermission: async () => true,
+    startRecording: async () => { throw new Error("no input device"); },
+    stopRecording: async () => "a",
+    transcribe: async () => "t",
+  });
+  await assert.rejects(noDevice.start(), (error: { code?: string }) => error.code === "start_failed");
+  assert.equal(noDevice.getState().phase, "error");
+});
+
+test("cancel during a pending voice start returns to idle at once and never starts the recorder", async () => {
+  let resolvePermission: ((granted: boolean) => void) | undefined;
+  const discarded: string[] = [];
+  const voice = createHomechatVoiceController({
+    requestPermission: () => new Promise((resolve) => { resolvePermission = resolve; }),
+    startRecording: async () => ({ recording: "late", mimeType: "m" }),
+    stopRecording: async () => "a",
+    discardRecording: async (recording: string) => { discarded.push(recording); },
+    transcribe: async () => "t",
+  }, { startTimeoutMs: 10_000 });
+  const pending = voice.start();
+  assert.equal(voice.getState().phase, "requesting_permission");
+  await voice.cancel();
+  await assert.rejects(pending, (error: { code?: string }) => error.code === "start_cancelled");
+  assert.equal(voice.getState().phase, "idle");
+  resolvePermission?.(true);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(discarded, []);
+  assert.equal(voice.isRecording(), false);
+  // A fresh start still works afterwards.
+  const again = voice.start();
+  resolvePermission?.(true);
+  await again;
+  assert.equal(voice.getState().phase, "recording");
+});
+
+test("voice start does not time out while the permission dialog is open, and a stale start leaves a newer recording alone", async () => {
+  let resolvePermission: ((granted: boolean) => void) | undefined;
+  const voice = createHomechatVoiceController({
+    requestPermission: () => new Promise<boolean>((resolve) => { resolvePermission = resolve; }),
+    startRecording: async () => ({ recording: "r", mimeType: "m" }),
+    stopRecording: async () => "a",
+    transcribe: async () => "t",
+  }, { startTimeoutMs: 10 });
+  const pending = voice.start();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(voice.getState().phase, "requesting_permission");
+  resolvePermission?.(true);
+  await pending;
+  assert.equal(voice.getState().phase, "recording");
+
+  const starts: Array<(value: { recording: string; mimeType: string }) => void> = [];
+  const discarded: string[] = [];
+  const shared = createHomechatVoiceController({
+    requestPermission: async () => true,
+    startRecording: () => new Promise<{ recording: string; mimeType: string }>((resolve) => { starts.push(resolve); }),
+    stopRecording: async () => "a",
+    discardRecording: async (recording: string) => { discarded.push(recording); },
+    transcribe: async () => "t",
+  }, { startTimeoutMs: 15 });
+  await assert.rejects(shared.start(), (error: { code?: string }) => error.code === "start_timeout");
+  const second = shared.start();
+  await new Promise((resolve) => setTimeout(resolve, 1));
+  starts[1]?.({ recording: "recorder", mimeType: "m" });
+  await second;
+  starts[0]?.({ recording: "recorder", mimeType: "m" });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(discarded, []);
+  assert.equal(shared.getState().phase, "recording");
+});
