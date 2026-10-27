@@ -13001,7 +13001,7 @@ const MessageBubble = memo(function MessageBubble({
       ) : null}
       {hermesReaction ? (
         <View style={styles.imReactionBadge} pointerEvents="none" accessible accessibilityRole="text" accessibilityLabel={`${appCopy.productName}: ${hermesReaction}`} testID="hermes-reaction">
-          <Text style={styles.imReactionEmoji} allowFontScaling={false}>{hermesReaction}</Text>
+          <Text style={styles.imReactionEmoji}>{hermesReaction}</Text>
         </View>
       ) : null}
       {isUser
