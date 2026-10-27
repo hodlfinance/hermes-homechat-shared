@@ -2720,6 +2720,7 @@ export function createHomechatVoiceController<Recording, Audio>(
   const startTimeoutMs = options.startTimeoutMs ?? 5_000;
   let active: SharedHomechatVoiceRecording<Recording> | null = null;
   let startGeneration = 0;
+  let startsBegun = 0;
   let abortPendingStart: (() => void) | null = null;
   let state: SharedHomechatVoiceState = { error: null, permission: "unknown", phase: "idle" };
   const listeners = new Set<(state: SharedHomechatVoiceState) => void>();
@@ -2741,32 +2742,45 @@ export function createHomechatVoiceController<Recording, Audio>(
   async function start(context: SharedHomechatTransportContext = {}) {
     if (active) return active;
     const generation = ++startGeneration;
+    const startNumber = ++startsBegun;
     setState({ ...state, error: null, phase: "requesting_permission" });
     let timer: ReturnType<typeof setTimeout> | undefined;
     let timedOut = false;
+    let abortThisStart: (() => void) | null = null;
+    const stopped = new Promise<never>((_, reject) => {
+      abortThisStart = () => reject(new SharedHomechatVoiceControllerError("start_cancelled", "The voice note was cancelled."));
+    });
+    stopped.catch(() => undefined);
+    abortPendingStart = abortThisStart;
     const attempt = (async () => {
+      // The OS permission dialog is not timed: the person may take a while.
       if (!await adapter.requestPermission(context)) {
         throw new SharedHomechatVoiceControllerError("permission_denied", "Microphone permission is required to record a voice note.");
       }
-      const recording = await adapter.startRecording(context);
-      if (timedOut || generation !== startGeneration) {
-        await adapter.discardRecording?.(recording.recording, context).catch(() => undefined);
+      if (generation !== startGeneration) {
         throw new SharedHomechatVoiceControllerError("start_cancelled", "The voice note was cancelled.");
       }
-      return recording;
+      const starting = adapter.startRecording(context);
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          timedOut = true;
+          reject(new SharedHomechatVoiceControllerError("start_timeout", "The microphone did not start."));
+        }, startTimeoutMs);
+      });
+      starting.then(async (late) => {
+        if (!timedOut && generation === startGeneration) return;
+        // A newer start may already own the same native recorder; leave it alone then.
+        if (startNumber !== startsBegun) return;
+        await adapter.discardRecording?.(late.recording, context).catch(() => undefined);
+      }, () => undefined);
+      return Promise.race([starting, timeout]);
     })();
-    let abortThisStart: (() => void) | null = null;
-    const timeout = new Promise<never>((_, reject) => {
-      abortThisStart = () => reject(new SharedHomechatVoiceControllerError("start_cancelled", "The voice note was cancelled."));
-      timer = setTimeout(() => {
-        timedOut = true;
-        reject(new SharedHomechatVoiceControllerError("start_timeout", "The microphone did not start."));
-      }, startTimeoutMs);
-    });
-    abortPendingStart = abortThisStart;
     attempt.catch(() => undefined);
     try {
-      const recording = await Promise.race([attempt, timeout]);
+      const recording = await Promise.race([attempt, stopped]);
+      if (generation !== startGeneration) {
+        throw new SharedHomechatVoiceControllerError("start_cancelled", "The voice note was cancelled.");
+      }
       active = recording;
       setState({ error: null, permission: "granted", phase: "recording" });
       return recording;

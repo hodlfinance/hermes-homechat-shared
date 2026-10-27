@@ -1325,7 +1325,7 @@ test("voice start reports denied permission and a failing recorder as errors", a
   assert.equal(noDevice.getState().phase, "error");
 });
 
-test("cancel during a pending voice start returns to idle at once and discards the late recording", async () => {
+test("cancel during a pending voice start returns to idle at once and never starts the recorder", async () => {
   let resolvePermission: ((granted: boolean) => void) | undefined;
   const discarded: string[] = [];
   const voice = createHomechatVoiceController({
@@ -1342,11 +1342,46 @@ test("cancel during a pending voice start returns to idle at once and discards t
   assert.equal(voice.getState().phase, "idle");
   resolvePermission?.(true);
   await new Promise((resolve) => setTimeout(resolve, 5));
-  assert.deepEqual(discarded, ["late"]);
+  assert.deepEqual(discarded, []);
   assert.equal(voice.isRecording(), false);
   // A fresh start still works afterwards.
   const again = voice.start();
   resolvePermission?.(true);
   await again;
   assert.equal(voice.getState().phase, "recording");
+});
+
+test("voice start does not time out while the permission dialog is open, and a stale start leaves a newer recording alone", async () => {
+  let resolvePermission: ((granted: boolean) => void) | undefined;
+  const voice = createHomechatVoiceController({
+    requestPermission: () => new Promise<boolean>((resolve) => { resolvePermission = resolve; }),
+    startRecording: async () => ({ recording: "r", mimeType: "m" }),
+    stopRecording: async () => "a",
+    transcribe: async () => "t",
+  }, { startTimeoutMs: 10 });
+  const pending = voice.start();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(voice.getState().phase, "requesting_permission");
+  resolvePermission?.(true);
+  await pending;
+  assert.equal(voice.getState().phase, "recording");
+
+  const starts: Array<(value: { recording: string; mimeType: string }) => void> = [];
+  const discarded: string[] = [];
+  const shared = createHomechatVoiceController({
+    requestPermission: async () => true,
+    startRecording: () => new Promise<{ recording: string; mimeType: string }>((resolve) => { starts.push(resolve); }),
+    stopRecording: async () => "a",
+    discardRecording: async (recording: string) => { discarded.push(recording); },
+    transcribe: async () => "t",
+  }, { startTimeoutMs: 15 });
+  await assert.rejects(shared.start(), (error: { code?: string }) => error.code === "start_timeout");
+  const second = shared.start();
+  await new Promise((resolve) => setTimeout(resolve, 1));
+  starts[1]?.({ recording: "recorder", mimeType: "m" });
+  await second;
+  starts[0]?.({ recording: "recorder", mimeType: "m" });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(discarded, []);
+  assert.equal(shared.getState().phase, "recording");
 });

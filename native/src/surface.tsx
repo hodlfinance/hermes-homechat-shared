@@ -10217,7 +10217,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                     onPress={startVoiceNote}
                     disabled={voiceButtonDisabled}
                     accessibilityRole="button"
-                    accessibilityLabel={t.chat.startVoiceNote}
+                    accessibilityLabel={voiceStartPending ? t.chat.stopVoiceNote : t.chat.startVoiceNote}
                   >
                     {voiceControllerBusy || voiceNoteDraft.phase === "sending"
                       ? <ActivityIndicator color={palette.ink} />
@@ -10300,7 +10300,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                         onPress={startVoiceNote}
                         disabled={voiceButtonDisabled}
                         accessibilityRole="button"
-                        accessibilityLabel={t.chat.startVoiceNote}
+                        accessibilityLabel={voiceStartPending ? t.chat.stopVoiceNote : t.chat.startVoiceNote}
                       >
                         {voiceControllerBusy || voiceNoteDraft.phase === "sending"
                           ? <ActivityIndicator color={palette.ink} />
