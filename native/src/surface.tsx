@@ -11500,6 +11500,9 @@ function IosPaywallPanel({ locale,
 const androidStartsDark = Platform.OS === "android" && Appearance?.getColorScheme?.() === "dark";
 const paywallBrandColor = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4ed8", dark: "#7ea2ff" }) : androidStartsDark ? "#7ea2ff" : "#1d4ed8";
 const chatAssistantBubble = Platform.OS === "ios" ? DynamicColorIOS({ light: "#eceef3", dark: "#262a33" }) : androidStartsDark ? "#262a33" : "#eceef3";
+// HPD-1789: the reaction badge on the user's bubble; colours from the approved mockup (--line, .dark .bdg).
+const chatReactionBackground = Platform.OS === "ios" ? DynamicColorIOS({ light: "#ffffff", dark: "#1f232d" }) : androidStartsDark ? "#1f232d" : "#ffffff";
+const chatReactionBorder = Platform.OS === "ios" ? DynamicColorIOS({ light: "#cfd3dc", dark: "#374151" }) : androidStartsDark ? "#374151" : "#cfd3dc";
 const chatUserBubble = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4ed8", dark: "#2f5fd0" }) : androidStartsDark ? "#2f5fd0" : "#1d4ed8";
 const paywallCtaColor = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1d4ed8", dark: "#3563e9" }) : androidStartsDark ? "#3563e9" : "#1d4ed8";
 const paywallCheckBackground = Platform.OS === "ios" ? DynamicColorIOS({ light: "#e8eefc", dark: "#1e2742" }) : androidStartsDark ? "#1e2742" : "#e8eefc";
@@ -12949,10 +12952,14 @@ const MessageBubble = memo(function MessageBubble({
   // The container type follows onReport (fixed per build), not the reply's state,
   // so a reply that finishes is not remounted. Without onReport: the plain View.
   const BubbleContainer = (onReport ? Pressable : View) as typeof Pressable;
+  // HPD-1789: Hermes' tapback on the user's message (approved mockup en-23b / en-dark-23b), Hey app only.
+  // Only Hermes reacts; the badge is drawn, never pressable.
+  const hermesReaction = isUser && imessage && message.hermesReaction ? message.hermesReaction : null;
   return (
     <BubbleContainer
       style={[styles.message, isUser ? styles.userMessage : styles.assistantMessage,
-        imessage && (isUser ? styles.imUser : [styles.imAssistant, heyIsShortReply(assistantText) && styles.imAssistantShort])]}
+        imessage && (isUser ? styles.imUser : [styles.imAssistant, heyIsShortReply(assistantText) && styles.imAssistantShort]),
+        hermesReaction && styles.imUserReacted]}
       // Only a reportable reply becomes one TalkBack node; user bubbles and running replies keep their parts reachable.
       accessible={onReport ? Boolean(report) : undefined}
       onLongPress={report ? () => confirmReplyReport() : undefined}
@@ -12990,6 +12997,11 @@ const MessageBubble = memo(function MessageBubble({
         >
           {interimMark === "working" ? <View style={styles.interimReplyDot} /> : null}
           <Text style={styles.interimReplyBadgeText}>{mobileInterimReplyLabel(interimMark, copy)}</Text>
+        </View>
+      ) : null}
+      {hermesReaction ? (
+        <View style={styles.imReactionBadge} pointerEvents="none" accessibilityRole="text" accessibilityLabel={`${appCopy.productName}: ${hermesReaction}`} testID="hermes-reaction">
+          <Text style={styles.imReactionEmoji} allowFontScaling={false}>{hermesReaction}</Text>
         </View>
       ) : null}
       {isUser
@@ -16711,6 +16723,25 @@ const styles = StyleSheet.create({
     maxWidth: "78%",
   },
   imUserText: { color: "#ffffff" },
+  // HPD-1789: Hermes' reaction badge, top left corner of the user's bubble (mockup en-23b / en-dark-23b).
+  imUserReacted: { marginTop: 10 },
+  imReactionBadge: {
+    position: "absolute",
+    top: -14,
+    left: -12,
+    minWidth: 30,
+    height: 26,
+    paddingHorizontal: 6,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: chatReactionBorder,
+    backgroundColor: chatReactionBackground,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
+    elevation: 1,
+  },
+  imReactionEmoji: { fontSize: 15, lineHeight: 19, color: "#000000" },
   // The time inside the blue bubble: white at 75 % (palette.muted was dark blue on blue). Light and dark.
   imUserTime: { color: "rgba(255,255,255,0.75)" },
   imAssistant: {

@@ -91,6 +91,10 @@ export function mobileChatMessageFromCanonical(message: HermesApiMessage): ChatM
     content: message.role === "user" ? visibleUserMessageText(message.content) : message.content,
     artifactReferences: message.artifactReferences,
     createdAt: message.createdAt,
+    // HPD-1789: only Hermes reacts, and only on the user's message.
+    ...(message.role === "user" && typeof message.hermesReaction === "string" && message.hermesReaction.trim()
+      ? { hermesReaction: message.hermesReaction.trim() }
+      : {}),
   };
 }
 

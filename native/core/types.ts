@@ -1267,6 +1267,8 @@ export interface ChatMessage {
   role: ChatRole;
   content: string;
   createdAt: string;
+  /** HPD-1789: Hermes' emoji reaction on a user message, drawn on the user's bubble. */
+  hermesReaction?: string | null;
 }
 
 /**

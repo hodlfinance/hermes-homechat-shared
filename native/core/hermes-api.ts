@@ -343,6 +343,12 @@ export type HermesApiMessage = {
   consumerSafety: HermesMessageConsumerSafety | null;
   artifactReferences: HermesArtifactReference[];
   createdAt: string;
+  /**
+   * HPD-1789: the one emoji Hermes put on this user message (iMessage-style
+   * tapback). Set by the plane on user messages only; absent or null means none.
+   * Only Hermes reacts; there is no way for the user to set it.
+   */
+  hermesReaction?: string | null;
 };
 
 export type HermesApiRun = {
