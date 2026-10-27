@@ -16730,7 +16730,7 @@ const styles = StyleSheet.create({
     top: -12,
     left: -10,
     minWidth: 30,
-    height: 26,
+    minHeight: 26,
     paddingHorizontal: 6,
     borderRadius: 13,
     borderWidth: 1,
