@@ -235,6 +235,8 @@ export function CardList({ locale = "en", cards, busyId, onMakeDefault, onRemove
   bare?: boolean;
 }) {
   const copy = paymentCardCopy(locale);
+  // HPD-1783: the busy label belongs to the action that was pressed ("Removing…" only after Remove).
+  const [pressed, setPressed] = useState<"default" | "remove" | null>(null);
   return (
     <View style={bare ? styles.bare : styles.card} accessibilityLabel={copy.listTitle}>
       {bare ? null : <Text style={styles.heading}>{copy.listTitle}</Text>}
@@ -244,9 +246,9 @@ export function CardList({ locale = "en", cards, busyId, onMakeDefault, onRemove
           <View style={styles.itemActions}>
             {card.isDefault
               ? <Text style={styles.note}>{copy.defaultBadge}</Text>
-              : <Pressable accessibilityRole="button" disabled={busyId === card.id} onPress={() => onMakeDefault(card)}><Text style={styles.link}>{copy.makeDefault}</Text></Pressable>}
-            <Pressable accessibilityRole="button" disabled={busyId === card.id} onPress={() => onRemove(card)}>
-              <Text style={styles.link}>{busyId === card.id ? copy.removing : copy.remove}</Text>
+              : <Pressable accessibilityRole="button" disabled={busyId === card.id} onPress={() => { setPressed("default"); onMakeDefault(card); }}><Text style={styles.link}>{copy.makeDefault}</Text></Pressable>}
+            <Pressable accessibilityRole="button" disabled={busyId === card.id} onPress={() => { setPressed("remove"); onRemove(card); }}>
+              <Text style={styles.link}>{busyId === card.id && pressed === "remove" ? copy.removing : copy.remove}</Text>
             </Pressable>
           </View>
         </View>
@@ -280,7 +282,7 @@ const styles = StyleSheet.create({
   secondary: { alignItems: "center", borderColor: palette.lineStrong, borderRadius: 12, borderWidth: 1, paddingVertical: 12 },
   secondaryText: { color: palette.ink, fontWeight: "700" },
   dimmed: { opacity: 0.55 },
-  item: { alignItems: "center", borderColor: palette.lineStrong, borderRadius: 12, borderWidth: 1, flexDirection: "row", justifyContent: "space-between", padding: 12 },
-  itemText: { color: palette.ink, flexShrink: 1 },
+  item: { alignItems: "center", borderColor: palette.lineStrong, borderRadius: 12, borderWidth: 1, columnGap: 12, flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", padding: 12, rowGap: 6 },
+  itemText: { color: palette.ink, flexGrow: 1, flexShrink: 1, minWidth: 190 },
   itemActions: { alignItems: "center", flexDirection: "row", gap: 12 },
 });
