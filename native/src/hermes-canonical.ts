@@ -92,7 +92,9 @@ export function mobileChatMessageFromCanonical(message: HermesApiMessage): ChatM
     artifactReferences: message.artifactReferences,
     createdAt: message.createdAt,
     // HPD-1789: only Hermes reacts, and only on the user's message.
-    ...(message.role === "user" && typeof message.hermesReaction === "string" && message.hermesReaction.trim()
+    // A single emoji (at most a few code points, e.g. "🌦️"); anything longer would stretch the badge.
+    ...(message.role === "user" && typeof message.hermesReaction === "string" && message.hermesReaction.trim() &&
+      [...message.hermesReaction.trim()].length <= 4
       ? { hermesReaction: message.hermesReaction.trim() }
       : {}),
   };

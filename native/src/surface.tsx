@@ -13000,7 +13000,7 @@ const MessageBubble = memo(function MessageBubble({
         </View>
       ) : null}
       {hermesReaction ? (
-        <View style={styles.imReactionBadge} pointerEvents="none" accessibilityRole="text" accessibilityLabel={`${appCopy.productName}: ${hermesReaction}`} testID="hermes-reaction">
+        <View style={styles.imReactionBadge} pointerEvents="none" accessible accessibilityRole="text" accessibilityLabel={`${appCopy.productName}: ${hermesReaction}`} testID="hermes-reaction">
           <Text style={styles.imReactionEmoji} allowFontScaling={false}>{hermesReaction}</Text>
         </View>
       ) : null}
@@ -16724,11 +16724,11 @@ const styles = StyleSheet.create({
   },
   imUserText: { color: "#ffffff" },
   // HPD-1789: Hermes' reaction badge, top left corner of the user's bubble (mockup en-23b / en-dark-23b).
-  imUserReacted: { marginTop: 10 },
+  imUserReacted: { marginTop: 8 },
   imReactionBadge: {
     position: "absolute",
-    top: -14,
-    left: -12,
+    top: -12,
+    left: -10,
     minWidth: 30,
     height: 26,
     paddingHorizontal: 6,
@@ -16739,7 +16739,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 1,
-    elevation: 1,
   },
   imReactionEmoji: { fontSize: 15, lineHeight: 19, color: "#000000" },
   // The time inside the blue bubble: white at 75 % (palette.muted was dark blue on blue). Light and dark.
