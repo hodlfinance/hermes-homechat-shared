@@ -2769,8 +2769,8 @@ export function createHomechatVoiceController<Recording, Audio>(
       });
       starting.then(async (late) => {
         if (!timedOut && generation === startGeneration) return;
-        // A newer start may already own the same native recorder; leave it alone then.
-        if (startNumber !== startsBegun) return;
+        // A newer start or recording may own the same native recorder; leave it alone then.
+        if (startNumber !== startsBegun && (active || abortPendingStart)) return;
         await adapter.discardRecording?.(late.recording, context).catch(() => undefined);
       }, () => undefined);
       return Promise.race([starting, timeout]);
