@@ -13001,7 +13001,7 @@ const MessageBubble = memo(function MessageBubble({
       ) : null}
       {hermesReaction ? (
         <View style={styles.imReactionBadge} pointerEvents="none" accessible accessibilityRole="text" accessibilityLabel={`${appCopy.productName}: ${hermesReaction}`} testID="hermes-reaction">
-          <Text style={styles.imReactionEmoji} allowFontScaling={false}>{hermesReaction}</Text>
+          <Text style={styles.imReactionEmoji}>{hermesReaction}</Text>
         </View>
       ) : null}
       {isUser
@@ -16730,7 +16730,7 @@ const styles = StyleSheet.create({
     top: -12,
     left: -10,
     minWidth: 30,
-    height: 26,
+    minHeight: 26,
     paddingHorizontal: 6,
     borderRadius: 13,
     borderWidth: 1,
