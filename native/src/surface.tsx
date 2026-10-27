@@ -2883,6 +2883,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     [api, voiceRecorder],
   );
   const voiceRecordingActive = voiceNoteState.phase === "recording";
+  const voiceStartPending = voiceNoteState.phase === "requesting_permission";
   const voiceControllerBusy = voiceNoteState.phase === "requesting_permission" ||
     voiceNoteState.phase === "stopping" ||
     voiceNoteState.phase === "transcribing";
@@ -8006,6 +8007,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }
 
   async function startVoiceNote() {
+    // HPD-1797: a second tap while the microphone is still starting cancels it.
+    if (voiceStartPending) {
+      voiceOperationGenerationRef.current += 1;
+      await voiceNoteController.cancel().catch(() => undefined);
+      return;
+    }
     if (liveVoiceActive(liveVoiceController.state().phase)) return;
     if (voiceControllerBusy || voiceRecordingActive || voiceNoteDraftRef.current.phase !== "idle") return;
     // The button that leads here is disabled by the same decision, so this is
@@ -8030,9 +8037,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       commitVoiceNoteDraft(mobileVoiceNoteRecordingStarted());
     } catch (err) {
       if (!voiceOperationIsCurrent(operationGeneration, accountGeneration)) return;
+      const code = (err as { code?: string } | null)?.code;
+      if (code === "start_cancelled") return;
       const message = displayError(err, "Voice recording could not start.");
-      recordDiagnostic("error", "Voice recording start failed", message);
-      setAppError(userFacingError(message));
+      recordDiagnostic("error", "Voice recording start failed", code ? `${code}: ${message}` : message);
+      setAppError(t.chat.microphoneUnavailable);
     }
   }
 
@@ -9030,12 +9039,12 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       runStatus: queued.runId ? chatRunStatusesById[queued.runId] ?? null : null,
     }),
   );
-  const voiceButtonDisabled = liveVoiceConnected || mobileVoiceButtonDisabled({
+  const voiceButtonDisabled = !voiceStartPending && (liveVoiceConnected || mobileVoiceButtonDisabled({
     activeRunId: activeChatRunId,
     busy,
     composerVoiceButtonDisabled: composerController.view.voiceButtonDisabled,
     voiceRecordingActive,
-  });
+  }));
   const liveVoiceStartButton = liveVoiceStartVisible(input, Boolean(host.liveVoice), liveVoiceState.phase) && !voiceRecordingActive && voiceNoteDraft.phase === "idle" ? (
     <Pressable
       style={[styles.composerIconButton, (!chatConfigured || voiceBusy || attachmentBusy) && styles.disabledButton]}

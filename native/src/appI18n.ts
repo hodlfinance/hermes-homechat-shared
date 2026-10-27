@@ -413,6 +413,7 @@ type MobileCopy = {
     recording: string;
     transcribing: string;
     retryVoiceNote: string;
+    microphoneUnavailable: string;
     discardVoiceNote: string;
     copyMessage: string;
     copyMessageHint: string;
@@ -3795,6 +3796,7 @@ const en: MobileCopy = {
     recording: "Recording",
     transcribing: "Transcribing voice note",
     retryVoiceNote: "Retry voice note",
+    microphoneUnavailable: "Microphone unavailable – please allow access in Settings.",
     discardVoiceNote: "Discard voice note",
     copyMessage: "Copy",
     copyMessageHint: "Long-press for message actions",
@@ -3888,6 +3890,7 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "recording": "Aufnahme",
   "transcribing": "Sprachnachricht wird transkribiert",
   "retryVoiceNote": "Sprachnachricht erneut versuchen",
+  "microphoneUnavailable": "Mikrofon nicht verfügbar – bitte in den Einstellungen erlauben.",
   "discardVoiceNote": "Sprachnachricht verwerfen",
   "copyMessage": "Kopieren",
   "copyMessageHint": "Lange drücken für Nachrichtenaktionen",
@@ -4001,6 +4004,7 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "recording": "Enregistrement",
   "transcribing": "Transcription de la note vocale",
   "retryVoiceNote": "Réessayer la note vocale",
+  "microphoneUnavailable": "Micro indisponible – autorisez l’accès dans les Réglages.",
   "discardVoiceNote": "Supprimer la note vocale",
   "copyMessage": "Copier",
   "copyMessageHint": "Appuyez longuement pour les actions du message",
@@ -4115,6 +4119,7 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "recording": "Grabando",
   "transcribing": "Transcribiendo nota de voz",
   "retryVoiceNote": "Reintentar nota de voz",
+  "microphoneUnavailable": "Micrófono no disponible: permite el acceso en Ajustes.",
   "discardVoiceNote": "Descartar nota de voz",
   "copyMessage": "Copiar",
   "copyMessageHint": "Mantén pulsado para ver las acciones del mensaje",
@@ -4199,6 +4204,7 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "recording": "Registrazione",
   "transcribing": "Trascrizione della nota vocale",
   "retryVoiceNote": "Riprova nota vocale",
+  "microphoneUnavailable": "Microfono non disponibile – consenti l’accesso nelle Impostazioni.",
   "discardVoiceNote": "Elimina nota vocale",
   "copyMessage": "Copia",
   "copyMessageHint": "Tieni premuto per le azioni del messaggio",
@@ -4313,6 +4319,7 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "recording": "Gravando",
   "transcribing": "Transcrevendo nota de voz",
   "retryVoiceNote": "Tentar nota de voz novamente",
+  "microphoneUnavailable": "Microfone indisponível – permita o acesso nos Ajustes.",
   "discardVoiceNote": "Descartar nota de voz",
   "copyMessage": "Copiar",
   "copyMessageHint": "Pressione e segure para ver as ações da mensagem",
@@ -4434,6 +4441,7 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "recording": "録音中",
   "transcribing": "音声メモを文字起こし中",
   "retryVoiceNote": "音声メモを再試行",
+  "microphoneUnavailable": "マイクを使用できません。設定でアクセスを許可してください。",
   "discardVoiceNote": "音声メモを破棄",
   "copyMessage": "コピー",
   "copyMessageHint": "長押しでメッセージ操作を表示",
@@ -4557,6 +4565,7 @@ export const mobileCatalog: Record<AppLocale, MobileCopy> = {
   "recording": "녹음 중",
   "transcribing": "음성 메모를 텍스트로 변환 중",
   "retryVoiceNote": "음성 메모 다시 시도",
+  "microphoneUnavailable": "마이크를 사용할 수 없습니다. 설정에서 접근을 허용해 주세요.",
   "discardVoiceNote": "음성 메모 버리기",
   "copyMessage": "복사",
   "copyMessageHint": "길게 누르면 메시지 동작이 표시됩니다",
