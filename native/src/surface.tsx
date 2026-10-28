@@ -1729,7 +1729,11 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // HPD-1466: a host whose chat can sit at different heights (HODL Bots: no
   // fixed bar above it, any iPhone, landscape) lets the chat measure its own
   // position for the keyboard instead of a fixed offset.
-  const ChatKeyboardAvoidingView = (host.presentation?.keyboardOffsetFromWindow === true
+  // HPD-1813: Android edge-to-edge keeps the root behind the IME even with
+  // adjustResize. The standalone Hey chat must explicitly shrink, using its
+  // measured window position (including any header), instead of native resize.
+  const androidStandaloneKeyboard = Platform.OS === "android" && host.session.mode === "standalone";
+  const ChatKeyboardAvoidingView = (androidStandaloneKeyboard || host.presentation?.keyboardOffsetFromWindow === true
     ? WindowKeyboardAvoidingView
     : KeyboardAvoidingView) as typeof KeyboardAvoidingView;
   // HPD-846: the chat composer returns to the tab bar when the keyboard hides.
@@ -9753,7 +9757,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         <ChatKeyboardAvoidingView
           ref={chatKeyboardAvoidingRef}
           style={styles.chatKeyboard}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" || androidStandaloneKeyboard ? "padding" : undefined}
           keyboardVerticalOffset={keyboardVerticalOffset}
         >
           <View style={styles.chatScreen}>
