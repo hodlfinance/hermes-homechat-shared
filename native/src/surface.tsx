@@ -1,6 +1,6 @@
 import { isPreinstalledR8Suggestion } from "../policy";
 import { heyActivityStepText, heyActivityVerbText, markdownLinkDestination, modelComparisonPresentation, modelComparisonCopy } from "../core/index";
-import { includedAiResetText, trialOfferView } from "../core/index";
+import { includedAiResetText, trialOfferBannerAllowed, trialOfferView } from "../core/index";
 import { adminUiCopy, notificationDeliveryNotice } from "../core/admin-ui-copy";
 import { connectionUiMessage, connectionPermissionLines as localizedConnectionPermissionLines } from "../core/connection-ui-copy";
 import { mobileChatCardCopy } from "./chat-card-copy";
@@ -9308,7 +9308,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
 
   // HPD-1715: an account on emergency or press access, inside the operator's deadline, opens the
   // normal store purchase from the banner. The purchase screen is the one every buyer sees; Back returns.
-  const trialOffer = productAccessScreen === "home" && storePlatform !== null && !mobilePurchaseCompletion
+  const trialOffer = productAccessScreen === "home" && trialOfferBannerAllowed({ sessionMode: host.session.mode, storePlatform }) && !mobilePurchaseCompletion
     ? trialOfferView(snapshot.subscription, appLocale, (value) => formatSecurityDate(value, appLocale))
     : null;
   if (trialOfferPaywallOpen && trialOffer && mobilePersonalPurchaseAvailable) {

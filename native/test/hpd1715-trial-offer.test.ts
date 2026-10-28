@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { appLocales } from "../core/types";
-import { trialOfferCopy, trialOfferView } from "../core/trial-offer";
+import { trialOfferBannerAllowed, trialOfferCopy, trialOfferView } from "../core/trial-offer";
 import { mobilePersonalPurchaseCanStart } from "../src/revenuecat-purchases";
 
 // HPD-1715: an account on emergency or press access gets a deadline to start a real
@@ -49,4 +49,17 @@ test("the store purchase may start for a manual entitlement only while the deadl
   assert.equal(mobilePersonalPurchaseCanStart(ACCOUNT, state({ status: "trialing", provider: "revenuecat" }), null, NOW), false);
   // A purchase finished in this session blocks another one.
   assert.equal(mobilePersonalPurchaseCanStart(ACCOUNT, state(), { accountId: ACCOUNT, expirationAt: null }, NOW), false);
+});
+
+test("the banner shows only in the Hey app with a store, never in HODL, LiveQuote or Fin", () => {
+  assert.equal(trialOfferBannerAllowed({ sessionMode: "standalone", storePlatform: "app_store" }), true);
+  assert.equal(trialOfferBannerAllowed({ sessionMode: "standalone", storePlatform: null }), false);
+  assert.equal(trialOfferBannerAllowed({ sessionMode: "external", storePlatform: "app_store" }), false);
+  assert.equal(trialOfferBannerAllowed({ sessionMode: "external", storePlatform: "play_store" }), false);
+});
+
+test("the surface gates the banner on the Hey host", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  assert.match(source, /const trialOffer = productAccessScreen === "home" && trialOfferBannerAllowed\(\{ sessionMode: host\.session\.mode, storePlatform \}\)/);
 });
