@@ -84,3 +84,12 @@ export function trialOfferView(
   const copy = trialOfferCopy(locale);
   return { deadlineAt, title: copy.title, body: copy.body.replace("{date}", formatDate(deadlineAt)), cta: copy.cta };
 }
+
+/**
+ * The banner sells a Hey Hermes store trial, so only the Hey app (the standalone
+ * host) may show it, and only on a build with a store. HODL, LiveQuote and Fin embed
+ * this package as an external host; there the button could not buy anything.
+ */
+export function trialOfferBannerAllowed(input: { sessionMode: "standalone" | "external"; storePlatform: unknown }): boolean {
+  return input.sessionMode === "standalone" && input.storePlatform !== null && input.storePlatform !== undefined;
+}
