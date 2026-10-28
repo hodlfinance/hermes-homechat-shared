@@ -18,9 +18,12 @@
  */
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from "react";
 import { Keyboard, KeyboardAvoidingView, Platform, View } from "react-native";
-import { refreshKeyboardAvoidingInset, windowKeyboardOffset } from "./mobile-keyboard-inset";
+import { refreshKeyboardAvoidingInset, releaseKeyboardAvoidingInsetAfterFrame, windowKeyboardOffset } from "./mobile-keyboard-inset";
 
-type MeasurableView = { measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void };
+type MeasurableView = {
+  measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void;
+  measure?: (callback: (x: number, y: number, width: number, height: number, pageX: number, pageY: number) => void) => void;
+};
 
 type WindowKeyboardAvoidingViewProps = {
   style?: unknown;
@@ -38,17 +41,31 @@ export const WindowKeyboardAvoidingView = forwardRef<unknown, WindowKeyboardAvoi
   const [offset, setOffset] = useState(0);
   useImperativeHandle(ref, () => keyboardRef.current, []);
   const measure = useCallback(() => {
-    frameRef.current?.measureInWindow?.((_x, y) => {
+    const update = (y: number) => {
       const next = windowKeyboardOffset(y);
       setOffset((current) => (current === next ? current : next));
-    });
+    };
+    if (Platform.OS === "android") {
+      // HPD-1813: Hey's edge-to-edge React root begins at screen y=0.
+      // Android measureInWindow subtracts the visible window's top inset,
+      // while Keyboard.screenY does not. pageY keeps both in screen space.
+      frameRef.current?.measure?.((_x, _y, _width, _height, _pageX, pageY) => update(pageY));
+    } else {
+      frameRef.current?.measureInWindow?.((_x, y) => update(y));
+    }
   }, []);
   // A host bar above the chat can appear or go away without this view's own
   // frame changing, so the position is read again whenever the keyboard opens.
   useEffect(() => {
-    if (Platform.OS !== "ios") return undefined;
-    const subscription = Keyboard.addListener("keyboardWillShow", measure);
-    return () => subscription.remove();
+    const event = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const subscription = Keyboard.addListener(event, measure);
+    // RN 0.81 treats Android's hide event as another frame. That frame uses
+    // the visible window height, leaving an inset behind in edge-to-edge.
+    // Clear it after RN's pending frame calculation has settled.
+    const hidden = Platform.OS === "android" ? Keyboard.addListener("keyboardDidHide", () => {
+      void releaseKeyboardAvoidingInsetAfterFrame(() => keyboardRef.current);
+    }) : null;
+    return () => { subscription.remove(); hidden?.remove(); };
   }, [measure]);
   useEffect(() => {
     refreshKeyboardAvoidingInset(keyboardRef.current);

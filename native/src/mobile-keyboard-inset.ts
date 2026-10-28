@@ -80,3 +80,9 @@ export function refreshKeyboardAvoidingInset(view: unknown): boolean {
   void Promise.resolve(instance._updateBottomIfNecessary()).catch(() => undefined);
   return true;
 }
+
+/** Android hide frames can finish computing after the hide listener; release only afterward. */
+export async function releaseKeyboardAvoidingInsetAfterFrame(getView: () => unknown): Promise<boolean> {
+  await Promise.resolve();
+  return releaseKeyboardAvoidingInset(getView());
+}
