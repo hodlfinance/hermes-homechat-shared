@@ -70,7 +70,7 @@ test("the surface binds, loads and sells nothing on Android until the guard says
   // The effect runs again when the Plane's answer arrives.
   assert.match(effect, /\}, \[snapshot\?\.me\.id, playProductGuard, serverPlanTiersKey\]\);/); // HPD-1534
   // The status is settled by an answer and by a failure alike, and reset with the session.
-  assert.match(surface, /setSalesStatus\(null\);\s*setSalesStatusSettled\(false\);\s*if \(!token \|\| host\.session\.mode !== "standalone" \|\| !storePlatform\) return;\s*let cancelled = false;\s*void readHeySalesStatus\(storePlatform, \(options\) => api\.salesStatus\(options\), \{ cancelled: \(\) => cancelled \}\)\.then\(\(status\) => \{\s*if \(cancelled\) return;\s*setSalesStatus\(status\);\s*setSalesStatusSettled\(true\);/);
+  assert.match(surface, /setSalesStatus\(null\);\s*setSalesStatusSettled\(false\);\s*if \(!token \|\| host\.session\.mode !== "standalone" \|\| !storePlatform\) return;\s*let cancelled = false;\s*void readHeySalesStatus\(storePlatform, \(options\) => api\.salesStatus\(\{ \.\.\.options, \.\.\.\(storePlatform === "android" \? \{ platform: "android" as const \} : \{\}\) \}\), \{ cancelled: \(\) => cancelled \}\)\.then\(\(status\) => \{\s*if \(cancelled\) return;\s*setSalesStatus\(status\);\s*setSalesStatusSettled\(true\);/);
 });
 
 test("the refusal is the existing sentence, named Google Play on Android", () => {
