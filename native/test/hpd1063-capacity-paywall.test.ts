@@ -18,7 +18,7 @@ const valid: HeyHermesSalesStatus = {
   invitation: null,
   waitlist: { status: "waiting", position: 4 },
   checkedAt: "2026-10-06T10:00:00.000Z",
-  playStorePersonalProductId: null, appWaitlist: null,
+  playStorePersonalProductId: null, appWaitlist: null, legacyAppEntry: "unavailable",
 };
 
 function client(respond: (url: string, init?: RequestInit) => Response | Promise<Response>) {
@@ -36,7 +36,7 @@ function client(respond: (url: string, init?: RequestInit) => Response | Promise
 
 test("the sales-status parser accepts the v1 shape", () => {
   assert.deepEqual(parseHeyHermesSalesStatus(valid), valid);
-  const open = { ...valid, open: true, reason: "open", mayPurchase: true, waitlist: null };
+  const open = { ...valid, open: true, reason: "open", mayPurchase: true, waitlist: null, legacyAppEntry: "purchase" };
   assert.deepEqual(parseHeyHermesSalesStatus(open), open);
   const invited = { ...valid, invitation: { expiresAt: "2026-10-07T10:00:00.000Z" }, waitlist: { status: "invited", position: null } };
   assert.deepEqual(parseHeyHermesSalesStatus(invited), invited);

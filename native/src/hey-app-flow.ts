@@ -227,14 +227,16 @@ export const HEY_PERSONAL_PRICE_FALLBACK = "$12.99";
  * The opted-in Hey contract requires explicit purchase authority; other consumers keep their legacy flow.
  */
 export type HeyAppEntryScreen = "purchase" | "waitlist" | "release" | "taken" | "unknown";
-type AppEntryStatus = Pick<HeyHermesSalesStatus, "appWaitlist"> & Partial<Pick<HeyHermesSalesStatus, "mayPurchase" | "appEntry">>;
+type AppEntryStatus = Pick<HeyHermesSalesStatus, "appWaitlist"> & Partial<Pick<HeyHermesSalesStatus, "mayPurchase" | "appEntry" | "legacyAppEntry">>;
 export function heyAppPurchaseAllowed(status: AppEntryStatus | null): boolean {
-  return status?.appEntry?.state === "purchase" && status.mayPurchase === true;
+  if (!status || status.mayPurchase !== true) return false;
+  return status.appEntry !== undefined ? status.appEntry?.state === "purchase" : status.legacyAppEntry === "purchase";
 }
 export function heyAppEntryScreen(status: AppEntryStatus | null, purchaseOpened: boolean, commonEntry = false): HeyAppEntryScreen {
   if (commonEntry) {
     if (heyAppPurchaseAllowed(status)) return "purchase";
-    return status?.appEntry?.state === "waiting" ? "waitlist" : "unknown";
+    const state = status?.appEntry !== undefined ? status.appEntry?.state : status?.legacyAppEntry;
+    return state === "waiting" ? "waitlist" : "unknown";
   }
   const state: HeyHermesAppWaitlistState | null = status?.appWaitlist?.state ?? null;
   if (!state || purchaseOpened) return "purchase";

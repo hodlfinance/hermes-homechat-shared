@@ -33,7 +33,7 @@ const status: HeyHermesSalesStatus = {
   invitation: null,
   waitlist: null,
   checkedAt: "2026-10-13T22:00:00.000Z",
-  playStorePersonalProductId: PRODUCT, appWaitlist: null,
+  playStorePersonalProductId: PRODUCT, appWaitlist: null, legacyAppEntry: "purchase",
 };
 
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));

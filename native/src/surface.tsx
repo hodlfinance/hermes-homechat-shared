@@ -2487,7 +2487,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       setSalesStatus(status);
       setSalesStatusSettled(true);
       // HPD-1762: gated by the server switch: the account joins the waitlist (idempotent; no position is returned).
-      if ((commonAppEntry ? status?.appEntry?.state === "waiting" : status?.appWaitlist?.state === "waiting")) {
+      if ((commonAppEntry ? heyAppEntryScreen(status, false, true) === "waitlist" : status?.appWaitlist?.state === "waiting")) {
         void api.joinAppWaitlist().then((joined) => {
           if (!cancelled && commonAppEntry) setSalesStatus(joined);
         });

@@ -16,7 +16,7 @@ test("one server decision drives both stores; intent, code success and legacy st
     assert.equal(heyAppEntryScreen(status("purchase"), opened, true), "purchase");
     assert.equal(heyAppEntryScreen(status("waiting"), opened, true), "waitlist");
     assert.equal(heyAppEntryScreen(status("unavailable"), opened, true), "unknown");
-    assert.equal(heyAppEntryScreen(parseHeyHermesSalesStatus(legacy), opened, true), "unknown");
+    assert.equal(heyAppEntryScreen(parseHeyHermesSalesStatus(legacy), opened, true), "purchase");
     assert.equal(heyAppEntryScreen(null, opened, true), "unknown");
   }
   assert.equal(heyAppPurchaseAllowed(status("purchase")), true);
@@ -25,16 +25,32 @@ test("one server decision drives both stores; intent, code success and legacy st
   assert.equal(heyAppPurchaseAllowed({ ...status("purchase"), mayPurchase: false }), false);
 });
 
-test("missing, malformed or conflicting common contract is unavailable, never legacy permission", async () => {
-  for (const body of [legacy, { ...legacy, appEntry: { state: "bogus" } }, { ...legacy, appEntry: { state: "waiting" } }]) {
+test("only explicit known 09ed shapes are compatible; present malformed/new unavailable never falls back", async () => {
+  const cases: Array<[unknown, string]> = [
+    [legacy, "purchase"],
+    [{ ...legacy, appWaitlist: { state: "released" } }, "purchase"],
+    [{ ...legacy, mayPurchase: false, appWaitlist: { state: "waiting" } }, "waitlist"],
+    [{ ...legacy, mayPurchase: false, appWaitlist: { state: "taken" } }, "waitlist"],
+    [{ ...legacy, appWaitlist: { state: "bogus" } }, "unknown"],
+    [{ ...legacy, appWaitlist: undefined }, "unknown"],
+    [{ ...legacy, appWaitlist: undefined, legacyAppEntry: "purchase" }, "unknown"],
+    [{ ...legacy, mayPurchase: false }, "unknown"],
+    [{ ...legacy, appEntry: null }, "unknown"],
+    [{ ...legacy, appEntry: { state: "bogus" } }, "unknown"],
+    [{ ...legacy, appEntry: { state: "waiting" } }, "unknown"],
+    [{ ...legacy, mayPurchase: false, appEntry: { state: "unavailable" } }, "unknown"],
+    [{ ...legacy, mayPurchase: false, appEntry: { state: "waiting" } }, "waitlist"],
+  ];
+  for (const [body, expected] of cases) {
     const api = createApiClient({ baseUrl: "https://example.test", fetchImpl: (async () => new Response(JSON.stringify(body))) as typeof fetch });
     const sales = await api.salesStatus();
-    assert.equal(sales?.appEntry, undefined);
-    assert.equal(heyAppPurchaseAllowed(sales), false);
+    assert.equal(heyAppEntryScreen(sales, true, true), expected, JSON.stringify(body));
+    assert.equal(heyAppPurchaseAllowed(sales), expected === "purchase");
     assert.equal(sales?.playStorePersonalProductId, "personal:monthly", "restore metadata survives an older/malformed entry contract");
-    assert.equal(heyAppPurchaseAllowed(await api.joinAppWaitlist()), false);
+    assert.equal(heyAppEntryScreen(await api.joinAppWaitlist(), true, true), expected);
   }
-  assert.ok(parseHeyHermesSalesStatus(legacy), "non-opted-in consumers retain legacy parsing");
+  const failed = createApiClient({ baseUrl: "https://example.test", fetchImpl: (async () => { throw new Error("offline"); }) as typeof fetch });
+  assert.equal(heyAppPurchaseAllowed(await failed.salesStatus()), false);
 });
 
 test("both common clients have a deadline and refresh when returning from release or a stale purchase screen", async () => {
