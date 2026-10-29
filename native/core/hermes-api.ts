@@ -627,12 +627,15 @@ function isIsoTimestamp(value: unknown): value is string {
 }
 
 /** Strict parser for the sales-status shape; anything else is null. */
-export function parseHeyHermesSalesStatus(value: unknown): HeyHermesSalesStatus | null {
+export function parseHeyHermesSalesStatus(value: unknown, options: { strictAppWaitlist?: boolean } = {}): HeyHermesSalesStatus | null {
   if (!isPlainRecord(value)) return null;
   if (value.schemaVersion !== heyHermesSalesStatusSchemaVersion) return null;
   if (typeof value.open !== "boolean" || typeof value.mayPurchase !== "boolean") return null;
   if (typeof value.reason !== "string" || !salesStatusReasons.includes(value.reason)) return null;
   if (!isIsoTimestamp(value.checkedAt)) return null;
+
+  if (options.strictAppWaitlist && value.appWaitlist != null &&
+    (!isPlainRecord(value.appWaitlist) || typeof value.appWaitlist.state !== "string" || !appWaitlistStates.includes(value.appWaitlist.state))) return null;
 
   let invitation: HeyHermesSalesStatus["invitation"] = null;
   if (value.invitation != null) {

@@ -347,14 +347,15 @@ test("the client hands the signal to the request only when one is given", async 
 test("the surface reads through the one function, and only Android can start a second read", () => {
   const effect = surface.slice(surface.indexOf("const [salesStatusSettled, setSalesStatusSettled]"), surface.indexOf("async function joinMobileWaitlist()"));
   // Reset with the session, gated by the store, settled by an answer and by a failure alike.
-  assert.match(effect, /setSalesStatus\(null\);\s*setSalesStatusSettled\(false\);\s*if \(!token \|\| host\.session\.mode !== "standalone" \|\| !storePlatform\) return;\s*let cancelled = false;\s*void readHeySalesStatus\(storePlatform, \(options\) => api\.salesStatus\(options\), \{ cancelled: \(\) => cancelled \}\)\.then\(\(status\) => \{\s*if \(cancelled\) return;\s*setSalesStatus\(status\);\s*setSalesStatusSettled\(true\);/);
+  assert.match(effect, /setSalesStatus\(null\);\s*setSalesStatusSettled\(false\);\s*if \(!token \|\| host\.session\.mode !== "standalone" \|\| !storePlatform\) return;\s*let cancelled = false;\s*void readHeySalesStatus\(storePlatform, \(options\) => api\.salesStatus\(\{ \.\.\.options, \.\.\.\(storePlatform === "android" \? \{ platform: "android" as const \} : \{\}\) \}\), \{ cancelled: \(\) => cancelled \}\)\.then\(\(status\) => \{\s*if \(cancelled\) return;\s*setSalesStatus\(status\);\s*setSalesStatusSettled\(true\);/);
   assert.match(effect, /\}, \[api, token, host\.session\.mode, salesStatusReadRound\]\);/);
-  // No other place reads the status.
-  assert.equal(surface.split("api.salesStatus(").length - 1, 1);
+  // Android also rechecks immediately before opening the store purchase.
+  assert.equal(surface.split("api.salesStatus(").length - 1, 2);
 
   // The round moves in one place, behind the predicate.
   // HPD-1762: a second place, deliberately: an accepted invitation code reads the status again (the gate is gone).
-  assert.equal(surface.split("setSalesStatusReadRound(").length - 1, 2);
+  // Explicit retry on the unknown-status screen is the third entry.
+  assert.equal(surface.split("setSalesStatusReadRound(").length - 1, 3);
   assert.match(surface, /if \(heySalesStatusRereadOnOpen\(\{ store: storePlatform, opened, settled: salesStatusSettled, status: salesStatus \}\)\) \{\s*setSalesStatusReadRound\(\(round\) => round \+ 1\);\s*\}/);
   // "In view" is decided by the one function, from the same values the render uses.
   assert.match(surface, /const salesPaywallInView = heySalesPaywallInView\(\{\s*store: storePlatform,\s*appInFront,\s*accountPanelOpen: paywallAccountOpen,\s*screen: productAccessScreenNow,\s*deletedPaywallOpen,\s*hasAccess: snapshot \? hasValidMobileProductAccess\(snapshot\.entitlement\) : false,\s*accountScreenOpen,\s*\}\);/);
@@ -372,4 +373,31 @@ test("no sentence was added for a failed or slow read", () => {
   assert.equal(surface.split(`"${existing}"`).length - 1, 2);
   const source = readFileSync(new URL("../src/hey-sales-status-read.ts", import.meta.url), "utf8");
   assert.doesNotMatch(source, /staticUiCopy|staticUiMessage|appI18n/);
+});
+
+
+test("Android routing context accompanies status, join and code; legacy requests retain their exact paths", async () => {
+  const urls: string[] = [];
+  const api = createApiClient({ baseUrl: "https://heyhermes.test/api", token: "test-session",
+    fetchImpl: (async (url: string) => {
+      urls.push(String(url));
+      return new Response(JSON.stringify(url.includes("redeem") ? { status: "pending" } : status), { status: 200 });
+    }) as unknown as typeof fetch,
+  });
+  await api.salesStatus(); await api.joinAppWaitlist(); await api.redeemInviteCode("ABCDEF");
+  await api.salesStatus({ platform: "android" }); await api.joinAppWaitlist({ platform: "android" }); await api.redeemInviteCode("ABCDEF", { platform: "android" });
+  assert.deepEqual(urls.map((url) => new URL(url).pathname + new URL(url).search), [
+    "/api/billing/sales-status", "/api/billing/app-waitlist", "/api/me/invite/redeem",
+    "/api/billing/sales-status?platform=android", "/api/billing/app-waitlist?platform=android", "/api/me/invite/redeem?platform=android",
+  ]);
+});
+
+
+test("returning from a release email refreshes an Android waitlist, without changing iOS", () => {
+  for (const state of ["waiting", "released", "taken"] as const) {
+    const gated = { ...status, appWaitlist: { state } };
+    assert.equal(heySalesStatusRereadOnOpen({ store: "android", opened: true, settled: true, status: gated }), true);
+    assert.equal(heySalesStatusRereadOnOpen({ store: "ios", opened: true, settled: true, status: gated }), false);
+    assert.equal(heySalesStatusRereadOnOpen({ store: "android", opened: false, settled: true, status: gated }), false);
+  }
 });

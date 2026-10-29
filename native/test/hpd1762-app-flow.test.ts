@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { heyIsShortReply, heyAndroidPushAvailable, heyAppEntryScreen, heyAppFlowCopy, heyAppFlowFill, heyInviteCodeFromUrl, heyInviteRedeemAccepted, heyNormalizeInviteCode, heyShowLimitCard } from "../src/hey-app-flow";
+import { heyIsShortReply, heyAndroidPushAvailable, heyAndroidPurchaseAllowed, heyAppEntryScreen, heyAppFlowCopy, heyAppFlowFill, heyInviteCodeFromUrl, heyInviteRedeemAccepted, heyNormalizeInviteCode, heyShowLimitCard } from "../src/hey-app-flow";
 import { parseHeyHermesSalesStatus } from "../core/hermes-api";
 
 // HPD-1762: Hey Hermes App 1.1 screens (copy approved by Justus 2026-10-26; server switch decides the waitlist).
@@ -58,6 +58,7 @@ test("the sales status parser reads the waitlist state and nothing else from the
   assert.equal(parseHeyHermesSalesStatus(base)?.appWaitlist, null);
   assert.deepEqual(parseHeyHermesSalesStatus({ ...base, appWaitlist: { state: "released", position: 3 } })?.appWaitlist, { state: "released" });
   assert.equal(parseHeyHermesSalesStatus({ ...base, appWaitlist: { state: "bogus" } })?.appWaitlist, null);
+  assert.equal(parseHeyHermesSalesStatus({ ...base, appWaitlist: { state: "bogus" } }, { strictAppWaitlist: true }), null);
 });
 
 test("invitation links: /i/<code> on heyhermes.app and the app scheme; typed codes are normalized", () => {
@@ -76,7 +77,7 @@ test("invitation links: /i/<code> on heyhermes.app and the app scheme; typed cod
 
 test("the surface wires the flow: welcome, link sent, waitlist, release, taken, single purchase, limit card, Pro", () => {
   const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
-  for (const needle of ["<HeyWelcomeScreen", "<HeyLinkSentScreen", "<HeyWaitlistScreen", "<HeyReleaseScreen", "<HeyTakenScreen", "<HeySinglePurchasePanel", "<HeyLimitCard", "<HeyProScreen", "heyInviteCodeFromUrl(url)", "api.joinAppWaitlist()"]) {
+  for (const needle of ["<HeyWelcomeScreen", "<HeyLinkSentScreen", "<HeyWaitlistScreen", "<HeyReleaseScreen", "<HeyTakenScreen", "<HeySinglePurchasePanel", "<HeyLimitCard", "<HeyProScreen", "heyInviteCodeFromUrl(url)", "api.joinAppWaitlist("]) {
     assert.ok(source.includes(needle), needle);
   }
 });
@@ -142,4 +143,26 @@ test("the 144 type scale: 50pt buttons with 1pt outlines, no weight 700, example
     assert.ok(copy.signUp.apple && copy.login.apple && copy.welcome.codeLabel && copy.welcome.cancel);
     assert.doesNotMatch(copy.welcome.login, /·/);
   }
+});
+
+
+test("Android requires authoritative release or exemption; local purchase intent never bypasses waiting/taken/unknown", () => {
+  const at = (state: "waiting" | "released" | "taken" | null, mayPurchase = state === null || state === "released") => ({ mayPurchase, appWaitlist: state ? { state } : null });
+  for (const opened of [false, true]) {
+    assert.equal(heyAppEntryScreen(null, opened, "android"), "unknown");
+    assert.equal(heyAppEntryScreen(at("waiting"), opened, "android"), "waitlist");
+    assert.equal(heyAppEntryScreen(at("taken"), opened, "android"), "taken");
+    assert.equal(heyAppEntryScreen(at(null, false), opened, "android"), "unknown");
+    assert.equal(heyAndroidPurchaseAllowed(null), false);
+    assert.equal(heyAndroidPurchaseAllowed(at("waiting", true)), false);
+    assert.equal(heyAndroidPurchaseAllowed(at("taken", true)), false);
+  }
+  assert.equal(heyAppEntryScreen(at("released"), false, "android"), "release");
+  assert.equal(heyAppEntryScreen(at("released"), true, "android"), "purchase");
+  // A code is followed by a server reread. Only its confirmed exemption opens purchase.
+  assert.equal(heyAppEntryScreen(at(null), true, "android"), "purchase");
+  assert.equal(heyAndroidPurchaseAllowed(at(null)), true);
+  assert.equal(heyAndroidPurchaseAllowed(at("released")), true);
+  assert.equal(heyAndroidPurchaseAllowed(at("released", false)), false);
+  assert.equal(heyAppEntryScreen(at("waiting"), true, "ios"), "purchase");
 });
