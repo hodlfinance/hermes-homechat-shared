@@ -735,10 +735,11 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
     // callers then behave exactly as before.
     // HPD-1243: the Android paywall gives each read a deadline and aborts it
     // through `signal`. Without one the request is the request it always was.
-    salesStatus: async (options: { signal?: AbortSignal } = {}): Promise<HeyHermesSalesStatus | null> => {
+    salesStatus: async (options: { signal?: AbortSignal; platform?: "android" | "ios" } = {}): Promise<HeyHermesSalesStatus | null> => {
       try {
         return parseHeyHermesSalesStatus(
-          await request<unknown>("/billing/sales-status", options.signal ? { signal: options.signal } : {}),
+          await request<unknown>(`/billing/sales-status${options.platform ? `?platform=${options.platform}` : ""}`, options.signal ? { signal: options.signal } : {}),
+          { strictAppWaitlist: options.platform === "android" },
         );
       } catch {
         return null;
@@ -752,17 +753,17 @@ export function createApiClient({ baseUrl, token = "", fetchImpl = fetch }: ApiC
       }
     },
     // HPD-1762: the app joins the waitlist when the sales status says it is gated; the answer is the new sales status.
-    joinAppWaitlist: async (): Promise<HeyHermesSalesStatus | null> => {
+    joinAppWaitlist: async (options: { platform?: "android" | "ios" } = {}): Promise<HeyHermesSalesStatus | null> => {
       try {
-        return parseHeyHermesSalesStatus(await request<unknown>("/billing/app-waitlist", { method: "POST", body: "{}" }));
+        return parseHeyHermesSalesStatus(await request<unknown>(`/billing/app-waitlist${options.platform ? `?platform=${options.platform}` : ""}`, { method: "POST", body: "{}" }), { strictAppWaitlist: options.platform === "android" });
       } catch {
         return null;
       }
     },
     // HPD-1762: an invitation code (typed, or from a /i/<code> link). Any failure reads as "unknown".
-    redeemInviteCode: async (code: string): Promise<{ status: string }> => {
+    redeemInviteCode: async (code: string, options: { platform?: "android" | "ios" } = {}): Promise<{ status: string }> => {
       try {
-        const answer = await request<{ status?: unknown }>("/me/invite/redeem", { method: "POST", body: JSON.stringify({ code }) });
+        const answer = await request<{ status?: unknown }>(`/me/invite/redeem${options.platform ? `?platform=${options.platform}` : ""}`, { method: "POST", body: JSON.stringify({ code }) });
         return { status: typeof answer?.status === "string" ? answer.status : "unknown" };
       } catch {
         return { status: "error" };

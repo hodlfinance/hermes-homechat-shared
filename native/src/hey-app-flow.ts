@@ -226,11 +226,30 @@ export const HEY_PERSONAL_PRICE_FALLBACK = "$12.99";
  * Which screen leads for an account without access, from the server's sales status.
  * Unknown status or no gate: the purchase screen, as in 1.0 (buying is possible).
  */
-export type HeyAppEntryScreen = "purchase" | "waitlist" | "release" | "taken";
-export function heyAppEntryScreen(status: Pick<HeyHermesSalesStatus, "appWaitlist"> | null, purchaseOpened: boolean): HeyAppEntryScreen {
+export type HeyAppEntryScreen = "purchase" | "waitlist" | "release" | "taken" | "unknown";
+type AppEntryStatus = Pick<HeyHermesSalesStatus, "appWaitlist"> & Partial<Pick<HeyHermesSalesStatus, "mayPurchase">>;
+export function heyAndroidPurchaseAllowed(status: AppEntryStatus | null): boolean {
+  return status?.mayPurchase === true && (!status.appWaitlist || status.appWaitlist.state === "released");
+}
+export function heyAppEntryScreen(status: AppEntryStatus | null, purchaseOpened: boolean, platform?: "android" | "ios"): HeyAppEntryScreen {
   const state: HeyHermesAppWaitlistState | null = status?.appWaitlist?.state ?? null;
+  if (platform === "android") {
+    if (!status) return "unknown";
+    if (state === "waiting") return "waitlist";
+    if (state === "taken") return "taken";
+    if (!heyAndroidPurchaseAllowed(status)) return "unknown";
+    return state === "released" && !purchaseOpened ? "release" : "purchase";
+  }
   if (!state || purchaseOpened) return "purchase";
   return state === "waiting" ? "waitlist" : state === "released" ? "release" : "taken";
+}
+
+export function heyAppStatusCopy(locale: string) {
+  return locale === "de" ? {
+    loading: "Dein Zugang wird geprüft …", error: "Dein Zugangsstatus konnte nicht geladen werden. Bitte versuche es erneut.", retry: "Erneut versuchen",
+  } : {
+    loading: "Checking your access…", error: "Your access status could not be loaded. Please try again.", retry: "Try again",
+  };
 }
 
 /**

@@ -151,5 +151,9 @@ export function heySalesStatusRereadOnOpen(input: {
   settled: boolean;
   status: unknown | null;
 }): boolean {
-  return input.store === "android" && input.opened && input.settled && input.status === null;
+  // A release email can arrive while the app is in the background. Re-entering
+  // the gated screen must observe that release (or a now-taken place).
+  const appWaitlist = input.status && typeof input.status === "object" && "appWaitlist" in input.status
+    ? input.status.appWaitlist : null;
+  return input.store === "android" && input.opened && input.settled && (input.status === null || Boolean(appWaitlist));
 }
