@@ -610,6 +610,8 @@ export type HeyHermesSalesStatus = {
    * (everyone can buy) or the account is not gated. Never carries a position number: the server decides who is next.
    */
   appWaitlist: { state: HeyHermesAppWaitlistState } | null;
+  /** Additive common entry contract. Missing on older servers. */
+  appEntry?: { state: "purchase" | "waiting" | "unavailable" };
 };
 
 export type HeyHermesAppWaitlistState = "waiting" | "released" | "taken";
@@ -634,6 +636,12 @@ export function parseHeyHermesSalesStatus(value: unknown): HeyHermesSalesStatus 
   if (typeof value.reason !== "string" || !salesStatusReasons.includes(value.reason)) return null;
   if (!isIsoTimestamp(value.checkedAt)) return null;
 
+  const appEntry = isPlainRecord(value.appEntry) && typeof value.appEntry.state === "string" && ["purchase", "waiting", "unavailable"].includes(String(value.appEntry.state)) &&
+    (value.appEntry.state === "purchase") === value.mayPurchase
+    ? { state: value.appEntry.state as "purchase" | "waiting" | "unavailable" } : null;
+  // Preserve valid product/restore metadata from an older server. The new Hey gate
+  // treats missing/malformed entry authority as unavailable, never purchase permission.
+
   let invitation: HeyHermesSalesStatus["invitation"] = null;
   if (value.invitation != null) {
     if (!isPlainRecord(value.invitation) || !isIsoTimestamp(value.invitation.expiresAt)) return null;
@@ -654,6 +662,7 @@ export function parseHeyHermesSalesStatus(value: unknown): HeyHermesSalesStatus 
     open: value.open,
     reason: value.reason as HeyHermesSalesStatusReason,
     mayPurchase: value.mayPurchase,
+    ...(appEntry ? { appEntry } : {}),
     invitation,
     waitlist,
     checkedAt: value.checkedAt,

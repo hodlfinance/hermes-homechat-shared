@@ -14,9 +14,10 @@ import type { HeyStorePlatform } from "./hey-store-platform";
  * the status or with null; null is the "unknown" the paywall already knows,
  * and it shows the existing sentence. No text belongs to this file.
  *
- * iOS does not take part: its paywall does not wait for the status, an unknown
+ * Legacy iOS does not take part: its paywall does not wait for the status, an unknown
  * status keeps the purchase (HPD-1063), and the call is handed through as it
- * was: once, without an argument, without a timer.
+ * was: once, without an argument, without a timer. The common Hey entry opt-in
+ * uses the same bounded read and foreground refresh on both stores.
  */
 export const heySalesStatusAndroidRead = {
   /** Reads per round. A fourth is never made; the next round starts when the paywall is opened again. */
@@ -33,9 +34,11 @@ export type HeySalesStatusReadTimers = {
 };
 
 export type HeySalesStatusReadOptions = {
-  /** True once the session that asked is gone; no further attempt starts then. Android only. */
+  /** Product-owned Hey contract, applied to both store platforms. */
+  commonEntry?: boolean;
+  /** True once the session that asked is gone; no further attempt starts then. Android and common Hey entry. */
   cancelled?: () => boolean;
-  /** The clock; tests turn it by hand. Android only. */
+  /** The clock; tests turn it by hand. Android and common Hey entry. */
   timers?: HeySalesStatusReadTimers;
 };
 
@@ -53,8 +56,8 @@ export function readHeySalesStatus<T>(
   read: (options?: { signal?: AbortSignal }) => Promise<T | null>,
   options: HeySalesStatusReadOptions = {},
 ): Promise<T | null> {
-  // iOS: the call itself, nothing around it.
-  if (store !== "android") return read();
+  // Legacy iOS: the call itself. The common Hey contract opts into the bounded path.
+  if (store !== "android" && !options.commonEntry) return read();
   return readWithDeadlineAndRetry(read, options);
 }
 
@@ -119,6 +122,7 @@ function readOnceWithDeadline<T>(
  */
 export function heySalesPaywallInView(input: {
   store: HeyStorePlatform | null;
+  commonEntry?: boolean;
   appInFront: boolean;
   /** The small account panel that replaces the purchase screen while open. */
   accountPanelOpen: boolean;
@@ -131,7 +135,7 @@ export function heySalesPaywallInView(input: {
   /** The Account page of Settings is open. */
   accountScreenOpen: boolean;
 }): boolean {
-  if (input.store !== "android" || !input.appInFront || input.accountPanelOpen) return false;
+  if ((!input.commonEntry && input.store !== "android") || !input.store || !input.appInFront || input.accountPanelOpen) return false;
   if (input.screen === "purchase") return true;
   if (input.screen === "deleted") return input.deletedPaywallOpen && !input.hasAccess;
   if (input.screen === "home") return input.accountScreenOpen;
@@ -146,10 +150,11 @@ export function heySalesPaywallInView(input: {
  */
 export function heySalesStatusRereadOnOpen(input: {
   store: HeyStorePlatform | null;
+  commonEntry?: boolean;
   /** The paywall was out of view and is in view now. */
   opened: boolean;
   settled: boolean;
   status: unknown | null;
 }): boolean {
-  return input.store === "android" && input.opened && input.settled && input.status === null;
+  return Boolean(input.store) && (input.commonEntry === true || input.store === "android") && input.opened && input.settled && (input.commonEntry === true || input.status === null);
 }

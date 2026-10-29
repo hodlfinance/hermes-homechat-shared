@@ -312,6 +312,8 @@ export type NativeR8Host = {
      * sales status are on for Android. iOS never reads it.
      */
     heyAndroidLaunchEnabled?: boolean;
+    /** Hey-only common app entry contract; requires a compatible backend. */
+    heyAppEntryGate?: boolean;
   };
   transport: NativeR8Transport;
   platform: NativeR8Platform;
