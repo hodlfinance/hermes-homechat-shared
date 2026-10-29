@@ -480,7 +480,7 @@ import { heyNoAccessCopy, heyPaywallAccountCopy, heyPreparingBody, heyPreparingC
 import { appStoreManagedSentence, mobileStoreNotice, mobileSubscriptionManageAction, mobileSubscriptionManagementTarget, type MobileSubscriptionManagementTarget } from "./subscription-management";
 import { heyServerDeletedCopy, heyServerDeletedDateLine, heyServerDeletedErrorMessage, heyServerDeletedModel, heyServerDeletedReceiptLine } from "./hey-server-deleted";
 import { deviceAppLocale, heySignInCopy, heySignInHeadline } from "./hey-sign-in";
-import { HEY_PERSONAL_PRICE_FALLBACK, heyAndroidPushAvailable, heyAppEntryScreen, heyIsShortReply, heyAppFlowCopy, heyAppFlowFill, heyInviteCodeFromUrl, heyInviteRedeemAccepted, heyNormalizeInviteCode, heyShowLimitCard } from "./hey-app-flow";
+import { HEY_PERSONAL_PRICE_FALLBACK, heyAndroidPushAvailable, heyAppPurchaseAllowed, heyAppStatusCopy, heyAppEntryScreen, heyIsShortReply, heyAppFlowCopy, heyAppFlowFill, heyInviteCodeFromUrl, heyInviteRedeemAccepted, heyNormalizeInviteCode, heyShowLimitCard } from "./hey-app-flow";
 import { MobileGoogleMark } from "./mobile-google-mark";
 import {
   iosPaywallCopy,
@@ -2467,34 +2467,37 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   }, [linkConfirmation]);
   // HPD-1063: null = unknown (old server, network error); the paywall then
   // behaves exactly as before.
+  const commonAppEntry = host.policy.heyAppEntryGate === true;
   const [salesStatus, setSalesStatus] = useState<HeyHermesSalesStatus | null>(null);
-  // HPD-1243: true once the Plane answered or failed to. Android waits for it
-  // before it offers a purchase (heyPlayProductGuard); iOS does not read it.
+  // Settled by an answer or failure. Both opted-in Hey clients require app entry authority.
   const [salesStatusSettled, setSalesStatusSettled] = useState(false);
   // HPD-1243: counts the reads the Android paywall asked for after a failed
   // one (see the effect on salesPaywallInView). It stays 0 on iOS, so the
   // effect below runs there exactly when it always did.
   const [salesStatusReadRound, setSalesStatusReadRound] = useState(0);
   const [waitlistPhase, setWaitlistPhase] = useState<"idle" | "joining" | "error">("idle");
-  // iOS: the one call, as before. Android: a deadline and a bounded retry, so
-  // the read always ends (hey-sales-status-read.ts).
+  // The common Hey gate uses the existing bounded read on both platforms.
   useEffect(() => {
     setSalesStatus(null);
     setSalesStatusSettled(false);
     if (!token || host.session.mode !== "standalone" || !storePlatform) return;
     let cancelled = false;
-    void readHeySalesStatus(storePlatform, (options) => api.salesStatus(options), { cancelled: () => cancelled }).then((status) => {
+    void readHeySalesStatus(storePlatform, (options) => api.salesStatus(options), { cancelled: () => cancelled, commonEntry: commonAppEntry }).then((status) => {
       if (cancelled) return;
       setSalesStatus(status);
       setSalesStatusSettled(true);
       // HPD-1762: gated by the server switch: the account joins the waitlist (idempotent; no position is returned).
-      if (status?.appWaitlist?.state === "waiting") void api.joinAppWaitlist();
+      if ((commonAppEntry ? heyAppEntryScreen(status, false, true) === "waitlist" : status?.appWaitlist?.state === "waiting")) {
+        void api.joinAppWaitlist().then((joined) => {
+          if (!cancelled && commonAppEntry) setSalesStatus(joined);
+        });
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [api, token, host.session.mode, salesStatusReadRound]);
-  // HPD-1762: the app flow. A release link or typed code redeems the invite; "subscribe right away" opens the purchase.
+  }, [api, token, host.session.mode, salesStatusReadRound, commonAppEntry]);
+  // Legacy consumers retain their local entry intent. The opted-in Hey gate ignores it.
   const [purchaseOpened, setPurchaseOpened] = useState(false);
   const [takenDismissed, setTakenDismissed] = useState(false);
   const [inviteInput, setInviteInput] = useState("");
@@ -2507,12 +2510,17 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     const code = heyNormalizeInviteCode(raw);
     if (!code) { setInvitePhase("invalid"); return; }
     setInvitePhase("checking");
+    const requestToken = token;
+    const generation = accountSessionGenerationRef.current;
     const answer = await api.redeemInviteCode(code);
+    if (!requestToken || !accountSessionIsCurrent(generation, requestToken)) return;
     if (heyInviteRedeemAccepted(answer.status)) {
       setInviteAccepted(true);
       setInvitePhase("idle");
       setInviteInput("");
       setPurchaseOpened(true);
+      // A code is not local purchase permission. The common gate waits for the server reread.
+      if (commonAppEntry) { setSalesStatus(null); setSalesStatusSettled(false); }
       setSalesStatusReadRound((round) => round + 1);
     } else {
       setInvitePhase("invalid");
@@ -3634,6 +3642,19 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     setMobilePurchasePhase("purchasing");
     setMobilePurchaseNotice(null);
     try {
+      if (commonAppEntry && storePlatform) {
+        const requestToken = token;
+        const generation = accountSessionGenerationRef.current;
+        const current = await readHeySalesStatus(storePlatform, (options) => api.salesStatus(options), { commonEntry: true, cancelled: () => !requestToken || !accountSessionIsCurrent(generation, requestToken) });
+        if (!requestToken || !accountSessionIsCurrent(generation, requestToken)) return;
+        setSalesStatus(current);
+        setSalesStatusSettled(true);
+        if (!heyAppPurchaseAllowed(current)) {
+          setMobilePurchasePhase("ready");
+          if (!current) setMobilePurchaseNotice(heyAppStatusCopy(appLocale).error);
+          return;
+        }
+      }
       const purchase = await mobilePurchasesController.purchase(accountId, packageId, () => {
         setMobilePurchaseCompletion({ accountId, expirationAt: null });
       }, { currentProductId: change?.currentProductId ?? null });
@@ -5074,6 +5095,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   // below therefore runs once and does nothing.
   const salesPaywallInView = heySalesPaywallInView({
     store: storePlatform,
+    commonEntry: commonAppEntry,
     appInFront,
     accountPanelOpen: paywallAccountOpen,
     screen: productAccessScreenNow,
@@ -5088,7 +5110,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   useEffect(() => {
     const opened = salesPaywallInView && !salesPaywallWasInViewRef.current;
     salesPaywallWasInViewRef.current = salesPaywallInView;
-    if (heySalesStatusRereadOnOpen({ store: storePlatform, opened, settled: salesStatusSettled, status: salesStatus })) {
+    if (heySalesStatusRereadOnOpen({ store: storePlatform, commonEntry: commonAppEntry, opened, settled: salesStatusSettled, status: salesStatus })) {
       setSalesStatusReadRound((round) => round + 1);
     }
   }, [salesPaywallInView]);
@@ -8970,14 +8992,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     formatTime: (value) => formatSecurityDate(value, appLocale),
   });
   const paywallSalesError = waitlistPhase === "error" ? iosPaywallWaitlistCopy(appLocale).waitlistError : null;
-  const mobilePersonalPurchaseAvailable = mobilePersonalPurchaseCanStart(
+  const mobilePersonalPurchaseAvailable = (!commonAppEntry || heyAppPurchaseAllowed(salesStatus)) && (mobilePersonalPurchaseCanStart(
     snapshot.me.id,
     snapshot.subscription,
     mobilePurchaseCompletion,
     Date.now(),
     mobilePurchasesController.personalProduct,
   ) || Boolean(selectedMobilePlan && serverPlanTiers.length > 0 &&
-    mobilePlanChangeCanStart(snapshot.subscription, mobilePurchasesController, selectedMobilePlan.plan, Date.now(), mobilePurchaseCompletion));
+    mobilePlanChangeCanStart(snapshot.subscription, mobilePurchasesController, selectedMobilePlan.plan, Date.now(), mobilePurchaseCompletion)));
   // HPD-1762: Pro appears only in context, as a change from the Personal plan when the included weekly allowance is used up.
   const proPlan = offeredMobilePlans.find((plan) => plan.plan === "personal") ?? null;
   const proChange = proPlan && storePlatform ? mobilePlanChangeCanStart(snapshot.subscription, mobilePurchasesController, "personal", Date.now(), mobilePurchaseCompletion) : null;
@@ -9353,11 +9375,19 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     );
   }
 
-  // HPD-1762: the app waitlist (server switch). Without a gate, or after "subscribe right away" or an accepted
-  // invite, the purchase screen leads exactly as in 1.0; the unknown sales status also keeps the purchase.
-  const entryScreen = productAccessScreen === "purchase" && storePlatform ? heyAppEntryScreen(salesStatus, purchaseOpened) : "purchase";
+  // HPD-1762: both Hey store clients follow the one server decision.
+  // Local intent cannot override waiting, and a missing new contract is unavailable.
+  const entryScreen = productAccessScreen === "purchase" && storePlatform ? heyAppEntryScreen(salesStatus, purchaseOpened, commonAppEntry) : "purchase";
   if (entryScreen !== "purchase") {
     const dark = resolvedColorScheme === "dark";
+    if (entryScreen === "unknown") return (
+      <HeyFlowFrame dark={dark} account={heyFlowAccount(appLocale, snapshot.me.email, () => void logout())}>
+        <Text style={flow.lead} accessibilityRole={salesStatusSettled ? "alert" : undefined}>{salesStatusSettled ? heyAppStatusCopy(appLocale).error : heyAppStatusCopy(appLocale).loading}</Text>
+        {salesStatusSettled ? <HeyFlowButton label={heyAppStatusCopy(appLocale).retry} onPress={() => setSalesStatusReadRound((round) => round + 1)} /> : <ActivityIndicator />}
+        <HeyFlowLink label={staticUiCopy(appLocale)["Restore"]} onPress={() => void restoreMobilePurchases()} />
+        {mobilePurchaseNotice ? <Text style={flow.small} accessibilityRole="alert">{mobilePurchaseNotice}</Text> : null}
+      </HeyFlowFrame>
+    );
     if (entryScreen === "release") return <HeyReleaseScreen locale={appLocale} dark={dark} account={heyFlowAccount(appLocale, snapshot.me.email, () => void logout())} onPurchase={() => setPurchaseOpened(true)} />;
     if (entryScreen === "taken" && !takenDismissed) return <HeyTakenScreen locale={appLocale} dark={dark} account={heyFlowAccount(appLocale, snapshot.me.email, () => void logout())} onBack={() => setTakenDismissed(true)} />;
     return (
@@ -9370,7 +9400,9 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         onCode={(value) => { setInviteInput(value); if (invitePhase === "invalid") setInvitePhase("idle"); }}
         phase={invitePhase}
         onRedeem={() => void redeemInviteCode(inviteInput)}
-        onSubscribe={() => setPurchaseOpened(true)}
+        onSubscribe={commonAppEntry ? undefined : () => setPurchaseOpened(true)}
+        onRestore={commonAppEntry ? () => void restoreMobilePurchases() : undefined}
+        notice={commonAppEntry ? mobilePurchaseNotice : null}
       />
     );
   }
@@ -12024,9 +12056,9 @@ function HeyLinkSentScreen({ locale, dark, email, login, onBack }: { locale: App
   );
 }
 
-function HeyWaitlistScreen({ locale, dark, account, email, code, onCode, phase, onRedeem, onSubscribe }: {
+function HeyWaitlistScreen({ locale, dark, account, email, code, onCode, phase, onRedeem, onSubscribe, onRestore, notice }: {
   locale: AppLocale; dark: boolean; account?: ReturnType<typeof heyFlowAccount>; email: string; code: string; onCode: (value: string) => void;
-  phase: "idle" | "checking" | "invalid"; onRedeem: () => void; onSubscribe: () => void;
+  phase: "idle" | "checking" | "invalid"; onRedeem: () => void; onSubscribe?: () => void; onRestore?: () => void; notice?: string | null;
 }) {
   const copy = heyAppFlowCopy(locale).waitlist;
   return (
@@ -12040,7 +12072,9 @@ function HeyWaitlistScreen({ locale, dark, account, email, code, onCode, phase, 
       {phase === "invalid" ? <Text style={flow.error} accessibilityRole="alert">{copy.invalid}</Text> : null}
       <HeyFlowButton label={phase === "checking" ? copy.redeeming : copy.redeem} outline busy={phase === "checking"} disabled={!code.trim()} onPress={onRedeem} />
       <View style={flow.spacer} />
-      <HeyFlowLink label={copy.subscribe} onPress={onSubscribe} />
+      {onSubscribe ? <HeyFlowLink label={copy.subscribe} onPress={onSubscribe} /> : null}
+      {onRestore ? <HeyFlowLink label={staticUiCopy(locale)["Restore"]} onPress={onRestore} /> : null}
+      {notice ? <Text style={flow.small} accessibilityRole="alert">{notice}</Text> : null}
     </HeyFlowFrame>
   );
 }

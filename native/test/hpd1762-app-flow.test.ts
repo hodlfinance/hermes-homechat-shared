@@ -76,7 +76,7 @@ test("invitation links: /i/<code> on heyhermes.app and the app scheme; typed cod
 
 test("the surface wires the flow: welcome, link sent, waitlist, release, taken, single purchase, limit card, Pro", () => {
   const source = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
-  for (const needle of ["<HeyWelcomeScreen", "<HeyLinkSentScreen", "<HeyWaitlistScreen", "<HeyReleaseScreen", "<HeyTakenScreen", "<HeySinglePurchasePanel", "<HeyLimitCard", "<HeyProScreen", "heyInviteCodeFromUrl(url)", "api.joinAppWaitlist()"]) {
+  for (const needle of ["<HeyWelcomeScreen", "<HeyLinkSentScreen", "<HeyWaitlistScreen", "<HeyReleaseScreen", "<HeyTakenScreen", "<HeySinglePurchasePanel", "<HeyLimitCard", "<HeyProScreen", "heyInviteCodeFromUrl(url)", "api.joinAppWaitlist("]) {
     assert.ok(source.includes(needle), needle);
   }
 });
