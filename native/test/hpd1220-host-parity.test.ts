@@ -66,11 +66,11 @@ const HOST_OPTIONS: Readonly<Record<string, { hey: Verdict; hodl: Verdict }>> = 
   "presentation.sessionFailure": { hey: "unused", hodl: "wired" },
   "policy.preinstalledRanker": {
     hey: "wired: Hey enables its preinstalled ranker policy",
-    hodl: "product-exempt: HODL omits preinstalled ranker tasks (HPD-407) and passes false",
+    hodl: "exempt: HODL omits preinstalled ranker tasks (HPD-407) and passes false",
   },
   "policy.preinstalledEmailScanner": {
     hey: "wired: Hey enables its preinstalled email-scanner policy",
-    hodl: "product-exempt: HODL omits the preinstalled scanner/Gmail recommendation (HPD-407) and passes false",
+    hodl: "exempt: HODL omits the preinstalled scanner/Gmail recommendation (HPD-407) and passes false",
   },
   "policy.heyAndroidLaunchEnabled": {
     hey: "wired: Hey's store-specific Android launch switch",
@@ -78,7 +78,7 @@ const HOST_OPTIONS: Readonly<Record<string, { hey: Verdict; hodl: Verdict }>> = 
   },
   "policy.heyAppEntryGate": {
     hey: "wired: Hey opts into its central server app-entry decision on both stores (HPD-1762)",
-    hodl: "product-exempt: HODL/LiveQuote own account and Pro entry (HPD-407/HPD-1220); their host explicitly passes false",
+    hodl: "exempt: HODL/LiveQuote own account and Pro entry (HPD-407/HPD-1220); their host explicitly passes false",
   },
 };
 
