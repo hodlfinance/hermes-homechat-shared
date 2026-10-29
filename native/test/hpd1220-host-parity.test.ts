@@ -64,6 +64,22 @@ const HOST_OPTIONS: Readonly<Record<string, { hey: Verdict; hodl: Verdict }>> = 
   "presentation.headerBack": { hey: "unused (keeps the left menu)", hodl: "wired (HPD-1466, HODL Bots chat only: back to the bot list, no left menu)" },
   "presentation.homeChatTitle": { hey: "unused (the Home chat stays Hermes)", hodl: "wired (HPD-1515, HODL Bots chat only: the Home chat is called Home)" },
   "presentation.sessionFailure": { hey: "unused", hodl: "wired" },
+  "policy.preinstalledRanker": {
+    hey: "wired: Hey enables its preinstalled ranker policy",
+    hodl: "exempt: HODL omits preinstalled ranker tasks (HPD-407) and passes false",
+  },
+  "policy.preinstalledEmailScanner": {
+    hey: "wired: Hey enables its preinstalled email-scanner policy",
+    hodl: "exempt: HODL omits the preinstalled scanner/Gmail recommendation (HPD-407) and passes false",
+  },
+  "policy.heyAndroidLaunchEnabled": {
+    hey: "wired: Hey's store-specific Android launch switch",
+    hodl: "wired: HODL/LiveQuote pass their product-specific Hermes Android reply/report switch (HPD-1228)",
+  },
+  "policy.heyAppEntryGate": {
+    hey: "wired: Hey opts into its central server app-entry decision on both stores (HPD-1762)",
+    hodl: "exempt: HODL/LiveQuote own account and Pro entry (HPD-407/HPD-1220); their host explicitly passes false",
+  },
 };
 
 const account = "exempt: HODL owns the account, sign-in, deletion and data export (standalone session only)";
@@ -152,7 +168,8 @@ function keysAt(body: string, indent: string): string[] {
 function hostOptionKeys(): string[] {
   const host = block(hostSource, "export type NativeR8Host = {");
   const presentation = block(host, "presentation?: {");
-  return [...keysAt(host, "  ").filter((key) => key !== "presentation"), ...keysAt(presentation, "    ").map((key) => `presentation.${key}`)].sort();
+  const policy = block(host, "  policy: {");
+  return [...keysAt(host, "  ").filter((key) => key !== "presentation"), ...keysAt(presentation, "    ").map((key) => `presentation.${key}`), ...keysAt(policy, "    ").map(key => `policy.${key}`)].sort();
 }
 
 /** The first request each surface API call makes, through a recording fetch. */
