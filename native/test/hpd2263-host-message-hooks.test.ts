@@ -36,7 +36,7 @@ test("the three options are optional and typed on NativeR8Host", () => {
   assert.match(host, /^  renderArtifact\?: \(artifact: ChatArtifactReference, context: NativeR8ArtifactRenderContext\) => ReactNode \| null;$/m);
   assert.match(host, /^  renderMessageFooter\?: \(message: ChatMessage, context: NativeR8MessageRenderContext\) => ReactNode \| null;$/m);
   assert.match(host, /^  approvalCardLabels\?: NativeR8ApprovalCardLabels;$/m);
-  assert.match(host, /export type NativeR8ApprovalCardLabels = \{ eyebrow\?: string; confirm\?: string; cancel\?: string \};/);
+  assert.match(host, /export type NativeR8ApprovalCardLabels = \{ eyebrow\?: string; confirm\?: string; cancel\?: string; failed\?: string \};/);
 });
 
 test("renderArtifact absent: only Fin Hermes references, one Fin card each, as before", () => {
@@ -91,14 +91,16 @@ test("renderMessageFooter present: called for finished assistant replies only", 
 });
 
 test("approval card labels: defaults are today's words, host words override", () => {
-  assert.deepEqual(approvalCardLabels(undefined), { eyebrow: "FIN HERMES", confirm: "Confirm", cancel: "Cancel" });
+  assert.deepEqual(approvalCardLabels(undefined), { eyebrow: "FIN HERMES", confirm: "Confirm", cancel: "Cancel", failed: "The change could not be applied. Review it and try again." });
   assert.deepEqual(approvalCardLabels({}), DEFAULT_APPROVAL_CARD_LABELS);
   assert.deepEqual(approvalCardLabels({ eyebrow: "HODL BOTS", confirm: "Bestätigen", cancel: "Abbrechen" }),
-    { eyebrow: "HODL BOTS", confirm: "Bestätigen", cancel: "Abbrechen" });
-  assert.deepEqual(approvalCardLabels({ confirm: "Ja", eyebrow: "  " }), { eyebrow: "FIN HERMES", confirm: "Ja", cancel: "Cancel" });
+    { eyebrow: "HODL BOTS", confirm: "Bestätigen", cancel: "Abbrechen", failed: "The change could not be applied. Review it and try again." });
+  assert.equal(approvalCardLabels({ failed: "Das ging nicht." }).failed, "Das ging nicht.");
+  assert.deepEqual(approvalCardLabels({ confirm: "Ja", eyebrow: "  " }), { eyebrow: "FIN HERMES", confirm: "Ja", cancel: "Cancel", failed: "The change could not be applied. Review it and try again." });
   assert.match(card, /<Text style=\{styles\.eyebrow\}>\{words\.eyebrow\}<\/Text>/);
   assert.match(card, /accessibilityLabel=\{words\.cancel\}[^>]*><Text style=\{styles\.cancelText\}>\{words\.cancel\}<\/Text>/);
   assert.match(card, /accessibilityLabel=\{words\.confirm\}[^>]*><Text style=\{styles\.confirmText\}>\{words\.confirm\}<\/Text>/);
   assert.doesNotMatch(card, />FIN HERMES</);
   assert.match(surface, /labels=\{host\.approvalCardLabels\}/);
+  assert.match(surface, /\[approval\.approvalId\]: approvalCardLabels\(host\.approvalCardLabels\)\.failed,/);
 });

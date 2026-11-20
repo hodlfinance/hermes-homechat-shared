@@ -211,7 +211,7 @@ export type NativeCardsPort = {
 export type NativeR8MessageRenderContext = { locale: AppLocale; conversationId: string | null };
 export type NativeR8ArtifactRenderContext = NativeR8MessageRenderContext & { message: ChatMessage };
 /** HPD-2263: the approval card's words; each one left out keeps today's ("FIN HERMES", "Confirm", "Cancel"). */
-export type NativeR8ApprovalCardLabels = { eyebrow?: string; confirm?: string; cancel?: string };
+export type NativeR8ApprovalCardLabels = { eyebrow?: string; confirm?: string; cancel?: string; failed?: string };
 
 export type NativeR8Host = {
   /** HPD-1722: present only in Hey Hermes. Turns on the card form, the payment approval and Settings > Cards. */

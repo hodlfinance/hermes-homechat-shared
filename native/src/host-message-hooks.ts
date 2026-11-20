@@ -18,6 +18,7 @@ export const DEFAULT_APPROVAL_CARD_LABELS: Readonly<Required<NativeR8ApprovalCar
   eyebrow: "FIN HERMES",
   confirm: "Confirm",
   cancel: "Cancel",
+  failed: "The change could not be applied. Review it and try again.",
 };
 
 /** The approval card's words: the host's where given and not blank, today's otherwise. */
@@ -28,6 +29,7 @@ export function approvalCardLabels(labels?: NativeR8ApprovalCardLabels | null): 
     eyebrow: pick(labels?.eyebrow, DEFAULT_APPROVAL_CARD_LABELS.eyebrow),
     confirm: pick(labels?.confirm, DEFAULT_APPROVAL_CARD_LABELS.confirm),
     cancel: pick(labels?.cancel, DEFAULT_APPROVAL_CARD_LABELS.cancel),
+    failed: pick(labels?.failed, DEFAULT_APPROVAL_CARD_LABELS.failed),
   };
 }
 

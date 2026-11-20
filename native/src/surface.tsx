@@ -28,7 +28,7 @@ import {
   type MobileFinanceSourceDocument,
 } from "./mobile-finance-artifacts";
 import { MobileFinanceActionApprovalCard } from "./mobile-finance-action-approval";
-import { hostArtifactSlots, hostMessageFooter } from "./host-message-hooks";
+import { approvalCardLabels, hostArtifactSlots, hostMessageFooter } from "./host-message-hooks";
 import { workspacePrivacyCopy } from "../ui/workspace-privacy-copy";
 import { openPageStarter, consumePageStarter, pageStarterTranscript, pageStarterPayload, pageStarterAfterNavigation, type PageStarterState } from "../ui/page-starter-state";
 import { pageStarterCopy } from "../ui/page-starter-copy";
@@ -7088,7 +7088,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
     } catch {
       setFinanceApprovalErrorById((current) => ({
         ...current,
-        [approval.approvalId]: "The change could not be applied. Review it and try again.",
+        // HPD-2263: the host's words when it passes approvalCardLabels.failed; today's otherwise.
+        [approval.approvalId]: approvalCardLabels(host.approvalCardLabels).failed,
       }));
     } finally {
       setFinanceApprovalBusyId(null);
