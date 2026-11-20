@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import type { ColorValue, ImageSourcePropType, StyleProp, ViewStyle } from "react-native";
-import type { createApiClient, ApiClientOptions, AppLocale, ChatLatencySummary, FirstConversationSnapshot } from "./core/index";
+import type { createApiClient, ApiClientOptions, AppLocale, ChatArtifactReference, ChatLatencySummary, ChatMessage, FirstConversationSnapshot } from "./core/index";
 import type { GuidedSetupState, GuidedSetupConnectionId, GuidedSetupConnectionChoice } from "./core/guided-setup";
 import type { createSupportRequestClient, createAnonymousSupportRequestClient } from "./core/support-request";
 import type { createNativeR8CanonicalController } from "./src/hermes-canonical";
@@ -203,6 +203,15 @@ export type NativeCardsPort = {
   keyPin?: { read: () => Promise<string | null>; write: (fingerprint: string) => Promise<void> };
 };
 
+/**
+ * HPD-2263 (HODL Bots engine branch): what the surface tells a host hook about
+ * the reply it draws for. `conversationId` is the reply's own conversation.
+ */
+export type NativeR8MessageRenderContext = { locale: AppLocale; conversationId: string | null };
+export type NativeR8ArtifactRenderContext = NativeR8MessageRenderContext & { message: ChatMessage };
+/** HPD-2263: the approval card's words; each one left out keeps today's ("FIN HERMES", "Confirm", "Cancel"). */
+export type NativeR8ApprovalCardLabels = { eyebrow?: string; confirm?: string; cancel?: string };
+
 export type NativeR8Host = {
   /** HPD-1722: present only in Hey Hermes. Turns on the card form, the payment approval and Settings > Cards. */
   cards?: NativeCardsPort;
@@ -227,6 +236,18 @@ export type NativeR8Host = {
    * The host decides whether to warm (Hey: three quiet minutes). Fire and forget.
    */
   onHomeChatTyping?: (input: { token: string; lastMessageAt: string | null }) => void;
+  /**
+   * HPD-2263 (HODL Bots engine branch only): draws one artifact of an assistant
+   * reply in the host's own look. Every reference except uploads reaches it,
+   * also `source: "bots-engine"`; a non-null answer is drawn in place of the
+   * Fin card, null keeps today's card (Fin Hermes) or nothing (any other source).
+   * Without it only Fin Hermes references are drawn, as before.
+   */
+  renderArtifact?: (artifact: ChatArtifactReference, context: NativeR8ArtifactRenderContext) => ReactNode | null;
+  /** HPD-2263: drawn under each finished assistant reply; null draws nothing. Without it nothing changes. */
+  renderMessageFooter?: (message: ChatMessage, context: NativeR8MessageRenderContext) => ReactNode | null;
+  /** HPD-2263: the approval card's eyebrow and buttons. Without it "FIN HERMES", "Confirm", "Cancel". */
+  approvalCardLabels?: NativeR8ApprovalCardLabels;
   apiBaseUrl: string;
   storageNamespace: string;
   identity: {

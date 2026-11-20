@@ -28,6 +28,7 @@ import {
   type MobileFinanceSourceDocument,
 } from "./mobile-finance-artifacts";
 import { MobileFinanceActionApprovalCard } from "./mobile-finance-action-approval";
+import { hostArtifactSlots, hostMessageFooter } from "./host-message-hooks";
 import { workspacePrivacyCopy } from "../ui/workspace-privacy-copy";
 import { openPageStarter, consumePageStarter, pageStarterTranscript, pageStarterPayload, pageStarterAfterNavigation, type PageStarterState } from "../ui/page-starter-state";
 import { pageStarterCopy } from "../ui/page-starter-copy";
@@ -620,6 +621,9 @@ export function createNativeR8Surface(host: NativeR8Host) {
   const createSupportRequestClient = host.transport.createSupportClient;
   const createAnonymousSupportRequestClient = host.transport.createAnonymousSupportClient;
   const readFinanceSourceDocument = host.transport.readFinanceSourceDocument;
+  // HPD-2263 (HODL Bots engine branch): optional host drawing; absent, the reply looks as before.
+  const hostRenderArtifact = host.renderArtifact;
+  const hostRenderMessageFooter = host.renderMessageFooter;
   const expoFetch = host.transport.fetchStream;
   const { bindMobilePurchasesAccount, isMobilePurchaseCancelled,
     mobilePurchasesConfiguredForBuild, mobilePurchasesController } = host.purchases;
@@ -10118,6 +10122,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 <MobileFinanceActionApprovalCard
                   key={approval.approvalId}
                   approval={approval}
+                  labels={host.approvalCardLabels}
                   busy={financeApprovalBusyId === approval.approvalId}
                   error={financeApprovalErrorById[approval.approvalId] || null}
                   onConfirm={() => void decideFinanceActionApproval(approval, "confirm")}
@@ -12934,6 +12939,13 @@ const MessageBubble = memo(function MessageBubble({
     ? []
     : uniqueMobileFinanceArtifactReferences(message.artifactReferences);
   const agentImages = isUser ? [] : assistantMessageImages(message.artifactReferences);
+  const hookContext = { locale, conversationId: message.conversationSessionId ?? null };
+  const artifactSlots = isUser
+    ? []
+    : hostRenderArtifact
+      ? hostArtifactSlots(message.artifactReferences, hostRenderArtifact, { ...hookContext, message })
+      : financeReferences.map((reference) => ({ key: `${reference.id}:${reference.version}`, kind: "finance" as const, reference }));
+  const messageFooter = hostMessageFooter(message, interimMark, hostRenderMessageFooter, hookContext);
   const citations = financeReferences.length
     ? mobileFinanceCitations(financeReferences, assistantText).filter((citation) =>
         mobileFinanceCitationAction(citation, Boolean(readFinanceSourceDocument)) !== "plain")
@@ -13059,10 +13071,12 @@ const MessageBubble = memo(function MessageBubble({
           </View>
         )}
       <AssistantMessageImages images={agentImages} locale={locale} readImage={readImage} />
-      {financeReferences.map((reference) => (
+      {artifactSlots.map((slot) => slot.kind === "host" ? (
+        <View key={slot.key} testID="host-artifact">{slot.node}</View>
+      ) : (
         <FinanceArtifactCard
-          key={`${reference.id}:${reference.version}`}
-          reference={reference}
+          key={slot.key}
+          reference={slot.reference}
           locale={locale}
           messageText={assistantText}
           messageArtifactReferences={financeReferences}
@@ -13081,6 +13095,7 @@ const MessageBubble = memo(function MessageBubble({
           onRetry={() => pressCitation(openCitation.citation)}
         />
       ) : null}
+      {messageFooter !== null ? <View testID="host-message-footer">{messageFooter}</View> : null}
       {messageTime ? (
         <Text style={[styles.messageTime, isUser && styles.userMessageTime, isUser && imessage && styles.imUserTime]} accessibilityLabel={`${copy.messageTime} ${messageTime}`}>
           {messageTime}
