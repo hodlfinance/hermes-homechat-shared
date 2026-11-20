@@ -28,7 +28,7 @@ import {
   type MobileFinanceSourceDocument,
 } from "./mobile-finance-artifacts";
 import { MobileFinanceActionApprovalCard } from "./mobile-finance-action-approval";
-import { approvalCardLabels, hostArtifactSlots, hostMessageFooter } from "./host-message-hooks";
+import { approvalCardLabels, composerPlaceholder, hostArtifactSlots, hostMessageFooter } from "./host-message-hooks";
 import { workspacePrivacyCopy } from "../ui/workspace-privacy-copy";
 import { openPageStarter, consumePageStarter, pageStarterTranscript, pageStarterPayload, pageStarterAfterNavigation, type PageStarterState } from "../ui/page-starter-state";
 import { pageStarterCopy } from "../ui/page-starter-copy";
@@ -10246,7 +10246,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   <TextInput
                     value={input}
                     onChangeText={setInput}
-                    placeholder={voiceControllerBusy ? t.chat.transcribing : t.chat.placeholder}
+                    placeholder={voiceControllerBusy ? t.chat.transcribing : composerPlaceholder(host.copyOverrides, t.chat.placeholder)}
                     placeholderTextColor={palette.secondary}
                     multiline
                     accessibilityLabel={staticUiCopy(appLocale)["Message"]}

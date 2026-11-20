@@ -104,3 +104,12 @@ test("approval card labels: defaults are today's words, host words override", ()
   assert.match(surface, /labels=\{host\.approvalCardLabels\}/);
   assert.match(surface, /\[approval\.approvalId\]: approvalCardLabels\(host\.approvalCardLabels\)\.failed,/);
 });
+
+test("HPD-2263: copyOverrides.composerPlaceholder replaces the composer's placeholder; absent or blank keeps today's", async () => {
+  const { composerPlaceholder } = await import("../src/host-message-hooks");
+  assert.equal(composerPlaceholder(undefined, "Ask Hermes"), "Ask Hermes");
+  assert.equal(composerPlaceholder({ composerPlaceholder: "  " }, "Ask Hermes"), "Ask Hermes");
+  assert.equal(composerPlaceholder({ composerPlaceholder: "Ask HODL Bots" }, "Ask Hermes"), "Ask HODL Bots");
+  assert.match(surface, /placeholder=\{voiceControllerBusy \? t\.chat\.transcribing : composerPlaceholder\(host\.copyOverrides, t\.chat\.placeholder\)\}/);
+  assert.match(host, /copyOverrides\?: NativeR8CopyOverrides;/);
+});

@@ -42,6 +42,7 @@ const HOST_OPTIONS: Readonly<Record<string, { hey: Verdict; hodl: Verdict }>> = 
   renderMessageFooter: { hey: "unused", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it" },
   approvalCardLabels: { hey: "unused (FIN HERMES, Confirm, Cancel)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it" },
   hiddenMenuItems: { hey: "unused (Hey keeps the left menu)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it: hides the entries that need the Hermes runtime" },
+  copyOverrides: { hey: "unused (Ask Hermes)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it: the composer names HODL Bots / LiveQuote Bots" },
   apiBaseUrl: { hey: "wired", hodl: "wired" },
   storageNamespace: { hey: "wired", hodl: "wired" },
   identity: { hey: "wired (brand icon)", hodl: "wired (default icon, Hermes copy)" },

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { ChatArtifactReference, ChatMessage } from "../core/index";
 import type {
   NativeR8ApprovalCardLabels,
+  NativeR8CopyOverrides,
   NativeR8ArtifactRenderContext,
   NativeR8MessageRenderContext,
 } from "../host";
@@ -89,4 +90,10 @@ export function hostMessageFooter(
   if (message.role !== "assistant" || message.optimistic === true || interimMark === "working") return null;
   const node = renderMessageFooter(message, context);
   return node === undefined || node === false ? null : node;
+}
+
+/** HPD-2263: the composer's placeholder: the host's where given and not blank, today's otherwise. */
+export function composerPlaceholder(overrides: NativeR8CopyOverrides | null | undefined, fallback: string): string {
+  const value = overrides?.composerPlaceholder;
+  return typeof value === "string" && value.trim() ? value : fallback;
 }

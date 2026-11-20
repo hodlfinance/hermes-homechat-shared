@@ -212,6 +212,8 @@ export type NativeR8MessageRenderContext = { locale: AppLocale; conversationId: 
 export type NativeR8ArtifactRenderContext = NativeR8MessageRenderContext & { message: ChatMessage };
 /** HPD-2263: the approval card's words; each one left out keeps today's ("FIN HERMES", "Confirm", "Cancel"). */
 export type NativeR8ApprovalCardLabels = { eyebrow?: string; confirm?: string; cancel?: string; failed?: string };
+/** HPD-2263: the host's own words for surface texts that otherwise name Hermes. Blank or absent keeps today's text. */
+export type NativeR8CopyOverrides = { composerPlaceholder?: string };
 
 export type NativeR8Host = {
   /** HPD-1722: present only in Hey Hermes. Turns on the card form, the payment approval and Settings > Cards. */
@@ -254,6 +256,8 @@ export type NativeR8Host = {
    * the host cannot serve; they are not shown. Without it nothing changes.
    */
   hiddenMenuItems?: readonly MobileHostHeaderMenuItem[];
+  /** HPD-2263: the host's words for the chat composer's placeholder. Without it "Ask Hermes" (or its translation). */
+  copyOverrides?: NativeR8CopyOverrides;
   apiBaseUrl: string;
   storageNamespace: string;
   identity: {
