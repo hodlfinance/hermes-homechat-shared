@@ -419,7 +419,19 @@ export class MobilePurchasesController {
     const tiers = (input.tiers ?? []).filter((tier, index, list) => TIER_ORDER.includes(tier) && list.indexOf(tier) === index);
     // Review of #185: a missing or broken tier offering never leaves the paywall empty;
     // the app then sells Personal from the current offering as before.
-    if (tiers.length > 0) return this.loadTierPlans(accountId, epoch, tiers).catch(() => this.loadPlans(accountId));
+    // HPD-2216: the fallback keeps this load's account-switch counter. When the account
+    // changed (or the binding was suspended) while the tier load ran, the original
+    // "account changed" error surfaces; a fresh second load would fail with "not bound".
+    if (tiers.length > 0) {
+      return this.loadTierPlans(accountId, epoch, tiers).catch((error: unknown) => {
+        if (epoch !== this.epoch) throw error;
+        return this.loadPersonalPlans(accountId, epoch);
+      });
+    }
+    return this.loadPersonalPlans(accountId, epoch);
+  }
+
+  private loadPersonalPlans(accountId: string, epoch: number): Promise<MobilePurchasePlan[]> {
     return this.runExclusive(async () => {
       const exactId = await this.assertBoundAccount(accountId, epoch);
       const offerings = await this.adapter.getOfferings();
