@@ -45,5 +45,15 @@ test("hidden entries are left out, the rest keeps its order", () => {
 });
 
 test("the surface passes the host's hidden entries to the \"...\" list", () => {
-  assert.match(surface, /mobileHostHeaderMenuItems\(\{[\s\S]{0,200}hidden: host\.hiddenMenuItems,[\s\S]{0,20}\}\)/);
+  assert.match(surface, /const hostHeaderMenuEntries = mobileHostHeaderMenuItems\(\{[\s\S]{0,200}hidden: host\.hiddenMenuItems,[\s\S]{0,20}\}\);/);
+  assert.match(surface, /items=\{hostHeaderMenuEntries\}/);
+});
+
+test("with every entry hidden the \"...\" button is not drawn; without hidden entries the list is never empty", () => {
+  assert.match(surface, /activeSubthreadHeader\.kind !== "subthread" && hostHeaderMenuEntries\.length > 0 \? \(/);
+  for (const suggestions of [true, false]) for (const tasks of [true, false]) for (const signOut of [true, false]) {
+    assert.ok(mobileHostHeaderMenuItems({ suggestions, tasks, signOut }).length > 0);
+  }
+  const all: MobileHostHeaderMenuItem[] = [...full, "tasks"];
+  assert.deepEqual(mobileHostHeaderMenuItems({ suggestions: true, tasks: true, signOut: true, hidden: all }), []);
 });

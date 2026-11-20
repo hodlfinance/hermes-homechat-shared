@@ -1804,6 +1804,14 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const [googleDeletionChallengeVersion, setGoogleDeletionChallengeVersion] = useState(0);
   const [input, setInput] = useState(initialDraft);
   const finSuggestionsEnabled = host.presentation?.finSuggestions === true;
+  // HPD-1466 / HPD-2263: the Home chat's "..." list; a host may hide entries
+  // (hiddenMenuItems). With nothing left the "..." is not drawn.
+  const hostHeaderMenuEntries = mobileHostHeaderMenuItems({
+    suggestions: finSuggestionsEnabled,
+    tasks: host.policy.preinstalledRanker,
+    signOut: host.session.mode === "standalone",
+    hidden: host.hiddenMenuItems,
+  });
   const [finSuggestionsState, setFinSuggestionsState] = useState<FinSuggestionsDeviceState>(emptyFinSuggestionsState);
   // Nothing is written before the stored states are read, so an early write
   // can never replace them with an empty set.
@@ -9553,7 +9561,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         {hostHeaderBack ? (
           // HPD-1466: one header row. The Home chat's "..." holds everything the
           // left menu offered; an automation thread keeps its own options above.
-          automationThreadHeader ? null : tab === "chat" && activeSubthreadHeader.kind !== "subthread" ? (
+          automationThreadHeader ? null : tab === "chat" && activeSubthreadHeader.kind !== "subthread" && hostHeaderMenuEntries.length > 0 ? (
             <Pressable
               style={({ pressed }) => [styles.mobilePrivacyButton, pressed && styles.systemRowPressed]}
               onPress={() => setHostHeaderMenuOpen(true)}
@@ -9697,12 +9705,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         <MobileHostHeaderMenu
           title={appCopy.productName}
           cancelLabel={t.nav.removeCancel}
-          items={mobileHostHeaderMenuItems({
-            suggestions: finSuggestionsEnabled,
-            tasks: host.policy.preinstalledRanker,
-            signOut: host.session.mode === "standalone",
-            hidden: host.hiddenMenuItems,
-          })}
+          items={hostHeaderMenuEntries}
           appLocale={appLocale}
           t={t}
           onClose={() => setHostHeaderMenuOpen(false)}

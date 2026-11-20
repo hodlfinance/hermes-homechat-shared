@@ -35,7 +35,7 @@ test("one header row: back, the thread's mark and name, and ... in the Home chat
   assert.match(surface, /mobileHostHeaderTitle\(\{ tab, session: activeChatSession, productName: appCopy\.productName, homeTitle: host\.presentation\?\.homeChatTitle/);
   assert.match(surface, /onPress=\{\(\) => setHostHeaderMenuOpen\(true\)\}[^]*?accessibilityLabel=\{mobileHostHeaderMoreLabel\(appLocale\)\}/);
   // The automation thread keeps its own options (View all automations, Delete).
-  assert.match(surface, /automationThreadHeader \? null : tab === "chat" && activeSubthreadHeader\.kind !== "subthread" \? \(\s*<Pressable/);
+  assert.match(surface, /automationThreadHeader \? null : tab === "chat" && activeSubthreadHeader\.kind !== "subthread"(?: && hostHeaderMenuEntries\.length > 0)? \? \(\s*<Pressable/);
 });
 
 test("the ... list keeps every destination of the left menu reachable", () => {
