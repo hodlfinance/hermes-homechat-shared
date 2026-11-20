@@ -19,13 +19,26 @@ export type MobileHostHeaderMenuItem =
   | "dashboard"
   | "sign_out";
 
-export function mobileHostHeaderMenuItems(input: { suggestions: boolean; tasks: boolean; signOut: boolean }): MobileHostHeaderMenuItem[] {
+/**
+ * HPD-2263 (HODL Bots engine branch only): a host may name entries of this
+ * "..." list it cannot serve (the engine has no Hermes runtime: no pages,
+ * automations, connections, AI access, dashboard ...). Those are left out.
+ * Without `hidden` the list is exactly what it was.
+ */
+export function mobileHostHeaderMenuItems(input: {
+  suggestions: boolean;
+  tasks: boolean;
+  signOut: boolean;
+  hidden?: readonly MobileHostHeaderMenuItem[] | null;
+}): MobileHostHeaderMenuItem[] {
   const items: MobileHostHeaderMenuItem[] = ["pages", "newPage"];
   if (input.suggestions) items.push("suggestions");
   if (input.tasks) items.push("tasks");
   items.push("automations", "connections", "ai_access", "account", "support", "privacy", "dashboard");
   if (input.signOut) items.push("sign_out");
-  return items;
+  if (!input.hidden || input.hidden.length === 0) return items;
+  const hidden = new Set(input.hidden);
+  return items.filter((item) => !hidden.has(item));
 }
 
 /**

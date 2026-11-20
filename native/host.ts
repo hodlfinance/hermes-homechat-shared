@@ -4,6 +4,7 @@ import type { createApiClient, ApiClientOptions, AppLocale, ChatArtifactReferenc
 import type { GuidedSetupState, GuidedSetupConnectionId, GuidedSetupConnectionChoice } from "./core/guided-setup";
 import type { createSupportRequestClient, createAnonymousSupportRequestClient } from "./core/support-request";
 import type { createNativeR8CanonicalController } from "./src/hermes-canonical";
+import type { MobileHostHeaderMenuItem } from "./src/mobile-host-header";
 import type { MobilePurchasesController } from "./src/revenuecat-purchases";
 import type { NativeSessionSecureStore } from "./src/mobile-session-storage";
 import type { MobilePalette } from "./src/mobile-palette";
@@ -248,6 +249,11 @@ export type NativeR8Host = {
   renderMessageFooter?: (message: ChatMessage, context: NativeR8MessageRenderContext) => ReactNode | null;
   /** HPD-2263: the approval card's eyebrow and buttons. Without it "FIN HERMES", "Confirm", "Cancel". */
   approvalCardLabels?: NativeR8ApprovalCardLabels;
+  /**
+   * HPD-2263: entries of the Home chat's "..." list (presentation.headerBack)
+   * the host cannot serve; they are not shown. Without it nothing changes.
+   */
+  hiddenMenuItems?: readonly MobileHostHeaderMenuItem[];
   apiBaseUrl: string;
   storageNamespace: string;
   identity: {

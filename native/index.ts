@@ -12,6 +12,7 @@ export { MobileFinanceActionApprovalCard, mobileFinanceActionApprovalCardView } 
 // HPD-2263: pure helpers behind the three optional host options (renderArtifact, renderMessageFooter, approvalCardLabels).
 export { DEFAULT_APPROVAL_CARD_LABELS, approvalCardLabels, hostArtifactSlots, hostMessageFooter } from "./src/host-message-hooks";
 export type { HostArtifactSlot } from "./src/host-message-hooks";
+export type { MobileHostHeaderMenuItem } from "./src/mobile-host-header";
 export { createNativeR8Transport } from "./transport";
 export type { NativeLiveVoicePort, NativeLiveVoiceHandle, NativeLiveVoiceState, NativeLiveVoicePhase, NativeLiveVoiceLimit } from "./src/mobile-live-voice";
 // HPD-1041: the Expo-free live voice client and WebRTC adapter (host injects react-native-webrtc).

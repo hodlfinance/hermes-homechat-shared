@@ -9701,6 +9701,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
             suggestions: finSuggestionsEnabled,
             tasks: host.policy.preinstalledRanker,
             signOut: host.session.mode === "standalone",
+            hidden: host.hiddenMenuItems,
           })}
           appLocale={appLocale}
           t={t}
