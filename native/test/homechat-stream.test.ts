@@ -33,6 +33,8 @@ class NoStreamTextDecoder {
   private readonly inner = new NativeTextDecoder();
   decode(input?: Uint8Array, options?: { stream?: boolean }) {
     if (options?.stream) throw new Error("Failed to decode: the 'stream' option is unsupported.");
+    // fast-text-encoding 1.0.6 also throws on the empty flush `decode()`.
+    if (input === undefined) throw new TypeError("Cannot read properties of undefined (reading 'buffer')");
     return this.inner.decode(input);
   }
 }
@@ -105,5 +107,47 @@ test("HPD-2263: the UTF-8 chunk decoder holds back an incomplete character", () 
   assert.equal(decoder.push(bytes.slice(0, 3)), "a");
   assert.equal(decoder.push(bytes.slice(3, 5)), "😀");
   assert.equal(decoder.push(bytes.slice(5)), "b");
+  assert.equal(decoder.finish(), "");
+});
+
+test("HPD-2268: ä, € and emoji split at every byte boundary decode with the polyfill-like TextDecoder", async () => {
+  const text = "ä€😀 Grüße";
+  const frames = new TextEncoder().encode(
+    `id: 1\nevent: message.delta\ndata: {"type":"message.delta","id":"1","runId":"run-1","payload":{"messageId":"m","text":"${text}"}}\n\n` +
+    'id: 2\nevent: run.status\ndata: {"type":"run.status","id":"2","runId":"run-1","payload":{"state":"completed"}}\n\n',
+  );
+  const body = new ReadableStream<Uint8Array<ArrayBuffer>>({
+    start(controller) {
+      for (let index = 0; index < frames.length; index += 1) controller.enqueue(frames.slice(index, index + 1));
+      controller.close();
+    },
+  });
+  const texts: string[] = [];
+  const result = await withNoStreamTextDecoder(() => createMobileHomechatEventStream(async () => ({ body, ok: true, status: 200, text: async () => "" }))(
+    "run-1",
+    { onEvent: (event) => { const e = event as { type: string; text?: string }; if (e.type === "message.delta") texts.push(e.text ?? ""); } },
+  ));
+  assert.deepEqual(result, { cursor: "2", terminal: true });
+  assert.deepEqual(texts, [text]);
+});
+
+test("HPD-2268: the chunk decoder never calls decode() without bytes and keeps split ä, € and emoji whole", () => {
+  const calls: Array<Uint8Array | undefined> = [];
+  const decoder = createUtf8ChunkDecoder({ decode: (input?: Uint8Array) => { calls.push(input); return new NoStreamTextDecoder().decode(input); } });
+  const bytes = new TextEncoder().encode("ä€😀");
+  let out = "";
+  for (let index = 0; index < bytes.length; index += 1) out += decoder.push(bytes.slice(index, index + 1));
+  out += decoder.push(new Uint8Array(0));
+  out += decoder.push(undefined);
+  out += decoder.finish();
+  assert.equal(out, "ä€😀");
+  assert.ok(calls.every((input) => input !== undefined && input.byteLength > 0));
+});
+
+test("HPD-2268: a truncated character at the end of the stream is flushed with bytes, never an empty decode()", () => {
+  const decoder = createUtf8ChunkDecoder(new NoStreamTextDecoder());
+  const bytes = new TextEncoder().encode("a€");
+  assert.equal(decoder.push(bytes.slice(0, 2)), "a");
+  assert.equal(decoder.finish(), "\ufffd");
   assert.equal(decoder.finish(), "");
 });
