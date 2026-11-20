@@ -36,6 +36,50 @@ function percentile(values: readonly number[], proportion: number) {
   return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * proportion) - 1))] ?? 0;
 }
 
+/**
+ * HPD-2263: UTF-8 text of a byte stream, chunk by chunk, without the
+ * `{ stream: true }` option of TextDecoder. React Native's Hermes has no
+ * TextDecoder; the HODL app installs fast-text-encoding, whose decode throws
+ * "the 'stream' option is unsupported" on every chunk, so every event stream
+ * failed at its first byte. A multi-byte character cut by a chunk boundary is
+ * held back until its remaining bytes arrive.
+ */
+export function createUtf8ChunkDecoder(decoder: { decode(input?: Uint8Array): string } = new TextDecoder()) {
+  let pending: Uint8Array = new Uint8Array(0);
+  const completeLength = (bytes: Uint8Array) => {
+    // Walk back over at most three continuation bytes to the lead byte of the last character.
+    let index = bytes.length - 1;
+    let continuation = 0;
+    while (index >= 0 && continuation < 3 && (bytes[index]! & 0xc0) === 0x80) {
+      index -= 1;
+      continuation += 1;
+    }
+    if (index < 0) return bytes.length;
+    const lead = bytes[index]!;
+    const needed = lead >= 0xf0 ? 4 : lead >= 0xe0 ? 3 : lead >= 0xc0 ? 2 : 1;
+    return needed > continuation + 1 ? index : bytes.length;
+  };
+  return {
+    push(chunk: Uint8Array | undefined): string {
+      if (!chunk?.byteLength) return "";
+      const bytes = pending.byteLength ? new Uint8Array(pending.byteLength + chunk.byteLength) : chunk;
+      if (pending.byteLength) {
+        bytes.set(pending, 0);
+        bytes.set(chunk, pending.byteLength);
+      }
+      const end = completeLength(bytes);
+      pending = bytes.slice(end);
+      return end ? decoder.decode(bytes.subarray(0, end)) : "";
+    },
+    finish(): string {
+      if (!pending.byteLength) return "";
+      const rest = pending;
+      pending = new Uint8Array(0);
+      return decoder.decode(rest);
+    },
+  };
+}
+
 export function createMobileHomechatEventStream(
   open: (runId: string, cursor: string | null, signal?: AbortSignal) => Promise<MobileHomechatResponse>,
   latency: MobileHomechatLatencyOptions = {},
@@ -85,7 +129,7 @@ export function createMobileHomechatEventStream(
     }
 
     const decoder = createHomechatEventStreamDecoder({ cursor: context.cursor });
-    const textDecoder = new TextDecoder();
+    const textDecoder = createUtf8ChunkDecoder();
     let terminal = false;
     const observeDelta = () => {
       const observedAt = now();
@@ -124,9 +168,9 @@ export function createMobileHomechatEventStream(
           observation.firstByteObserved = true;
           emitTiming({ firstByteMs: Math.max(0, now() - observation.startedAt) });
         }
-        await emit(textDecoder.decode(result.value, { stream: true }));
+        await emit(textDecoder.push(result.value));
       }
-      await emit(textDecoder.decode());
+      await emit(textDecoder.finish());
       const remainder = decoder.finish();
       if (remainder.cursor) context.onCursor?.(remainder.cursor);
       for (const event of remainder.events) {
@@ -143,6 +187,17 @@ export function createMobileHomechatEventStream(
           reader.releaseLock();
         } catch {
           // A completed reply must not turn into a user-visible teardown error.
+        }
+      } else {
+        // HPD-2263: a stream that ends without its terminal event (an error in
+        // this loop, a parse failure, a dropped connection) closes its request.
+        // Before, the reconnect opened a new request every 1.6 s while the old
+        // ones stayed open, until the device's connections to the host were used
+        // up and even Stop could not reach the server.
+        try {
+          void Promise.resolve(reader.cancel?.()).catch(() => undefined);
+        } catch {
+          // Closing is best effort; the reconnect proceeds either way.
         }
       }
     }
