@@ -213,7 +213,13 @@ export type NativeR8ArtifactRenderContext = NativeR8MessageRenderContext & { mes
 /** HPD-2263: the approval card's words; each one left out keeps today's ("FIN HERMES", "Confirm", "Cancel"). */
 export type NativeR8ApprovalCardLabels = { eyebrow?: string; confirm?: string; cancel?: string; failed?: string };
 /** HPD-2263: the host's own words for surface texts that otherwise name Hermes. Blank or absent keeps today's text. */
-export type NativeR8CopyOverrides = { composerPlaceholder?: string };
+export type NativeR8CopyOverrides = {
+  composerPlaceholder?: string;
+  /** HPD-2263: title of the empty new conversation ("Start with one message"). */
+  emptyChatTitle?: string;
+  /** HPD-2263: line under that title when the chat is ready ("Ask Hermes what you want to do, ..."). */
+  emptyChatReady?: string;
+};
 
 export type NativeR8Host = {
   /** HPD-1722: present only in Hey Hermes. Turns on the card form, the payment approval and Settings > Cards. */

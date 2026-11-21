@@ -94,6 +94,15 @@ export function hostMessageFooter(
 
 /** HPD-2263: the composer's placeholder: the host's where given and not blank, today's otherwise. */
 export function composerPlaceholder(overrides: NativeR8CopyOverrides | null | undefined, fallback: string): string {
-  const value = overrides?.composerPlaceholder;
+  return copyOverride(overrides, "composerPlaceholder", fallback);
+}
+
+/** One host word override: the host's text where given and not blank, today's otherwise. */
+export function copyOverride(
+  overrides: NativeR8CopyOverrides | null | undefined,
+  key: keyof NativeR8CopyOverrides,
+  fallback: string,
+): string {
+  const value = overrides?.[key];
   return typeof value === "string" && value.trim() ? value : fallback;
 }

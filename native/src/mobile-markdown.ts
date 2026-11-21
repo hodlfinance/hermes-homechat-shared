@@ -19,6 +19,44 @@ export type MobileMarkdownBlock =
       rows: MobileMarkdownInlineSegment[][][];
     };
 
+/**
+ * HPD-2263: the width of each table column, sized to its content. Every column
+ * shared the bubble's width equally, so a six-column table broke its header
+ * into single letters ("n", "t"). A column is now at least as wide as its
+ * longest word (headers never break inside a word) and its widest cell up to a
+ * cap, never under the minimum; a table wider than the screen scrolls sideways.
+ * Widths are estimates from character counts at the table's 15-point type.
+ */
+export const MARKDOWN_TABLE_COLUMN_MIN_WIDTH = 64;
+export const MARKDOWN_TABLE_COLUMN_MAX_WIDTH = 220;
+const TABLE_CELL_PADDING = 20; // 9 + 9 padding, 1 border, 1 spare
+const TABLE_CHAR_WIDTH = 8.6;
+const TABLE_HEADER_CHAR_WIDTH = 9.2;
+
+function cellText(cell: MobileMarkdownInlineSegment[]): string {
+  return cell.map((segment) => segment.text).join("").replace(/\s+/g, " ").trim();
+}
+
+export function markdownTableColumnWidths(block: { header: MobileMarkdownInlineSegment[][]; rows: MobileMarkdownInlineSegment[][][] }): number[] {
+  const rows = block.header.length ? [block.header, ...block.rows] : block.rows;
+  const columnCount = rows.reduce((count, row) => Math.max(count, row.length), 0);
+  const widths: number[] = [];
+  for (let column = 0; column < columnCount; column += 1) {
+    let width = MARKDOWN_TABLE_COLUMN_MIN_WIDTH;
+    rows.forEach((row, rowIndex) => {
+      const text = cellText(row[column] || []);
+      if (!text) return;
+      const charWidth = block.header.length && rowIndex === 0 ? TABLE_HEADER_CHAR_WIDTH : TABLE_CHAR_WIDTH;
+      const longestWord = text.split(" ").reduce((longest, word) => Math.max(longest, word.length), 0);
+      const wordWidth = Math.ceil(longestWord * charWidth + TABLE_CELL_PADDING);
+      const fullWidth = Math.min(Math.ceil(text.length * charWidth + TABLE_CELL_PADDING), MARKDOWN_TABLE_COLUMN_MAX_WIDTH);
+      width = Math.max(width, wordWidth, fullWidth);
+    });
+    widths.push(width);
+  }
+  return widths;
+}
+
 // Plain character class, no Unicode property escapes: the app's JS engine must parse it.
 const WORDLIKE = /[0-9A-Za-z_*\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF]/;
 

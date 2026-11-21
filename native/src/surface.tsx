@@ -28,7 +28,7 @@ import {
   type MobileFinanceSourceDocument,
 } from "./mobile-finance-artifacts";
 import { MobileFinanceActionApprovalCard } from "./mobile-finance-action-approval";
-import { approvalCardLabels, composerPlaceholder, hostArtifactSlots, hostMessageFooter } from "./host-message-hooks";
+import { approvalCardLabels, composerPlaceholder, copyOverride, hostArtifactSlots, hostMessageFooter } from "./host-message-hooks";
 import { workspacePrivacyCopy } from "../ui/workspace-privacy-copy";
 import { openPageStarter, consumePageStarter, pageStarterTranscript, pageStarterPayload, pageStarterAfterNavigation, type PageStarterState } from "../ui/page-starter-state";
 import { pageStarterCopy } from "../ui/page-starter-copy";
@@ -364,7 +364,7 @@ import {
   mobileVisibleChatClarifyRequest,
 } from "./mobile-chat-user-decision";
 import { mobileAssistantLinkSegments } from "./mobile-message-links";
-import { mobileMarkdownBlocks, type MobileMarkdownInlineSegment } from "./mobile-markdown";
+import { MARKDOWN_TABLE_COLUMN_MIN_WIDTH, markdownTableColumnWidths, mobileMarkdownBlocks, type MobileMarkdownBlock, type MobileMarkdownInlineSegment } from "./mobile-markdown";
 import { mobileInterimReplyLabel, mobileInterimReplyMark, type MobileInterimReplyMark } from "./mobile-interim-reply";
 import { mobileBlockingRunId, mobileRunStatusIsFinished, mobileStoppedRunStatus } from "./mobile-stop-target";
 import { FinSuggestionCard, FinSuggestionsPage } from "./FinSuggestions";
@@ -588,7 +588,7 @@ import {
 } from "./mobile-voice-note";
 
 
-import type { NativeR8Host, NativeAudioPlayer as AudioPlayer, NativeNotification } from "../host";
+import type { NativeR8Host, NativeR8CopyOverrides, NativeAudioPlayer as AudioPlayer, NativeNotification } from "../host";
 
 /**
  * R8 native implementation extracted from the accepted App89 source.
@@ -10031,7 +10031,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 pendingAssistantText: Boolean(pendingAssistantText),
                 switchingConversation: chatSessionsBusy,
               }) ? (
-                <ChatEmptyState chatAccess={chatAccess} suggestions={finSuggestionsEnabled ? [] : chatSuggestions} copy={t} onUseSuggestion={startChatSuggestion} />
+                <ChatEmptyState chatAccess={chatAccess} suggestions={finSuggestionsEnabled ? [] : chatSuggestions} copy={t} copyOverrides={host.copyOverrides} onUseSuggestion={startChatSuggestion} />
               ) : null}
               {visibleMobileMessages.map((message) => (
                 <MessageBubble
@@ -12861,20 +12861,22 @@ function ChatEmptyState({
   chatAccess,
   suggestions,
   copy,
+  copyOverrides,
   onUseSuggestion,
 }: {
   chatAccess: ReturnType<typeof mobileChatAccessView>;
   suggestions: ChatSuggestion[];
   copy: ReturnType<typeof mobileText>;
+  copyOverrides?: NativeR8CopyOverrides;
   onUseSuggestion: (suggestion: ChatSuggestion) => void;
 }) {
   const ordered = [...suggestions].sort((left, right) => Number(Boolean(left.usedAt)) - Number(Boolean(right.usedAt))).slice(0, 5);
   return (
     <View style={styles.chatEmptyState}>
       <MessageSquare size={20} color={palette.muted} />
-      <Text style={styles.chatEmptyTitle}>{copy.chat.emptyTitle}</Text>
+      <Text style={styles.chatEmptyTitle}>{copyOverride(copyOverrides, "emptyChatTitle", copy.chat.emptyTitle)}</Text>
       <Text style={styles.muted}>
-        {chatAccess.ready ? copy.chat.emptyReady : chatAccess.waitingHint}
+        {chatAccess.ready ? copyOverride(copyOverrides, "emptyChatReady", copy.chat.emptyReady) : chatAccess.waitingHint}
       </Text>
       {chatAccess.ready && ordered.length ? (
         <View style={styles.suggestionChipWrap}>
@@ -13525,6 +13527,19 @@ function MobileMarkdownInlineText({
   );
 }
 
+// HPD-2263: one fixed width per column; a column grows (in proportion) only to
+// fill a bubble that is wider than the table.
+const markdownTableWidthCache = new WeakMap<object, number[]>();
+function markdownTableCellWidth(block: Extract<MobileMarkdownBlock, { kind: "table" }>, cellIndex: number) {
+  let widths = markdownTableWidthCache.get(block);
+  if (!widths) {
+    widths = markdownTableColumnWidths(block);
+    markdownTableWidthCache.set(block, widths);
+  }
+  const width = widths[cellIndex] ?? MARKDOWN_TABLE_COLUMN_MIN_WIDTH;
+  return { width, flexGrow: width, flexShrink: 0 };
+}
+
 function LinkedMessageText({
   locale,
   text,
@@ -13582,9 +13597,17 @@ function MarkdownTextBlocks({
           <Text style={styles.codeBlockText} selectable>{block.text}</Text>
         </View>
       ) : block.kind === "table" ? (
-        <View
+        // HPD-2263: columns size to their content and a table wider than the
+        // bubble scrolls sideways. Every cell has a fixed width: text in a
+        // horizontal scroll view without one measures at zero width and grows
+        // one character per line (the 13,928-point code block above).
+        <ScrollView
           key={`table-${blockIndex}`}
+          horizontal
+          bounces={false}
+          showsHorizontalScrollIndicator
           style={styles.markdownTableViewport}
+          contentContainerStyle={styles.markdownTableScrollContent}
           accessibilityLabel={mobileChatCardCopy(locale).table}
         >
           <View style={styles.markdownTable}>
@@ -13598,6 +13621,7 @@ function MarkdownTextBlocks({
                     key={`table-${blockIndex}-row-${rowIndex}-cell-${cellIndex}`}
                     style={[
                       styles.markdownTableCell,
+                      markdownTableCellWidth(block, cellIndex),
                       block.header.length > 0 && rowIndex === 0 && styles.markdownTableHeaderCell,
                       cellIndex > 0 && styles.markdownTableColumnBorder,
                     ]}
@@ -13613,7 +13637,7 @@ function MarkdownTextBlocks({
               </View>
             ))}
           </View>
-        </View>
+        </ScrollView>
       ) : block.kind === "list" ? (
         <View key={`list-${blockIndex}`} style={styles.markdownList} accessibilityRole="list">
           {block.items.map((item, itemIndex) => (
@@ -16950,10 +16974,13 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     maxWidth: "100%",
     minWidth: 0,
+    flexGrow: 0,
+  },
+  markdownTableScrollContent: {
+    flexGrow: 1,
   },
   markdownTable: {
-    alignSelf: "stretch",
-    maxWidth: "100%",
+    flexGrow: 1,
     borderWidth: 1,
     borderColor: palette.line,
     borderRadius: 8,
@@ -16969,9 +16996,6 @@ const styles = StyleSheet.create({
     borderTopColor: palette.line,
   },
   markdownTableCell: {
-    flex: 1,
-    flexBasis: 0,
-    minWidth: 0,
     paddingHorizontal: 9,
     paddingVertical: 8,
     justifyContent: "flex-start",

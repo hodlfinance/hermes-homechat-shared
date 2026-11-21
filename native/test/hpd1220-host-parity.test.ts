@@ -42,7 +42,7 @@ const HOST_OPTIONS: Readonly<Record<string, { hey: Verdict; hodl: Verdict }>> = 
   renderMessageFooter: { hey: "unused", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it" },
   approvalCardLabels: { hey: "unused (FIN HERMES, Confirm, Cancel)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it" },
   hiddenMenuItems: { hey: "unused (Hey keeps the left menu)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it: hides the entries that need the Hermes runtime" },
-  copyOverrides: { hey: "unused (Ask Hermes)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it: the composer names HODL Bots / LiveQuote Bots" },
+  copyOverrides: { hey: "unused (Ask Hermes; Start with one message / Ask Hermes what you want to do, plan, or understand.)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it: the composer and the empty new conversation name HODL Bots / LiveQuote Bots" },
   streamDeltaMode: { hey: "unused (the Hermes runtime's deltas keep the shared merge)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it: the engine's deltas are new text only" },
   apiBaseUrl: { hey: "wired", hodl: "wired" },
   storageNamespace: { hey: "wired", hodl: "wired" },
@@ -257,4 +257,17 @@ test("HPD-1220: the live line says Hey's states in both apps: Getting ready, Thi
   // The canonical "waiting" run state is the approval wait, not "Thinking".
   const canonical = readFileSync(new URL("../src/hermes-canonical.ts", import.meta.url), "utf8");
   assert.match(canonical, /status === "waiting" \? "waiting_for_approval" : status/);
+});
+
+// HPD-2263: shared rendering both hosts get, recorded here because it changes
+// what Hey shows. Markdown tables in chat: before, every column took an equal
+// share of the bubble (a six-column header broke into single letters); now each
+// column is sized to its content (minimum 64 pt, longest word never broken,
+// long text capped at 220 pt and wrapped) and a table wider than the bubble
+// scrolls sideways. Hey, HODL Bots and LiveQuote Bots render the same; a table
+// that fits stretches to the bubble as before.
+test("HPD-2263: markdown tables render the same in Hey and HODL: content-sized columns, sideways scroll", () => {
+  const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  assert.match(surface, /markdownTableCellWidth\(block, cellIndex\)/);
+  assert.doesNotMatch(surface, /host\.[A-Za-z]+[^\n]*markdownTableCellWidth/);
 });

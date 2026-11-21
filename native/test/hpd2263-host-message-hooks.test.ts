@@ -113,3 +113,15 @@ test("HPD-2263: copyOverrides.composerPlaceholder replaces the composer's placeh
   assert.match(surface, /placeholder=\{voiceControllerBusy \? t\.chat\.transcribing : composerPlaceholder\(host\.copyOverrides, t\.chat\.placeholder\)\}/);
   assert.match(host, /copyOverrides\?: NativeR8CopyOverrides;/);
 });
+
+test("HPD-2263: copyOverrides.emptyChatTitle / emptyChatReady replace the empty new conversation's words; absent or blank keeps today's", async () => {
+  const { copyOverride } = await import("../src/host-message-hooks");
+  assert.equal(copyOverride(undefined, "emptyChatReady", "Ask Hermes what you want to do, plan, or understand."), "Ask Hermes what you want to do, plan, or understand.");
+  assert.equal(copyOverride({ emptyChatReady: " " }, "emptyChatReady", "Ask Hermes"), "Ask Hermes");
+  assert.equal(copyOverride({ emptyChatReady: "Ask HODL Bots about your portfolio." }, "emptyChatReady", "Ask Hermes"), "Ask HODL Bots about your portfolio.");
+  assert.match(surface, /\{copyOverride\(copyOverrides, "emptyChatTitle", copy\.chat\.emptyTitle\)\}/);
+  assert.match(surface, /chatAccess\.ready \? copyOverride\(copyOverrides, "emptyChatReady", copy\.chat\.emptyReady\) : chatAccess\.waitingHint/);
+  assert.match(surface, /<ChatEmptyState [^>]*copyOverrides=\{host\.copyOverrides\}/);
+  assert.match(host, /emptyChatTitle\?: string;/);
+  assert.match(host, /emptyChatReady\?: string;/);
+});
