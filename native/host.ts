@@ -258,6 +258,12 @@ export type NativeR8Host = {
   hiddenMenuItems?: readonly MobileHostHeaderMenuItem[];
   /** HPD-2263: the host's words for the chat composer's placeholder. Without it "Ask Hermes" (or its translation). */
   copyOverrides?: NativeR8CopyOverrides;
+  /**
+   * HPD-2263: "append" when the host's chat server sends every message delta as
+   * new text only (the HODL Bots engine). Without it the deltas go through the
+   * shared draft merge unchanged.
+   */
+  streamDeltaMode?: "append";
   apiBaseUrl: string;
   storageNamespace: string;
   identity: {

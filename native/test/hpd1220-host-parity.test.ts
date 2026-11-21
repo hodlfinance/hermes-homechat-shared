@@ -43,6 +43,7 @@ const HOST_OPTIONS: Readonly<Record<string, { hey: Verdict; hodl: Verdict }>> = 
   approvalCardLabels: { hey: "unused (FIN HERMES, Confirm, Cancel)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it" },
   hiddenMenuItems: { hey: "unused (Hey keeps the left menu)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it: hides the entries that need the Hermes runtime" },
   copyOverrides: { hey: "unused (Ask Hermes)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it: the composer names HODL Bots / LiveQuote Bots" },
+  streamDeltaMode: { hey: "unused (the Hermes runtime's deltas keep the shared merge)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it: the engine's deltas are new text only" },
   apiBaseUrl: { hey: "wired", hodl: "wired" },
   storageNamespace: { hey: "wired", hodl: "wired" },
   identity: { hey: "wired (brand icon)", hodl: "wired (default icon, Hermes copy)" },

@@ -2704,6 +2704,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       streamRun: createMobileHomechatEventStream(
         (runId, cursor, signal) => hermesApi.runEventsResponse(runId, { lastEventId: cursor, signal }),
         {
+          ...(host.streamDeltaMode === "append" ? { deltaMode: "append" as const } : {}),
           startedAt: (runId: string) => chatLatencyRef.current?.runId === runId ? chatLatencyRef.current.startedAt : null,
           onTiming: (timing: Partial<ChatLatencySummary>, runId: string) => {
             if (chatLatencyRef.current?.runId === runId) recordMobileChatLatency(timing);

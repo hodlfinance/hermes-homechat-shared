@@ -3,6 +3,7 @@ import {
   isTerminalHomechatEvent,
   type ChatLatencySummary,
   type ChatRun,
+  type SharedHomechatCanonicalEvent,
   type SharedHomechatRunTransport,
 } from "../core/index";
 import { HermesApiClientError } from "../core/hermes-api-client";
@@ -10,6 +11,15 @@ import { HermesApiClientError } from "../core/hermes-api-client";
 type MobileHomechatResponse = Pick<Response, "body" | "ok" | "status" | "text">;
 
 export type MobileHomechatLatencyOptions = {
+  /**
+   * HPD-2263: "append" when every message delta is new text to add (the HODL
+   * Bots engine). The shared draft merge also accepts snapshots and replays and
+   * drops a delta it already finds in the draft, so short token deltas ("c",
+   * " ", " −") vanished while streaming. In this mode the stream adds each
+   * delta to the run's draft and hands on the whole draft as a `replace` delta.
+   * Absent: deltas pass unchanged.
+   */
+  deltaMode?: "append";
   now?: () => number;
   startedAt?: (runId: string) => number | null;
   onTiming?: (timing: Partial<ChatLatencySummary>, runId: string) => void;
@@ -80,6 +90,35 @@ export function createUtf8ChunkDecoder(decoder: { decode(input?: Uint8Array): st
   };
 }
 
+/**
+ * HPD-2263: turns append-only message deltas into whole-draft `replace` deltas.
+ * The draft is kept per run across reconnects; a stream opened without a cursor
+ * replays the run from its first event, so its draft starts empty again.
+ */
+export function createAppendDeltaDrafts(limit = 32) {
+  const drafts = new Map<string, string>();
+  return {
+    open(runId: string, cursor: string | null) {
+      if (!cursor) drafts.delete(runId);
+    },
+    apply<Event extends SharedHomechatCanonicalEvent>(runId: string, event: Event): Event {
+      if (event.type !== "message.delta") return event;
+      const payload = (event.payload ?? {}) as Record<string, unknown>;
+      if (payload.clarifyRequest !== undefined || payload.clarifyId !== undefined) return event;
+      const text = typeof (event as { text?: unknown }).text === "string" ? (event as { text: string }).text : "";
+      const replace = (event as { replace?: boolean }).replace === true || payload.replace === true;
+      const draft = payload.retracted === true ? "" : replace ? text : `${drafts.get(runId) ?? ""}${text}`;
+      if (!drafts.has(runId) && drafts.size >= limit) drafts.delete(drafts.keys().next().value!);
+      drafts.set(runId, draft);
+      if (payload.retracted === true) return event;
+      return { ...event, text: draft, replace: true, payload: { ...payload, text: draft, replace: true } };
+    },
+    end(runId: string) {
+      drafts.delete(runId);
+    },
+  };
+}
+
 export function createMobileHomechatEventStream(
   open: (runId: string, cursor: string | null, signal?: AbortSignal) => Promise<MobileHomechatResponse>,
   latency: MobileHomechatLatencyOptions = {},
@@ -96,6 +135,7 @@ export function createMobileHomechatEventStream(
     deltaGaps: number[];
     maxGapMs: number;
   }>();
+  const appendDrafts = latency.deltaMode === "append" ? createAppendDeltaDrafts() : null;
   return async (runId, context) => {
     const now = latency.now ?? (() => performance.now());
     if (!observations.has(runId) && observations.size >= 32) observations.delete(observations.keys().next().value!);
@@ -128,6 +168,7 @@ export function createMobileHomechatEventStream(
       throw new Error("Streaming is unavailable on this device; switching to polling.");
     }
 
+    appendDrafts?.open(runId, context.cursor ?? null);
     const decoder = createHomechatEventStreamDecoder({ cursor: context.cursor });
     const textDecoder = createUtf8ChunkDecoder();
     let terminal = false;
@@ -150,10 +191,11 @@ export function createMobileHomechatEventStream(
     const emit = async (chunk: string) => {
       const parsed = decoder.push(chunk);
       if (parsed.cursor) context.onCursor?.(parsed.cursor);
-      for (const event of parsed.events) {
-        if (event.runId && event.runId !== runId) {
+      for (const parsedEvent of parsed.events) {
+        if (parsedEvent.runId && parsedEvent.runId !== runId) {
           throw new Error("Homechat stream crossed the active run boundary.");
         }
+        const event = appendDrafts ? appendDrafts.apply(runId, parsedEvent) : parsedEvent;
         if (event.type === "message.delta") observeDelta();
         await context.onEvent(event);
         if (isTerminalHomechatEvent(event)) terminal = true;
@@ -173,10 +215,11 @@ export function createMobileHomechatEventStream(
       await emit(textDecoder.finish());
       const remainder = decoder.finish();
       if (remainder.cursor) context.onCursor?.(remainder.cursor);
-      for (const event of remainder.events) {
-        if (event.runId && event.runId !== runId) {
+      for (const remainderEvent of remainder.events) {
+        if (remainderEvent.runId && remainderEvent.runId !== runId) {
           throw new Error("Homechat stream crossed the active run boundary.");
         }
+        const event = appendDrafts ? appendDrafts.apply(runId, remainderEvent) : remainderEvent;
         if (event.type === "message.delta") observeDelta();
         await context.onEvent(event);
         if (isTerminalHomechatEvent(event)) terminal = true;
@@ -214,6 +257,7 @@ export function createMobileHomechatEventStream(
       });
       observations.delete(runId);
     }
+    if (terminal) appendDrafts?.end(runId);
 
     return { cursor: decoder.getCursor(), terminal };
   };
