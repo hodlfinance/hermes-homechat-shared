@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createHomechatClientState, reduceHomechatClientState } from "../../src/index";
+import { createHomechatClientState, reduceHomechatClientState, type SharedHomechatCanonicalEvent } from "../../src/index";
 import { createMobileHomechatEventStream, createUtf8ChunkDecoder } from "../src/homechat-stream";
 
 test("releases a terminal Expo fetch reader without cancelling its native stream", async () => {
@@ -194,6 +194,66 @@ test("HPD-2263: append mode keeps the draft across a resumed stream and starts o
   await stream("run-1", { cursor: null, onEvent: onEvent as never });
   assert.equal(seen[0], ENGINE_DELTAS[0]);
   assert.equal(seen.at(-1), ENGINE_TEXT);
+});
+
+test("HPD-2263: append mode resets the draft when the server answers a cursor with a full replay (X-Hermes-Replay: reset)", async () => {
+  const shownBefore = ENGINE_DELTAS.slice(0, 4).join("");
+  const responses = [
+    { bytes: engineFrames(ENGINE_DELTAS.slice(0, 4), 1, false), replay: "full" },
+    { bytes: engineFrames(ENGINE_DELTAS, 1, true), replay: "reset" },
+  ];
+  const stream = createMobileHomechatEventStream(async () => {
+    const next = responses.shift()!;
+    return { body: chunked(next.bytes, 7), ok: true, status: 200, text: async () => "", headers: new Headers({ "X-Hermes-Replay": next.replay }) };
+  }, { deltaMode: "append" });
+  let state = createHomechatClientState();
+  const shown: string[] = [];
+  const onEvent = (raw: unknown) => {
+    const event = raw as SharedHomechatCanonicalEvent;
+    state = reduceHomechatClientState(state, { type: "run.event", event });
+    if (event.type === "message.delta") shown.push(state.streamingText);
+  };
+  const first = await stream("run-1", { onEvent });
+  assert.deepEqual(first, { cursor: "4", terminal: false });
+  assert.equal(shown.at(-1), shownBefore);
+  shown.length = 0;
+  await stream("run-1", { cursor: "4", onEvent });
+  // The replay is not appended onto the old draft, and the shown text never gets shorter.
+  assert.equal(shown.at(-1), ENGINE_TEXT);
+  for (const text of shown) {
+    assert.ok(text.length >= shownBefore.length, `shortened to ${JSON.stringify(text)}`);
+    assert.ok(ENGINE_TEXT.startsWith(text), `not a prefix: ${JSON.stringify(text)}`);
+  }
+});
+
+test("HPD-2263: append mode with a cursor but no known draft asks for a full replay and never cuts the shown text", async () => {
+  const shownBefore = ENGINE_DELTAS.slice(0, 4).join("");
+  const opened: (string | null)[] = [];
+  // A fresh stream instance (for example after the transport was rebuilt): no draft for run-1.
+  const stream = createMobileHomechatEventStream(async (_runId, cursor) => {
+    opened.push(cursor);
+    return { body: chunked(engineFrames(ENGINE_DELTAS, 1, true), 5), ok: true, status: 200, text: async () => "", headers: new Headers({ "X-Hermes-Replay": "full" }) };
+  }, { deltaMode: "append" });
+  const seen: string[] = [];
+  await stream("run-1", { cursor: "4", onEvent: ((event: { type: string; text?: string }) => {
+    if (event.type === "message.delta") seen.push(event.text ?? "");
+  }) as never });
+  assert.deepEqual(opened, [null]);
+  // Held back up to the old cursor: the first delta is the text already shown, then it grows.
+  assert.equal(seen[0], shownBefore);
+  assert.equal(seen.at(-1), ENGINE_TEXT);
+  seen.forEach((text, index) => assert.equal(text, ENGINE_DELTAS.slice(0, index + 4).join("")));
+
+  // A cursor the replay never reaches: everything is held, then the whole draft comes before the terminal event.
+  const order: string[] = [];
+  const other = createMobileHomechatEventStream(async () => ({
+    body: chunked(engineFrames(ENGINE_DELTAS, 1, true), 64), ok: true, status: 200, text: async () => "",
+  }), { deltaMode: "append" });
+  const result = await other("run-1", { cursor: "99", onEvent: ((event: { type: string; text?: string }) => {
+    order.push(event.type === "message.delta" ? `delta:${event.text}` : event.type);
+  }) as never });
+  assert.equal(result && result.terminal, true);
+  assert.deepEqual(order, [`delta:${ENGINE_TEXT}`, "run.status"]);
 });
 
 test("HPD-2263: append mode follows a retraction and a replace delta", async () => {

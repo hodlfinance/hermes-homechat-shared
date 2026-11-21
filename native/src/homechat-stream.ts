@@ -8,7 +8,10 @@ import {
 } from "../core/index";
 import { HermesApiClientError } from "../core/hermes-api-client";
 
-type MobileHomechatResponse = Pick<Response, "body" | "ok" | "status" | "text">;
+type MobileHomechatResponse = Pick<Response, "body" | "ok" | "status" | "text"> & {
+  /** HPD-2263: read for `X-Hermes-Replay` (full | resume | reset); optional for test doubles. */
+  headers?: { get(name: string): string | null } | null;
+};
 
 export type MobileHomechatLatencyOptions = {
   /**
@@ -92,29 +95,94 @@ export function createUtf8ChunkDecoder(decoder: { decode(input?: Uint8Array): st
 
 /**
  * HPD-2263: turns append-only message deltas into whole-draft `replace` deltas.
- * The draft is kept per run across reconnects; a stream opened without a cursor
- * replays the run from its first event, so its draft starts empty again.
+ * The draft is kept per run across reconnects. A replay from the run's first
+ * event (a stream opened without a cursor, or the server's `X-Hermes-Replay:
+ * full|reset` answer to a cursor) rebuilds the draft from empty, so replayed
+ * text is never appended onto the old draft. While a replay rebuilds text the
+ * user has already seen, its deltas are held back, so the shown text is never
+ * cut to a shorter prefix:
+ * - after a reset, until the rebuilt draft reaches the old draft (or departs from it);
+ * - when a cursor is given but no draft is known for the run (a fresh stream
+ *   instance), the stream asks for a full replay (`resumeCursor` returns null)
+ *   and holds deltas back up to the event with the old cursor's id.
+ * A terminal event that arrives while deltas are held back is preceded by the
+ * whole draft, so nothing is lost.
  */
 export function createAppendDeltaDrafts(limit = 32) {
   const drafts = new Map<string, string>();
+  const holds = new Map<string, { untilId?: string; floor?: string; held?: SharedHomechatCanonicalEvent }>();
+  const remember = (runId: string, draft: string) => {
+    if (!drafts.has(runId) && drafts.size >= limit) drafts.delete(drafts.keys().next().value!);
+    drafts.set(runId, draft);
+  };
+  const asReplace = <Event extends SharedHomechatCanonicalEvent>(event: Event, draft: string): Event => {
+    const payload = (event.payload ?? {}) as Record<string, unknown>;
+    return { ...event, text: draft, replace: true, payload: { ...payload, text: draft, replace: true } };
+  };
   return {
-    open(runId: string, cursor: string | null) {
-      if (!cursor) drafts.delete(runId);
+    /** The cursor to open the stream with: null (full replay) when a cursor is given but no draft is known. */
+    resumeCursor(runId: string, cursor: string | null): string | null {
+      return cursor && !drafts.has(runId) ? null : cursor;
     },
-    apply<Event extends SharedHomechatCanonicalEvent>(runId: string, event: Event): Event {
-      if (event.type !== "message.delta") return event;
+    /**
+     * Called once the stream is open. `requested` is the caller's cursor, `sent` the one
+     * the stream was opened with, `replay` the server's `X-Hermes-Replay` answer.
+     */
+    open(runId: string, requested: string | null, sent: string | null, replay: string | null = null) {
+      // A plain resume keeps a hold that a dropped replay left open: the cursor it
+      // resumes from may still lie before the text already shown.
+      if (sent && replay !== "reset" && replay !== "full") return;
+      holds.delete(runId);
+      if (requested && !sent) {
+        // A fresh stream instance with a cursor: full replay, held back up to the cursor.
+        drafts.delete(runId);
+        holds.set(runId, { untilId: requested });
+        return;
+      }
+      if (!sent) {
+        drafts.delete(runId);
+        return;
+      }
+      const floor = drafts.get(runId);
+      drafts.delete(runId);
+      if (floor) holds.set(runId, { floor });
+    },
+    apply<Event extends SharedHomechatCanonicalEvent>(runId: string, event: Event): Event[] {
+      const hold = holds.get(runId);
+      if (event.type !== "message.delta") {
+        if (hold && isTerminalHomechatEvent(event)) {
+          holds.delete(runId);
+          const draft = drafts.get(runId);
+          if (hold.held && draft) return [asReplace(hold.held as Event, draft), event];
+        }
+        if (hold?.untilId !== undefined && event.id === hold.untilId) holds.delete(runId);
+        return [event];
+      }
       const payload = (event.payload ?? {}) as Record<string, unknown>;
-      if (payload.clarifyRequest !== undefined || payload.clarifyId !== undefined) return event;
+      if (payload.clarifyRequest !== undefined || payload.clarifyId !== undefined) return [event];
       const text = typeof (event as { text?: unknown }).text === "string" ? (event as { text: string }).text : "";
       const replace = (event as { replace?: boolean }).replace === true || payload.replace === true;
       const draft = payload.retracted === true ? "" : replace ? text : `${drafts.get(runId) ?? ""}${text}`;
-      if (!drafts.has(runId) && drafts.size >= limit) drafts.delete(drafts.keys().next().value!);
-      drafts.set(runId, draft);
-      if (payload.retracted === true) return event;
-      return { ...event, text: draft, replace: true, payload: { ...payload, text: draft, replace: true } };
+      remember(runId, draft);
+      if (payload.retracted === true) {
+        holds.delete(runId);
+        return [event];
+      }
+      if (hold) {
+        const reachedCursor = hold.untilId !== undefined && event.id === hold.untilId;
+        const caughtUp = hold.floor !== undefined && (draft.length >= hold.floor.length || !hold.floor.startsWith(draft));
+        if (!reachedCursor && !caughtUp) {
+          hold.held = event;
+          return [];
+        }
+        holds.delete(runId);
+        // At the old cursor the shown text already ends here; send it once as the whole draft.
+      }
+      return [asReplace(event, draft)];
     },
     end(runId: string) {
       drafts.delete(runId);
+      holds.delete(runId);
     },
   };
 }
@@ -151,7 +219,9 @@ export function createMobileHomechatEventStream(
         // Diagnostic observers are deliberately fail-open.
       }
     };
-    const response = await open(runId, context.cursor ?? null, context.signal);
+    const requestedCursor = context.cursor ?? null;
+    const sentCursor = appendDrafts ? appendDrafts.resumeCursor(runId, requestedCursor) : requestedCursor;
+    const response = await open(runId, sentCursor, context.signal);
     if (!observation.streamOpenObserved) {
       observation.streamOpenObserved = true;
       emitTiming({ streamOpenMs: Math.max(0, now() - observation.startedAt) });
@@ -168,8 +238,14 @@ export function createMobileHomechatEventStream(
       throw new Error("Streaming is unavailable on this device; switching to polling.");
     }
 
-    appendDrafts?.open(runId, context.cursor ?? null);
-    const decoder = createHomechatEventStreamDecoder({ cursor: context.cursor });
+    let replayMode: string | null = null;
+    try {
+      replayMode = response.headers?.get?.("x-hermes-replay")?.trim().toLowerCase() ?? null;
+    } catch {
+      replayMode = null;
+    }
+    appendDrafts?.open(runId, requestedCursor, sentCursor, replayMode);
+    const decoder = createHomechatEventStreamDecoder({ cursor: sentCursor });
     const textDecoder = createUtf8ChunkDecoder();
     let terminal = false;
     const observeDelta = () => {
@@ -195,10 +271,11 @@ export function createMobileHomechatEventStream(
         if (parsedEvent.runId && parsedEvent.runId !== runId) {
           throw new Error("Homechat stream crossed the active run boundary.");
         }
-        const event = appendDrafts ? appendDrafts.apply(runId, parsedEvent) : parsedEvent;
-        if (event.type === "message.delta") observeDelta();
-        await context.onEvent(event);
-        if (isTerminalHomechatEvent(event)) terminal = true;
+        for (const event of appendDrafts ? appendDrafts.apply(runId, parsedEvent) : [parsedEvent]) {
+          if (event.type === "message.delta") observeDelta();
+          await context.onEvent(event);
+          if (isTerminalHomechatEvent(event)) terminal = true;
+        }
       }
     };
 
@@ -219,10 +296,11 @@ export function createMobileHomechatEventStream(
         if (remainderEvent.runId && remainderEvent.runId !== runId) {
           throw new Error("Homechat stream crossed the active run boundary.");
         }
-        const event = appendDrafts ? appendDrafts.apply(runId, remainderEvent) : remainderEvent;
-        if (event.type === "message.delta") observeDelta();
-        await context.onEvent(event);
-        if (isTerminalHomechatEvent(event)) terminal = true;
+        for (const event of appendDrafts ? appendDrafts.apply(runId, remainderEvent) : [remainderEvent]) {
+          if (event.type === "message.delta") observeDelta();
+          await context.onEvent(event);
+          if (isTerminalHomechatEvent(event)) terminal = true;
+        }
       }
     } finally {
       if (terminal) {
