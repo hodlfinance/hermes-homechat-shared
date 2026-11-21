@@ -13587,7 +13587,7 @@ function MarkdownTextBlocks({
           accessibilityLabel={mobileChatCardCopy(locale).table}
         >
           <View style={styles.markdownTable}>
-            {[block.header, ...block.rows].map((row, rowIndex) => (
+            {(block.header.length ? [block.header, ...block.rows] : block.rows).map((row, rowIndex) => (
               <View
                 key={`table-${blockIndex}-row-${rowIndex}`}
                 style={[styles.markdownTableRow, rowIndex > 0 && styles.markdownTableRowBorder]}
@@ -13597,7 +13597,7 @@ function MarkdownTextBlocks({
                     key={`table-${blockIndex}-row-${rowIndex}-cell-${cellIndex}`}
                     style={[
                       styles.markdownTableCell,
-                      rowIndex === 0 && styles.markdownTableHeaderCell,
+                      block.header.length > 0 && rowIndex === 0 && styles.markdownTableHeaderCell,
                       cellIndex > 0 && styles.markdownTableColumnBorder,
                     ]}
                   >
@@ -13605,7 +13605,7 @@ function MarkdownTextBlocks({
                       citations={citations}
                       onCitationPress={onCitationPress}
                       segments={cell}
-                      variant={rowIndex === 0 ? "table_header" : "table_cell"}
+                      variant={block.header.length > 0 && rowIndex === 0 ? "table_header" : "table_cell"}
                     />
                   </View>
                 ))}

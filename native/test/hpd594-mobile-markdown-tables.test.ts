@@ -134,3 +134,30 @@ test("the shared chat renderer keeps tables inside the transcript without a nest
   // preview all share the same non-scrolling Markdown renderer.
   assert.equal((surfaceSource.match(/<LinkedMessageText /g) || []).length, 3);
 });
+
+// HPD-2263: the engine's BTC answer wrote a key/value table under a blank
+// header row; it showed on the phone as raw pipe text.
+test("a table with a blank header row renders its rows without a header", () => {
+  const blocks = mobileMarkdownBlocks([
+    "Bitcoin today:",
+    "| | |",
+    "|---|---|",
+    "| Price | 57,457.08 USD |",
+    "| Day | **−7.01 %** |",
+    "",
+    "After.",
+  ].join("\n"));
+  assert.equal(blocks.length, 3);
+  const table = blocks[1];
+  assert.ok(table?.kind === "table");
+  assert.deepEqual(table.header, []);
+  assert.deepEqual(table.rows, [
+    [[{ kind: "plain", text: "Price" }], [{ kind: "plain", text: "57,457.08 USD" }]],
+    [[{ kind: "plain", text: "Day" }], [{ kind: "bold", text: "−7.01 %" }]],
+  ]);
+  assert.doesNotMatch(JSON.stringify(blocks), /\|/);
+  for (const source of [surfaceSource, financeArtifactCardSource]) {
+    assert.match(source, /\(block\.header\.length \? \[block\.header, \.\.\.block\.rows\] : block\.rows\)\.map\(/);
+    assert.match(source, /block\.header\.length > 0 && rowIndex === 0 && styles\.markdownTableHeaderCell/);
+  }
+});

@@ -122,12 +122,12 @@ function MarkdownContent({
         </View>
       ) : block.kind === "table" ? (
         <View accessibilityLabel="Table" key={`table-${blockIndex}`} style={styles.markdownTable}>
-          {[block.header, ...block.rows].map((row, rowIndex) => (
+          {(block.header.length ? [block.header, ...block.rows] : block.rows).map((row, rowIndex) => (
             <View key={`table-${blockIndex}-row-${rowIndex}`} style={[styles.markdownTableRow, rowIndex > 0 && styles.rowBorder]}>
               {row.map((cell, cellIndex) => (
                 <View
                   key={`table-${blockIndex}-row-${rowIndex}-cell-${cellIndex}`}
-                  style={[styles.markdownTableCell, rowIndex === 0 && styles.markdownTableHeaderCell, cellIndex > 0 && styles.markdownTableColumnBorder]}
+                  style={[styles.markdownTableCell, block.header.length > 0 && rowIndex === 0 && styles.markdownTableHeaderCell, cellIndex > 0 && styles.markdownTableColumnBorder]}
                 >
                   <MarkdownInlineText
                     citations={citations}
@@ -135,7 +135,7 @@ function MarkdownContent({
                     onOpenUrl={onOpenUrl}
                     segments={cell}
                     styles={styles}
-                    variant={rowIndex === 0 ? "table_header" : "table_cell"}
+                    variant={block.header.length > 0 && rowIndex === 0 ? "table_header" : "table_cell"}
                   />
                 </View>
               ))}

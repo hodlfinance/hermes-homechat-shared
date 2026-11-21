@@ -14,6 +14,7 @@ export type MobileMarkdownBlock =
   | { kind: "list"; ordered: boolean; items: MobileMarkdownInlineSegment[][] }
   | {
       kind: "table";
+      /** Empty when the table's header row has no text (HPD-2263). */
       header: MobileMarkdownInlineSegment[][];
       rows: MobileMarkdownInlineSegment[][][];
     };
@@ -149,7 +150,7 @@ function headingBlock(line: string): Extract<MobileMarkdownBlock, { kind: "headi
 
 function tableBlockAt(lines: string[], start: number) {
   const header = tableCells(lines[start] || "");
-  if (!header || !header.some(Boolean) || !tableDelimiter(tableCells(lines[start + 1] || ""), header.length)) {
+  if (!header || !tableDelimiter(tableCells(lines[start + 1] || ""), header.length)) {
     return null;
   }
 
@@ -165,7 +166,11 @@ function tableBlockAt(lines: string[], start: number) {
   return {
     block: {
       kind: "table" as const,
-      header: header.map(inlineSegments),
+      // HPD-2263: models write key/value tables with a blank header row
+      // ("| | |" then "|---|---|"); that table showed as raw pipes. A header
+      // whose cells are all empty is left out, and the renderers draw the
+      // rows without a header row.
+      header: header.some(Boolean) ? header.map(inlineSegments) : [],
       rows: rows.map((row) => row.map(inlineSegments)),
     },
     next: cursor,
