@@ -28,7 +28,7 @@ import {
   type MobileFinanceSourceDocument,
 } from "./mobile-finance-artifacts";
 import { MobileFinanceActionApprovalCard } from "./mobile-finance-action-approval";
-import { approvalCardLabels, composerPlaceholder, copyOverride, hostArtifactSlots, hostMessageFooter } from "./host-message-hooks";
+import { approvalCardLabels, composerPlaceholder, copyOverride, hostArtifactSlots, hostMessageFooter, hostMessageHeader } from "./host-message-hooks";
 import { workspacePrivacyCopy } from "../ui/workspace-privacy-copy";
 import { openPageStarter, consumePageStarter, pageStarterTranscript, pageStarterPayload, pageStarterAfterNavigation, type PageStarterState } from "../ui/page-starter-state";
 import { pageStarterCopy } from "../ui/page-starter-copy";
@@ -628,6 +628,8 @@ export function createNativeR8Surface(host: NativeR8Host) {
   // HPD-2263 (HODL Bots engine branch): optional host drawing; absent, the reply looks as before.
   const hostRenderArtifact = host.renderArtifact;
   const hostRenderMessageFooter = host.renderMessageFooter;
+  // HPD-2297: optional host mark above a finished assistant reply; absent, nothing is drawn.
+  const hostRenderMessageHeader = host.renderMessageHeader;
   const expoFetch = host.transport.fetchStream;
   const { bindMobilePurchasesAccount, isMobilePurchaseCancelled,
     mobilePurchasesConfiguredForBuild, mobilePurchasesController } = host.purchases;
@@ -13022,6 +13024,7 @@ const MessageBubble = memo(function MessageBubble({
       ? hostArtifactSlots(message.artifactReferences, hostRenderArtifact, { ...hookContext, message })
       : financeReferences.map((reference) => ({ key: `${reference.id}:${reference.version}`, kind: "finance" as const, reference }));
   const messageFooter = hostMessageFooter(message, interimMark, hostRenderMessageFooter, hookContext);
+  const messageHeader = hostMessageHeader(message, interimMark, hostRenderMessageHeader, hookContext);
   const citations = financeReferences.length
     ? mobileFinanceCitations(financeReferences, assistantText).filter((citation) =>
         mobileFinanceCitationAction(citation, Boolean(readFinanceSourceDocument)) !== "plain")
@@ -13111,6 +13114,7 @@ const MessageBubble = memo(function MessageBubble({
           <Text style={styles.assistantIdentityLabel}>{appCopy.productName}</Text>
         </View>
       ) : null}
+      {messageHeader !== null ? <View testID="host-message-header">{messageHeader}</View> : null}
       {uploadReferences.length ? (
         <View style={styles.userAttachmentList}>
           {uploadReferences.map((reference) => (

@@ -97,6 +97,10 @@ export function mobileChatMessageFromCanonical(message: HermesApiMessage): ChatM
       [...message.hermesReaction.trim()].length <= 4
       ? { hermesReaction: message.hermesReaction.trim() }
       : {}),
+    // HPD-2297: an assistant message's kind (HODL Bots engine), only a short plain name; absent stays absent.
+    ...(message.role === "assistant" && typeof message.kind === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(message.kind)
+      ? { kind: message.kind }
+      : {}),
   };
 }
 

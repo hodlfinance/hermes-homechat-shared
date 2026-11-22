@@ -92,6 +92,19 @@ export function hostMessageFooter(
   return node === undefined || node === false ? null : node;
 }
 
+/**
+ * HPD-2297: the host's mark above an assistant reply: the same rule as the
+ * footer (finished assistant replies only), and only when the host passes it.
+ */
+export function hostMessageHeader(
+  message: ChatMessage,
+  interimMark: "working" | "stopped" | "interrupted" | null | undefined,
+  renderMessageHeader: ((message: ChatMessage, context: NativeR8MessageRenderContext) => ReactNode | null) | undefined,
+  context: NativeR8MessageRenderContext,
+): ReactNode | null {
+  return hostMessageFooter(message, interimMark, renderMessageHeader, context);
+}
+
 /** HPD-2263: the composer's placeholder: the host's where given and not blank, today's otherwise. */
 export function composerPlaceholder(overrides: NativeR8CopyOverrides | null | undefined, fallback: string): string {
   return copyOverride(overrides, "composerPlaceholder", fallback);

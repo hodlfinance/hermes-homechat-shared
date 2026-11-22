@@ -349,6 +349,12 @@ export type HermesApiMessage = {
    * Only Hermes reacts; there is no way for the user to set it.
    */
   hermesReaction?: string | null;
+  /**
+   * HPD-2297 (HODL Bots engine): what kind of assistant message this is, e.g.
+   * "portfolio_report" for a report the bot wrote without a question. Absent
+   * on every other message and on the Hermes plane (Hey).
+   */
+  kind?: string | null;
 };
 
 export type HermesApiRun = {

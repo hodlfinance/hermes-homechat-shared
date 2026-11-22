@@ -40,6 +40,7 @@ const HOST_OPTIONS: Readonly<Record<string, { hey: Verdict; hodl: Verdict }>> = 
   onHomeChatTyping: { hey: "wired (HPD-1121)", hodl: "wired (HPD-1191)" },
   renderArtifact: { hey: "unused (Fin cards only, as before)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch (bots-engine/hpd2263) passes it: price and chart cards" },
   renderMessageFooter: { hey: "unused", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it" },
+  renderMessageHeader: { hey: "unused", hodl: "pending: HPD-2297 — only the HODL Bots engine branch passes it: the mark Report on a portfolio report" },
   approvalCardLabels: { hey: "unused (FIN HERMES, Confirm, Cancel)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it" },
   hiddenMenuItems: { hey: "unused (Hey keeps the left menu)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it: hides the entries that need the Hermes runtime" },
   copyOverrides: { hey: "unused (Ask Hermes; Start with one message / Ask Hermes what you want to do, plan, or understand.)", hodl: "pending: HPD-2263 — only the HODL Bots engine branch passes it: the composer and the empty new conversation name HODL Bots / LiveQuote Bots" },

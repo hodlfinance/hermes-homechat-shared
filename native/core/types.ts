@@ -1269,6 +1269,12 @@ export interface ChatMessage {
   createdAt: string;
   /** HPD-1789: Hermes' emoji reaction on a user message, drawn on the user's bubble. */
   hermesReaction?: string | null;
+  /**
+   * HPD-2297: the server's kind of an assistant message (HODL Bots engine:
+   * "portfolio_report"). Absent on every other message; the surface only hands
+   * it to the host (renderMessageHeader).
+   */
+  kind?: string;
 }
 
 /**

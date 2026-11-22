@@ -255,6 +255,12 @@ export type NativeR8Host = {
   renderArtifact?: (artifact: ChatArtifactReference, context: NativeR8ArtifactRenderContext) => ReactNode | null;
   /** HPD-2263: drawn under each finished assistant reply; null draws nothing. Without it nothing changes. */
   renderMessageFooter?: (message: ChatMessage, context: NativeR8MessageRenderContext) => ReactNode | null;
+  /**
+   * HPD-2297 (HODL Bots engine branch): drawn above the text of each finished
+   * assistant reply (HODL: the mark "Report" on a message of kind
+   * "portfolio_report"); null draws nothing. Without it nothing changes (Hey).
+   */
+  renderMessageHeader?: (message: ChatMessage, context: NativeR8MessageRenderContext) => ReactNode | null;
   /** HPD-2263: the approval card's eyebrow and buttons. Without it "FIN HERMES", "Confirm", "Cancel". */
   approvalCardLabels?: NativeR8ApprovalCardLabels;
   /**

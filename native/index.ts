@@ -10,7 +10,7 @@ export type {
 } from "./host";
 export { MobileFinanceActionApprovalCard, mobileFinanceActionApprovalCardView } from "./src/mobile-finance-action-approval";
 // HPD-2263: pure helpers behind the three optional host options (renderArtifact, renderMessageFooter, approvalCardLabels).
-export { DEFAULT_APPROVAL_CARD_LABELS, approvalCardLabels, hostArtifactSlots, hostMessageFooter } from "./src/host-message-hooks";
+export { DEFAULT_APPROVAL_CARD_LABELS, approvalCardLabels, hostArtifactSlots, hostMessageFooter, hostMessageHeader } from "./src/host-message-hooks";
 export type { HostArtifactSlot } from "./src/host-message-hooks";
 export type { MobileHostHeaderMenuItem } from "./src/mobile-host-header";
 export { createNativeR8Transport } from "./transport";
