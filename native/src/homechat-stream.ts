@@ -25,17 +25,24 @@ export type MobileHomechatLatencyOptions = {
   deltaMode?: "append";
   /**
    * HPD-2263 (TestFlight 9074: back button blocked during a slow answer): with
-   * `deltaMode: "append"` every delta is the whole draft, so a delta that is
-   * followed by another one within this many milliseconds can be dropped
-   * without losing text. At most one draft per window reaches `onEvent` (the
-   * first one at once, the newest one when the window ends; every other event
-   * first sends the waiting draft). Before, each one-character delta re-rendered
-   * the whole chat surface and the JS thread never caught up: touches (back,
-   * Stop, the Bots list) waited behind it. 0 or absent: every delta passes.
+   * `deltaMode: "append"` every delta is the whole draft, so only the newest
+   * one needs to reach the chat. The stream keeps reading at network speed and
+   * only stores the newest draft; a timer hands it to `onEvent`, and the next
+   * one waits until this many milliseconds after that delivery ended. Every
+   * other event first sends the waiting draft with it, in one delivery (so
+   * `message.completed` shows the full answer at once). Before, a slow redraw
+   * held up the reader, so each delta got its own redraw: a 5.7 s answer took
+   * minutes to appear. 0 or absent: every delta passes.
    * Ignored without `deltaMode: "append"`, whose deltas are increments.
    */
   deltaCoalesceMs?: number;
   now?: () => number;
+  /**
+   * HPD-2263: runs one delivery (one or more `onEvent` calls) so that its state
+   * updates draw once, e.g. React Native's `unstable_batchedUpdates`. The old
+   * architecture otherwise redraws after every single state update.
+   */
+  batchUpdates?: (fn: () => void) => void;
   startedAt?: (runId: string) => number | null;
   onTiming?: (timing: Partial<ChatLatencySummary>, runId: string) => void;
 };
@@ -206,60 +213,105 @@ function homechatDraftDeltaCanWait(event: SharedHomechatCanonicalEvent) {
   return replace && payload.retracted !== true && payload.clarifyRequest === undefined && payload.clarifyId === undefined;
 }
 
+type HomechatBatch = (fn: () => void) => void;
+const runUnbatched: HomechatBatch = (fn) => fn();
+
+/** Hands events to `deliver` inside one batch; a synchronous throw becomes a rejection. */
+function deliverInOneBatch(
+  events: SharedHomechatCanonicalEvent[],
+  deliver: (event: SharedHomechatCanonicalEvent) => void | Promise<void>,
+  batch: HomechatBatch,
+): Promise<void> {
+  const pending: Array<void | Promise<void>> = [];
+  try {
+    batch(() => {
+      for (const event of events) pending.push(deliver(event));
+    });
+  } catch (error) {
+    return Promise.reject(error);
+  }
+  return Promise.all(pending).then(() => undefined);
+}
+
 /**
- * HPD-2263: at most one whole-draft delta per `windowMs`. The first delta of a
- * window goes out at once; later ones replace each other until the window
- * ends, then the newest goes out. Deliveries keep their order (one chain).
- * After an abort (Stop, leaving the chat) a waiting draft is dropped.
+ * HPD-2263: whole-draft deltas for a slow chat. `offer` never waits for the
+ * chat: it keeps only the newest draft and a timer delivers it. The next
+ * delivery waits `windowMs` after the previous one ENDED, so a slow redraw
+ * means fewer drafts, never a slower reader. `finish` sends the waiting draft
+ * together with the given events (one batch, one redraw), in order after any
+ * delivery still in progress. After an abort (Stop, leaving the chat) a
+ * waiting draft is dropped and no timer fires.
  */
 export function createDraftCoalescer(
   windowMs: number,
   now: () => number,
   deliver: (event: SharedHomechatCanonicalEvent) => void | Promise<void>,
   signal?: AbortSignal,
+  batch: HomechatBatch = runUnbatched,
 ) {
   let held: SharedHomechatCanonicalEvent | null = null;
-  let lastSentAt = Number.NEGATIVE_INFINITY;
+  let lastEndedAt = Number.NEGATIVE_INFINITY;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let chain: Promise<void> = Promise.resolve();
-  const send = (event: SharedHomechatCanonicalEvent) => {
-    lastSentAt = now();
-    const run = () => deliver(event);
-    chain = chain.then(run, run);
-    return chain;
-  };
+  let delivering: Promise<void> | null = null;
+  let cancelled = false;
   const clearTimer = () => {
     if (timer !== null) clearTimeout(timer);
     timer = null;
   };
-  const flush = (): Promise<void> => {
-    clearTimer();
-    if (!held || signal?.aborted) {
+  const stopped = () => cancelled || signal?.aborted === true;
+  const deliverNow = (events: SharedHomechatCanonicalEvent[]) => {
+    const done = deliverInOneBatch(events, deliver, batch);
+    // On the old architecture the redraw ran inside the batch; the window starts now.
+    lastEndedAt = now();
+    const settled = done.then(() => undefined, () => undefined).then(() => {
+      lastEndedAt = now();
+      if (delivering === settled) delivering = null;
+      schedule();
+    });
+    delivering = settled;
+    return done;
+  };
+  const fire = () => {
+    timer = null;
+    if (!held || stopped()) {
       held = null;
-      return chain;
+      return;
     }
     const event = held;
     held = null;
-    return send(event);
+    void deliverNow([event]).catch(() => undefined);
   };
+  const schedule = () => {
+    if (timer !== null || delivering || !held || stopped()) return;
+    timer = setTimeout(fire, Math.max(0, windowMs - (now() - lastEndedAt)));
+  };
+  const onAbort = () => {
+    clearTimer();
+    held = null;
+  };
+  signal?.addEventListener?.("abort", onAbort, { once: true });
   return {
-    offer(event: SharedHomechatCanonicalEvent): Promise<void> {
-      if (signal?.aborted) return chain;
-      const waited = now() - lastSentAt;
-      if (!held && waited >= windowMs) return send(event);
+    offer(event: SharedHomechatCanonicalEvent): void {
+      if (stopped()) return;
       held = event;
-      if (timer === null) {
-        timer = setTimeout(() => {
-          timer = null;
-          void flush().catch(() => undefined);
-        }, Math.max(0, windowMs - waited));
-      }
-      return Promise.resolve();
+      schedule();
     },
-    flush,
+    async finish(events: SharedHomechatCanonicalEvent[] = []): Promise<void> {
+      clearTimer();
+      while (delivering) {
+        await delivering;
+        clearTimer();
+      }
+      if (stopped()) held = null;
+      const list = held ? [held, ...events] : events;
+      held = null;
+      if (list.length) await deliverNow(list);
+    },
     cancel() {
+      cancelled = true;
       clearTimer();
       held = null;
+      signal?.removeEventListener?.("abort", onAbort);
     },
   };
 }
@@ -341,18 +393,21 @@ export function createMobileHomechatEventStream(
         emitTiming({ firstDeltaMs: Math.max(0, observedAt - observation.startedAt) });
       }
     };
+    const batch = latency.batchUpdates ?? runUnbatched;
     const coalescer = appendDrafts && (latency.deltaCoalesceMs ?? 0) > 0
-      ? createDraftCoalescer(latency.deltaCoalesceMs!, now, (event) => context.onEvent(event), context.signal)
+      ? createDraftCoalescer(latency.deltaCoalesceMs!, now, (event) => context.onEvent(event), context.signal, batch)
       : null;
-    const flushHeldDraft = () => coalescer ? coalescer.flush() : Promise.resolve();
+    const flushHeldDraft = () => coalescer ? coalescer.finish() : Promise.resolve();
     const deliver = async (event: SharedHomechatCanonicalEvent) => {
       const isDelta = event.type === "message.delta";
       if (isDelta) observeDelta();
       if (coalescer && isDelta && homechatDraftDeltaCanWait(event)) {
-        await coalescer.offer(event);
+        // HPD-2263: the reader never waits for the chat to redraw.
+        coalescer.offer(event);
+      } else if (coalescer) {
+        await coalescer.finish([event]);
       } else {
-        await flushHeldDraft();
-        await context.onEvent(event);
+        await deliverInOneBatch([event], (item) => context.onEvent(item), batch);
       }
       if (isTerminalHomechatEvent(event)) terminal = true;
     };

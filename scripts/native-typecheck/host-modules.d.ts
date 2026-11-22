@@ -53,6 +53,7 @@ declare module "react-native" {
   export const TextInput: any;
   export const View: any;
   export const useColorScheme: any;
+  export const unstable_batchedUpdates: (fn: () => void) => void;
 }
 declare module "react-native-svg";
 declare module "lucide-react-native";

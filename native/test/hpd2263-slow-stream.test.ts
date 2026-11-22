@@ -121,3 +121,96 @@ test("HPD-2263: without a window (Hey) every delta passes as before", async () =
   });
   assert.equal(count, 50);
 });
+
+// HPD-2263 (live, 2026-11-22): after the coalescer above, an answer whose
+// engine stream finished in 5.7 s (307 deltas, 3,542 characters) took 3-4
+// minutes to appear in HODL. The reader waited for each delivery, and on React
+// Native's old architecture a delivery redraws synchronously, so with a slow
+// redraw every delta got its own redraw. Now the reader never waits for the
+// chat, the next draft waits 80 ms after a redraw ENDED, one delivery draws
+// once, and message.completed shows the full answer at once.
+const LIVE_COUNT = 307;
+const LIVE_CHARS = 3542;
+const LIVE_DELTAS = (() => {
+  const out: string[] = [];
+  let used = 0;
+  for (let index = 0; index < LIVE_COUNT; index += 1) {
+    const length = Math.round(((index + 1) * LIVE_CHARS) / LIVE_COUNT) - used;
+    used += length;
+    out.push(`${"w".repeat(length - 1)} `);
+  }
+  return out;
+})();
+const LIVE_TEXT = LIVE_DELTAS.join("");
+const liveFrame = (seq: number, type: string, text: string) =>
+  `id: ${seq}\nevent: ${type}\ndata: ${JSON.stringify({ type, id: String(seq), runId: "run-1", text, payload: { messageId: "m", text }, createdAt: "2026-11-22T09:29:17.000Z" })}\n\n`;
+
+/** The live engine timing: deltas from 2.6 s to 5.6 s, completed at 5.7 s. Chunks buffer while JS is busy. */
+function liveBody() {
+  const frames = LIVE_DELTAS.map((text, index) => ({ at: 2600 + (index * 3000) / LIVE_COUNT, data: liveFrame(index + 1, "message.delta", text) }));
+  frames.push({ at: 5700, data: liveFrame(LIVE_COUNT + 1, "message.completed", LIVE_TEXT) });
+  let index = 0;
+  return {
+    getReader: () => ({
+      read: () => new Promise<{ done: boolean; value?: Uint8Array }>((resolve) => {
+        if (index >= frames.length) return resolve({ done: true });
+        const next = () => resolve({ done: false, value: new TextEncoder().encode(frames[index++]!.data) });
+        const wait = frames[index]!.at - Date.now();
+        if (wait <= 0) queueMicrotask(next);
+        else setTimeout(next, wait);
+      }),
+      cancel: async () => undefined,
+      releaseLock: () => undefined,
+    }),
+  };
+}
+
+for (const redrawMs of [150, 600]) {
+  test(`HPD-2263: a 5.7 s answer with a ${redrawMs} ms redraw shows in full right after completion in a few redraws`, async () => {
+    mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+    try {
+      let shown = "";
+      let pending = "";
+      let redraws = 0;
+      let batching = false;
+      const timeline: Array<[number, number]> = [];
+      // A redraw blocks the JS thread for redrawMs (old architecture, synchronous).
+      const redraw = () => {
+        mock.timers.tick(redrawMs);
+        redraws += 1;
+        shown = pending;
+        timeline.push([Date.now(), shown.length]);
+      };
+      let settled = false;
+      const stream = createMobileHomechatEventStream(async () => ({ body: liveBody() as never, ok: true, status: 200, text: async () => "" }), {
+        deltaMode: "append", deltaCoalesceMs: 80, now: () => Date.now(),
+        batchUpdates: (fn) => {
+          batching = true;
+          try { fn(); } finally { batching = false; }
+          redraw();
+        },
+      });
+      const done = stream("run-1", {
+        onEvent: (event) => {
+          const e = event as { type: string; text?: string };
+          if (e.type === "message.delta" || e.type === "message.completed") pending = e.text ?? "";
+          if (!batching) redraw();
+        },
+      }).then((result) => { settled = true; return result; });
+      await drive(() => settled, 1);
+      assert.deepEqual(await done, { cursor: String(LIVE_COUNT + 1), terminal: true });
+      assert.equal(shown, LIVE_TEXT);
+      const fullAt = timeline.find(([, length]) => length >= LIVE_CHARS)![0];
+      const at = (share: number) => (timeline.find(([, length]) => length >= LIVE_CHARS * share)![0] / 1000).toFixed(2);
+      console.log(`HPD-2263 redraw ${redrawMs} ms: ${redraws} redraws, first ${(timeline[0]![0] / 1000).toFixed(2)} s, 50% ${at(0.5)} s, full ${(fullAt / 1000).toFixed(2)} s`);
+      // Floor: completed arrives while a redraw runs, then one more redraw draws it.
+      // 150 ms: by 6.0 s; 600 ms: by 6.9 s (measured 6.54 s).
+      assert.ok(fullAt <= 5_700 + 2 * redrawMs, `full text at ${fullAt} ms`);
+      assert.ok(redraws <= 25, `${redraws} redraws`);
+      // The text only grows while it streams.
+      timeline.forEach(([, length], index) => assert.ok(index === 0 || length >= timeline[index - 1]![1]));
+    } finally {
+      mock.timers.reset();
+    }
+  });
+}

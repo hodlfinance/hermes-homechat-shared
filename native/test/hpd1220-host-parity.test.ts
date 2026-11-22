@@ -278,13 +278,22 @@ test("HPD-2263: markdown tables render the same in Hey and HODL: content-sized c
 //   appending it (same list as before, no full sort per streamed delta);
 // - markdown is drawn per block, and a block whose content did not change is
 //   not drawn again (same output; only the growing last block re-renders).
-// HODL only (host option streamDeltaMode "append"): whole drafts reach the
-// chat at most every 80 ms. Hey's deltas are increments and pass as before.
+// - one streamed delivery runs inside unstable_batchedUpdates, so its state
+//   updates draw once (old architecture otherwise draws after each one; same
+//   state, same order, fewer redraws);
+// - the chat follows streamed text with at most one scroll per frame, not
+//   animated while text streams.
+// HODL only (host option streamDeltaMode "append"): the reader never waits for
+// a redraw; the newest whole draft goes out 80 ms after the previous delivery
+// ended. Hey's deltas are increments and each passes as before.
 test("HPD-2263: streaming relief is shared rendering; draft coalescing is the append-mode host only", () => {
   const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
   assert.match(surface, /const appended = appendChatRunEventsInOrder\(next\[runId\] \?\? \[\], events\);/);
   assert.match(surface, /<MarkdownBlockView\n\s+key=/);
   assert.match(surface, /host\.streamDeltaMode === "append" \? \{ deltaMode: "append" as const, deltaCoalesceMs: MOBILE_APPEND_DRAFT_COALESCE_MS \} : \{\}/);
+  assert.match(surface, /batchUpdates: runStreamDeliveryBatched,/);
+  assert.match(surface, /followMessagesToEnd\(!chatStreamingText\)/);
   const stream = readFileSync(new URL("../src/homechat-stream.ts", import.meta.url), "utf8");
   assert.match(stream, /appendDrafts && \(latency\.deltaCoalesceMs \?\? 0\) > 0/);
+  assert.match(stream, /await deliverInOneBatch\(\[event\], \(item\) => context\.onEvent\(item\), batch\);/);
 });

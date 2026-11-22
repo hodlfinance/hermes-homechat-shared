@@ -83,6 +83,7 @@ import {
   type ColorValue,
   type ImageStyle,
   type NativeScrollEvent,
+  unstable_batchedUpdates,
 } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import {
@@ -1260,6 +1261,11 @@ function sortChatRunEvents(events: ChatRunEvent[]) {
 
 /** HPD-2263: the window in which whole-draft deltas of an append-mode stream replace each other. */
 const MOBILE_APPEND_DRAFT_COALESCE_MS = 80;
+// HPD-2263: one streamed delivery draws once. React Native's old architecture
+// otherwise redraws after every single state update of that delivery.
+const runStreamDeliveryBatched: (fn: () => void) => void = typeof unstable_batchedUpdates === "function"
+  ? (fn) => unstable_batchedUpdates(fn)
+  : (fn) => fn();
 
 /**
  * HPD-2263: new events that all come after the run's last event are appended
@@ -2197,6 +2203,21 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
   const error = mobileVisibleRouteError(appError, selectedChatRoutePreference, dismissedAppErrorKey)?.message ?? null;
   const visibleSessionNotice = mobileVisibleNotice(sessionNotice, dismissedSessionNoticeKey)?.message ?? null;
   const messagesScrollRef = useRef<ScrollView | null>(null);
+  // HPD-2263: the chat follows a streamed answer with at most one scroll per
+  // drawn frame. Animated scrolls queued up behind each other and the chat
+  // fell behind the text; while text streams the scroll is not animated.
+  const messagesFollowFrameRef = useRef<number | null>(null);
+  const followMessagesToEnd = (animated: boolean) => {
+    if (messagesFollowFrameRef.current !== null) return;
+    messagesFollowFrameRef.current = requestAnimationFrame(() => {
+      messagesFollowFrameRef.current = null;
+      messagesScrollRef.current?.scrollToEnd({ animated });
+    });
+  };
+  useEffect(() => () => {
+    if (messagesFollowFrameRef.current !== null) cancelAnimationFrame(messagesFollowFrameRef.current);
+    messagesFollowFrameRef.current = null;
+  }, []);
   const messagesContentHeightRef = useRef(0);
   const messagesViewportHeightRef = useRef(0);
   const messagesScrollOffsetRef = useRef(0);
@@ -2746,6 +2767,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
           // slow stream of one-character deltas leaves the JS thread free for
           // back, Stop and the Bots list.
           ...(host.streamDeltaMode === "append" ? { deltaMode: "append" as const, deltaCoalesceMs: MOBILE_APPEND_DRAFT_COALESCE_MS } : {}),
+          batchUpdates: runStreamDeliveryBatched,
           startedAt: (runId: string) => chatLatencyRef.current?.runId === runId ? chatLatencyRef.current.startedAt : null,
           onTiming: (timing: Partial<ChatLatencySummary>, runId: string) => {
             if (chatLatencyRef.current?.runId === runId) recordMobileChatLatency(timing);
@@ -10015,7 +10037,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                   messagesScrollRef.current?.scrollTo({ y: 0, animated: false });
                 } else if (decision === "bottom") {
                   messagesScrollOffsetRef.current = lowestVisibleOffset;
-                  messagesScrollRef.current?.scrollToEnd({ animated: true });
+                  followMessagesToEnd(!chatStreamingText);
                 }
               }}
             >
