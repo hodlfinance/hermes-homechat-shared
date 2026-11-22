@@ -271,3 +271,20 @@ test("HPD-2263: markdown tables render the same in Hey and HODL: content-sized c
   assert.match(surface, /markdownTableCellWidth\(block, cellIndex\)/);
   assert.doesNotMatch(surface, /host\.[A-Za-z]+[^\n]*markdownTableCellWidth/);
 });
+
+// HPD-2263 (TestFlight 9074: during a very slow answer the back button did not
+// react). Shared changes both hosts get, recorded here because they touch Hey:
+// - the run's event list takes a new event that comes after its last one by
+//   appending it (same list as before, no full sort per streamed delta);
+// - markdown is drawn per block, and a block whose content did not change is
+//   not drawn again (same output; only the growing last block re-renders).
+// HODL only (host option streamDeltaMode "append"): whole drafts reach the
+// chat at most every 80 ms. Hey's deltas are increments and pass as before.
+test("HPD-2263: streaming relief is shared rendering; draft coalescing is the append-mode host only", () => {
+  const surface = readFileSync(new URL("../src/surface.tsx", import.meta.url), "utf8");
+  assert.match(surface, /const appended = appendChatRunEventsInOrder\(next\[runId\] \?\? \[\], events\);/);
+  assert.match(surface, /<MarkdownBlockView\n\s+key=/);
+  assert.match(surface, /host\.streamDeltaMode === "append" \? \{ deltaMode: "append" as const, deltaCoalesceMs: MOBILE_APPEND_DRAFT_COALESCE_MS \} : \{\}/);
+  const stream = readFileSync(new URL("../src/homechat-stream.ts", import.meta.url), "utf8");
+  assert.match(stream, /appendDrafts && \(latency\.deltaCoalesceMs \?\? 0\) > 0/);
+});

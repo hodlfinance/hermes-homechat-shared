@@ -23,6 +23,18 @@ export type MobileHomechatLatencyOptions = {
    * Absent: deltas pass unchanged.
    */
   deltaMode?: "append";
+  /**
+   * HPD-2263 (TestFlight 9074: back button blocked during a slow answer): with
+   * `deltaMode: "append"` every delta is the whole draft, so a delta that is
+   * followed by another one within this many milliseconds can be dropped
+   * without losing text. At most one draft per window reaches `onEvent` (the
+   * first one at once, the newest one when the window ends; every other event
+   * first sends the waiting draft). Before, each one-character delta re-rendered
+   * the whole chat surface and the JS thread never caught up: touches (back,
+   * Stop, the Bots list) waited behind it. 0 or absent: every delta passes.
+   * Ignored without `deltaMode: "append"`, whose deltas are increments.
+   */
+  deltaCoalesceMs?: number;
   now?: () => number;
   startedAt?: (runId: string) => number | null;
   onTiming?: (timing: Partial<ChatLatencySummary>, runId: string) => void;
@@ -187,6 +199,71 @@ export function createAppendDeltaDrafts(limit = 32) {
   };
 }
 
+/** A whole-draft delta (append mode) that a newer one may replace: not a clarify, not a retraction. */
+function homechatDraftDeltaCanWait(event: SharedHomechatCanonicalEvent) {
+  const payload = (event.payload ?? {}) as Record<string, unknown>;
+  const replace = (event as { replace?: boolean }).replace === true || payload.replace === true;
+  return replace && payload.retracted !== true && payload.clarifyRequest === undefined && payload.clarifyId === undefined;
+}
+
+/**
+ * HPD-2263: at most one whole-draft delta per `windowMs`. The first delta of a
+ * window goes out at once; later ones replace each other until the window
+ * ends, then the newest goes out. Deliveries keep their order (one chain).
+ * After an abort (Stop, leaving the chat) a waiting draft is dropped.
+ */
+export function createDraftCoalescer(
+  windowMs: number,
+  now: () => number,
+  deliver: (event: SharedHomechatCanonicalEvent) => void | Promise<void>,
+  signal?: AbortSignal,
+) {
+  let held: SharedHomechatCanonicalEvent | null = null;
+  let lastSentAt = Number.NEGATIVE_INFINITY;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let chain: Promise<void> = Promise.resolve();
+  const send = (event: SharedHomechatCanonicalEvent) => {
+    lastSentAt = now();
+    const run = () => deliver(event);
+    chain = chain.then(run, run);
+    return chain;
+  };
+  const clearTimer = () => {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+  };
+  const flush = (): Promise<void> => {
+    clearTimer();
+    if (!held || signal?.aborted) {
+      held = null;
+      return chain;
+    }
+    const event = held;
+    held = null;
+    return send(event);
+  };
+  return {
+    offer(event: SharedHomechatCanonicalEvent): Promise<void> {
+      if (signal?.aborted) return chain;
+      const waited = now() - lastSentAt;
+      if (!held && waited >= windowMs) return send(event);
+      held = event;
+      if (timer === null) {
+        timer = setTimeout(() => {
+          timer = null;
+          void flush().catch(() => undefined);
+        }, Math.max(0, windowMs - waited));
+      }
+      return Promise.resolve();
+    },
+    flush,
+    cancel() {
+      clearTimer();
+      held = null;
+    },
+  };
+}
+
 export function createMobileHomechatEventStream(
   open: (runId: string, cursor: string | null, signal?: AbortSignal) => Promise<MobileHomechatResponse>,
   latency: MobileHomechatLatencyOptions = {},
@@ -264,6 +341,21 @@ export function createMobileHomechatEventStream(
         emitTiming({ firstDeltaMs: Math.max(0, observedAt - observation.startedAt) });
       }
     };
+    const coalescer = appendDrafts && (latency.deltaCoalesceMs ?? 0) > 0
+      ? createDraftCoalescer(latency.deltaCoalesceMs!, now, (event) => context.onEvent(event), context.signal)
+      : null;
+    const flushHeldDraft = () => coalescer ? coalescer.flush() : Promise.resolve();
+    const deliver = async (event: SharedHomechatCanonicalEvent) => {
+      const isDelta = event.type === "message.delta";
+      if (isDelta) observeDelta();
+      if (coalescer && isDelta && homechatDraftDeltaCanWait(event)) {
+        await coalescer.offer(event);
+      } else {
+        await flushHeldDraft();
+        await context.onEvent(event);
+      }
+      if (isTerminalHomechatEvent(event)) terminal = true;
+    };
     const emit = async (chunk: string) => {
       const parsed = decoder.push(chunk);
       if (parsed.cursor) context.onCursor?.(parsed.cursor);
@@ -271,11 +363,7 @@ export function createMobileHomechatEventStream(
         if (parsedEvent.runId && parsedEvent.runId !== runId) {
           throw new Error("Homechat stream crossed the active run boundary.");
         }
-        for (const event of appendDrafts ? appendDrafts.apply(runId, parsedEvent) : [parsedEvent]) {
-          if (event.type === "message.delta") observeDelta();
-          await context.onEvent(event);
-          if (isTerminalHomechatEvent(event)) terminal = true;
-        }
+        for (const event of appendDrafts ? appendDrafts.apply(runId, parsedEvent) : [parsedEvent]) await deliver(event);
       }
     };
 
@@ -296,13 +384,11 @@ export function createMobileHomechatEventStream(
         if (remainderEvent.runId && remainderEvent.runId !== runId) {
           throw new Error("Homechat stream crossed the active run boundary.");
         }
-        for (const event of appendDrafts ? appendDrafts.apply(runId, remainderEvent) : [remainderEvent]) {
-          if (event.type === "message.delta") observeDelta();
-          await context.onEvent(event);
-          if (isTerminalHomechatEvent(event)) terminal = true;
-        }
+        for (const event of appendDrafts ? appendDrafts.apply(runId, remainderEvent) : [remainderEvent]) await deliver(event);
       }
+      await flushHeldDraft();
     } finally {
+      coalescer?.cancel();
       if (terminal) {
         try {
           reader.releaseLock();

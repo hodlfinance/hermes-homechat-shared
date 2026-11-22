@@ -1258,10 +1258,48 @@ function sortChatRunEvents(events: ChatRunEvent[]) {
   return [...events].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
 }
 
+/** HPD-2263: the window in which whole-draft deltas of an append-mode stream replace each other. */
+const MOBILE_APPEND_DRAFT_COALESCE_MS = 80;
+
+/**
+ * HPD-2263: new events that all come after the run's last event are appended
+ * to the list as it is. Same result as the full merge below (the list is
+ * already sorted and compacted, the sort is stable, compaction only looks at
+ * the previous kept event), without sorting the whole list again: during a
+ * long answer that sort (two Date.parse per comparison) ran on every delta.
+ * Null when the full merge is needed.
+ */
+function appendChatRunEventsInOrder(existing: readonly ChatRunEvent[], events: readonly ChatRunEvent[]): ChatRunEvent[] | null {
+  const last = existing.at(-1);
+  let previousAt = last ? Date.parse(last.createdAt) : Number.NEGATIVE_INFINITY;
+  if (Number.isNaN(previousAt)) return null;
+  const incomingIds = new Set<string>();
+  for (const event of events) {
+    const at = Date.parse(event.createdAt);
+    if (Number.isNaN(at) || at < previousAt || incomingIds.has(event.id)) return null;
+    incomingIds.add(event.id);
+    previousAt = at;
+  }
+  for (const event of existing) if (incomingIds.has(event.id) || Number.isNaN(Date.parse(event.createdAt))) return null;
+  const next = existing.slice();
+  for (const event of events) {
+    const eventKey = mobileLowValueGatewayEventKey(event) ?? mobileDuplicateChatEventKey(event);
+    const previous = next.at(-1);
+    if (eventKey && previous && (mobileLowValueGatewayEventKey(previous) ?? mobileDuplicateChatEventKey(previous)) === eventKey) continue;
+    next.push(event);
+  }
+  return next;
+}
+
 function mergeChatRunEventMaps(current: ChatRunEventMap, incoming: ChatRunEventMap): ChatRunEventMap {
   const next = { ...current };
   for (const [runId, events] of Object.entries(incoming)) {
     if (!events.length) continue;
+    const appended = appendChatRunEventsInOrder(next[runId] ?? [], events);
+    if (appended) {
+      next[runId] = appended;
+      continue;
+    }
     const byId = new Map<string, ChatRunEvent>();
     for (const event of next[runId] ?? []) byId.set(event.id, event);
     for (const event of events) byId.set(event.id, event);
@@ -2704,7 +2742,10 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
       streamRun: createMobileHomechatEventStream(
         (runId, cursor, signal) => hermesApi.runEventsResponse(runId, { lastEventId: cursor, signal }),
         {
-          ...(host.streamDeltaMode === "append" ? { deltaMode: "append" as const } : {}),
+          // HPD-2263 (TestFlight 9074): whole drafts at most every 80 ms, so a
+          // slow stream of one-character deltas leaves the JS thread free for
+          // back, Stop and the Bots list.
+          ...(host.streamDeltaMode === "append" ? { deltaMode: "append" as const, deltaCoalesceMs: MOBILE_APPEND_DRAFT_COALESCE_MS } : {}),
           startedAt: (runId: string) => chatLatencyRef.current?.runId === runId ? chatLatencyRef.current.startedAt : null,
           onTiming: (timing: Partial<ChatLatencySummary>, runId: string) => {
             if (chatLatencyRef.current?.runId === runId) recordMobileChatLatency(timing);
@@ -13585,7 +13626,46 @@ function MarkdownTextBlocks({
 }) {
   return (
     <View style={styles.markdownBlocks}>
-      {mobileMarkdownBlocks(text).map((block, blockIndex) => block.kind === "code" ? (
+      {mobileMarkdownBlocks(text).map((block, blockIndex) => (
+        <MarkdownBlockView
+          key={`${block.kind}-${blockIndex}`}
+          block={block}
+          blockIndex={blockIndex}
+          signature={markdownBlockSignature(block)}
+          locale={locale}
+          citations={citations}
+          onCitationPress={onCitationPress}
+        />
+      ))}
+    </View>
+  );
+}
+
+/** HPD-2263: a block's content as a string, so an unchanged block is not drawn again. */
+function markdownBlockSignature(block: MobileMarkdownBlock) {
+  return JSON.stringify(block);
+}
+
+/**
+ * HPD-2263 (TestFlight 9074): one markdown block. While an answer streams the
+ * whole text is parsed again on every update; finished blocks keep their
+ * signature and skip rendering, only the growing last block is drawn again.
+ */
+const MarkdownBlockView = memo(function MarkdownBlockView({
+  block,
+  blockIndex,
+  locale,
+  citations,
+  onCitationPress,
+}: {
+  block: MobileMarkdownBlock;
+  blockIndex: number;
+  signature: string;
+  locale: AppLocale;
+  citations?: readonly MobileFinanceCitation[];
+  onCitationPress?: (citation: MobileFinanceCitation) => void;
+}) {
+  return block.kind === "code" ? (
         // Code used to sit in a horizontal ScrollView so long lines could be
         // scrolled sideways. Nested in the transcript's own scroll view it took
         // a height of its own: a thirteen-line block of HTML measured 13,928
@@ -13665,10 +13745,13 @@ function MarkdownTextBlocks({
           onCitationPress={onCitationPress}
           segments={block.segments}
         />
-      ))}
-    </View>
-  );
-}
+      );
+}, (previous, next) =>
+  previous.signature === next.signature &&
+  previous.blockIndex === next.blockIndex &&
+  previous.locale === next.locale &&
+  previous.citations === next.citations &&
+  previous.onCitationPress === next.onCitationPress);
 
 function PendingAssistantMessage({ locale,
   text,
