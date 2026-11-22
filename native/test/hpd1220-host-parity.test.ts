@@ -69,6 +69,7 @@ const HOST_OPTIONS: Readonly<Record<string, { hey: Verdict; hodl: Verdict }>> = 
   "presentation.assistantAvatar": { hey: "unused (keeps the dragon and brand icon)", hodl: "wired (HPD-1442, round bot figure per thread)" },
   "presentation.headerBack": { hey: "unused (keeps the left menu)", hodl: "wired (HPD-1466, HODL Bots chat only: back to the bot list, no left menu)" },
   "presentation.homeChatTitle": { hey: "unused (the Home chat stays Hermes)", hodl: "wired (HPD-1515, HODL Bots chat only: the Home chat is called Home)" },
+  "presentation.headerTitleMark": { hey: "unused", hodl: "wired (HPD-2298, HODL Bots chat only: the mark Fresh while Fresh user mode is on)" },
   "presentation.sessionFailure": { hey: "unused", hodl: "wired" },
   "policy.preinstalledRanker": {
     hey: "wired: Hey enables its preinstalled ranker policy",

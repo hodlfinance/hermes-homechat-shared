@@ -608,6 +608,9 @@ export function createNativeR8Surface(host: NativeR8Host) {
   // HPD-1442: a host may draw Hermes itself (HODL: a round bot figure in the
   // colour of the thread). Without it every mark stays the dragon or the brand icon.
   const HostAssistantAvatar = host.presentation?.assistantAvatar ?? null;
+  // HPD-2298: a host mark right after the thread's name in the headerBack row
+  // (HODL: "Fresh" while Fresh user mode is on). Without it nothing changes.
+  const HostHeaderTitleMark = host.presentation?.headerBack ? host.presentation?.headerTitleMark ?? null : null;
   // HPD-1243: the store this build sells and signs in through. iOS as before;
   // Android only with the host's switch on; null keeps Android on the email link.
   const storePlatform = heyStorePlatform(Platform.OS, host.policy.heyAndroidLaunchEnabled);
@@ -8492,7 +8495,8 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
         )}
         {hostHeaderBack ? (
           <View style={styles.hostHeaderTitleRow}>
-            <Text style={styles.chatHeaderTitle} numberOfLines={1}>{pendingHostHeaderThread?.title || appCopy.productName}</Text>
+            <Text style={[styles.chatHeaderTitle, styles.flexShrinkOne]} numberOfLines={1}>{pendingHostHeaderThread?.title || appCopy.productName}</Text>
+            {HostHeaderTitleMark ? <HostHeaderTitleMark /> : null}
           </View>
         ) : (
           <View style={[styles.mobileAppBarTitle, host.presentation?.centerChatTitle && styles.mobileAppBarTitleCentered]}>
@@ -9585,6 +9589,7 @@ function NativeR8SurfaceBody({ initialDraft = "", navigationRequest, homeRequest
                 ? pendingHostHeaderThread.title
                 : mobileHostHeaderTitle({ tab, session: activeChatSession, productName: appCopy.productName, homeTitle: host.presentation?.homeChatTitle, screenTitle: mobileScreenTitle(tab, settingsSection, t, appLocale) })}
             </Text>
+            {tab === "chat" && HostHeaderTitleMark ? <HostHeaderTitleMark /> : null}
           </View>
         ) : (
         <View style={[

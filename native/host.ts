@@ -337,6 +337,14 @@ export type NativeR8Host = {
      * without it the Home chat is named productName as before (Hey).
      */
     homeChatTitle?: string;
+    /**
+     * HPD-2298 (HODL Bots engine branch): with headerBack only. A small mark
+     * the host draws right after the thread's name in the one header row
+     * (HODL: "Fresh" while Fresh user mode is on). The component reads the
+     * host's own state and returns null when there is nothing to show; the
+     * surface passes it no props. Without it nothing changes (Hey).
+     */
+    headerTitleMark?: ComponentType<Record<string, never>>;
     sessionFailure?: {
       title: string;
       body: string;
